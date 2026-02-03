@@ -1,0 +1,26 @@
+# --- Core API & Server ---
+fastapi
+uvicorn
+python-multipart
+requests
+uvloop  # Optional: Makes asyncio faster on Linux/Mac
+
+# --- Google Gemini (LLM) ---
+google-generativeai
+
+# --- Speech-to-Text (STT) ---
+# Note: NVIDIA NeMo has complex dependencies. 
+# It is often better to install PyTorch first, then NeMo.
+nemo_toolkit[all]
+torch
+torchaudio
+torchvision
+
+# --- Text-to-Speech (TTS) ---
+coqui-tts # Coqui TTS
+scipy
+numpy
+
+# --- Audio Processing Helpers ---
+pydub   # Useful for converting WebM (browser audio) to WAV if needed
+ffmpeg-python
