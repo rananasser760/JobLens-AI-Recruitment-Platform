@@ -2,13 +2,16 @@ import os
 import shutil
 import uuid
 import urllib.parse
+import subprocess
+from typing import List, Dict
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict
 
-# --- NEW: Audio Processing Import ---
-from pydub import AudioSegment
+# --- NEW: Robust FFmpeg Wrapper ---
+# This library guarantees a working binary on Windows/Mac/Linux
+import imageio_ffmpeg 
 
 # Import your modules
 from response import generate_interview_response
@@ -31,6 +34,7 @@ app.add_middleware(
 SESSIONS: Dict[str, Dict] = {}
 
 # --- Helpers ---
+
 def cleanup_files(*paths):
     """Deletes temporary files to save space."""
     for path in paths:
@@ -42,20 +46,49 @@ def cleanup_files(*paths):
 
 def convert_to_wav(input_path: str, output_path: str):
     """
-    Converts any input audio (WebM, MP3, Ogg) to 16kHz Mono WAV.
-    This format is required for optimal performance with NeMo/Parakeet.
+    Converts audio using the guaranteed imageio-ffmpeg binary.
     """
+    # 1. Get the path to the static executable
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    
+    # 2. Force Absolute Paths (Fixes 'File not found' errors)
+    abs_input = os.path.abspath(input_path)
+    abs_output = os.path.abspath(output_path)
+
+    # 3. Validation
+    if not os.path.exists(abs_input):
+        raise RuntimeError(f"Input file missing: {abs_input}")
+    
+    if os.path.getsize(abs_input) == 0:
+        raise RuntimeError("Input file is empty (0 bytes). Upload failed.")
+
+    # 4. Command
+    # -y: Overwrite
+    # -v error: Only print errors
+    command = [
+        ffmpeg_exe,
+        "-y",               
+        "-v", "error",      
+        "-i", abs_input,   
+        "-ar", "16000",     
+        "-ac", "1",         
+        abs_output         
+    ]
+
     try:
-        # Load audio (pydub auto-detects format)
-        audio = AudioSegment.from_file(input_path)
+        # 5. Run it
+        # capture_output=True allows us to see the error message if it fails
+        subprocess.run(
+            command, 
+            check=True, 
+            capture_output=True, 
+            text=True
+        )
+        print(f"DEBUG: Converted {abs_input} -> {abs_output}")
         
-        # Set parameters: 16000Hz sample rate, Mono channel
-        audio = audio.set_frame_rate(16000).set_channels(1)
-        
-        # Export as clean WAV
-        audio.export(output_path, format="wav")
-    except Exception as e:
-        raise RuntimeError(f"FFmpeg conversion failed. Is FFmpeg installed? Error: {e}")
+    except subprocess.CalledProcessError as e:
+        # If it fails, e.stderr will now contain the actual reason
+        raise RuntimeError(f"FFmpeg Error:\n{e.stderr}")
 
 # --- Endpoints ---
 
@@ -80,28 +113,33 @@ async def handle_audio_reply(
     
     session_data = SESSIONS[session_id]
     
-    # Define temp file paths
+    # --- HANDLING FILE EXTENSIONS ---
+    # We grab the extension from the original filename to help FFmpeg
+    original_ext = os.path.splitext(file.filename)[1]
+    if not original_ext:
+        original_ext = ".webm" # Fallback for browser blobs
+
     unique_id = uuid.uuid4()
-    raw_input_filename = f"temp_raw_{unique_id}"  # No extension yet, pydub will figure it out
+    raw_input_filename = f"temp_raw_{unique_id}{original_ext}" 
     clean_wav_filename = f"temp_clean_{unique_id}.wav"
     output_audio_path = None
 
     try:
-        # 2. Save Uploaded Raw Audio (WebM/Ogg from browser)
+        # 2. Save File
         with open(raw_input_filename, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # 3. Convert to 16kHz WAV (CRITICAL STEP)
+        # 3. Convert (Now using the robust binary)
         convert_to_wav(raw_input_filename, clean_wav_filename)
 
-        # 4. STT: Process the Clean WAV
+        # 4. STT
         user_transcript = speech_to_text(clean_wav_filename)
         print(f"User ({session_id}): {user_transcript}")
 
         # Update History
         session_data["history"].append({"role": "user", "content": user_transcript})
 
-        # 5. LLM: Generate Response
+        # 5. LLM
         ai_response_text = generate_interview_response(
             current_transcript=user_transcript,
             chat_history=session_data["history"],
@@ -111,15 +149,14 @@ async def handle_audio_reply(
         # Update History
         session_data["history"].append({"role": "assistant", "content": ai_response_text})
 
-        # 6. TTS: Generate Audio
+        # 6. TTS
         output_audio_path = text_to_speech_file(ai_response_text)
 
-        # Prepare Headers
+        # Headers
         safe_response = urllib.parse.quote(ai_response_text)
         safe_transcript = urllib.parse.quote(user_transcript)
 
-        # 7. Cleanup & Return
-        # We clean input files immediately. Output file is cleaned after response is sent.
+        # 7. Cleanup
         cleanup_files(raw_input_filename, clean_wav_filename)
         background_tasks.add_task(cleanup_files, output_audio_path)
 
@@ -134,11 +171,12 @@ async def handle_audio_reply(
         )
 
     except Exception as e:
-        # Cleanup on error
         cleanup_files(raw_input_filename, clean_wav_filename, output_audio_path)
         print(f"Error processing request: {e}")
+        # Return 500 but include the error detail so you can see it in Postman/Frontend
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # reload=False prevents double-loading models
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)

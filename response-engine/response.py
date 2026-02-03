@@ -3,9 +3,9 @@ import openai
 from typing import List, Dict
 
 # --- CONFIGURATION ---
-# PASTE YOUR OPENROUTER KEY HERE
-OPENROUTER_API_KEY = "OPENROUTER_KEY_HERE" # <-- REPLACE THIS WITH YOUR OPENROUTER API KEY
-OPENROUTER_MODEL_NAME = "mistralai/mistral-7b-instruct-v0.2" # Example model, change this later
+# ⚠️ REPLACE THIS WITH YOUR REAL KEY ⚠️
+OPENROUTER_API_KEY = "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" 
+OPENROUTER_MODEL_NAME = "mistralai/mistral-7b-instruct-v0.2" 
 
 # Configure the OpenAI client to use OpenRouter API
 openrouter_client = openai.OpenAI(
@@ -23,11 +23,12 @@ def generate_interview_response(
     """
 
     # 1. Construct the System Prompt (Context)
+    # UPDATED: Added instruction #5 to forbid markdown/asterisks
     system_prompt = f"""
     You are a professional, encouraging, yet thorough technical recruiter.
     You are interviewing a candidate.
 
-    Context from Candidate's CV:S
+    Context from Candidate's CV:
     {cv_text}
 
     Your Goal:
@@ -35,6 +36,7 @@ def generate_interview_response(
     2. If the response is vague, ask for clarification.
     3. If the response is good, move to the next relevant topic based on the CV.
     4. Keep your responses concise (under 2-3 sentences) so they are easy to listen to via audio.
+    5. CRITICAL: Do NOT use markdown formatting (like **bold** or *italics*). Do not use asterisks. Output plain text only.
     """
 
     # 2. Build the Chat History for OpenRouter format
@@ -50,8 +52,15 @@ def generate_interview_response(
             temperature=0.7,
             max_tokens=100,
         )
-        return response.choices[0].message.content.strip()
+        
+        # --- NEW: Post-processing cleanup ---
+        raw_content = response.choices[0].message.content
+        
+        # Remove asterisks (*) and other markdown symbols that mess up TTS
+        clean_content = raw_content.replace("*", "").replace("#", "").strip()
+        
+        return clean_content
 
     except Exception as e:
         print(f"Error generating response with OpenRouter: {e}")
-        return "Could you please repeat that? I didn't quite catch it."
+        return "I'm sorry, I'm having trouble connecting to my brain right now. Could you repeat that?"
