@@ -4,7 +4,7 @@ from typing import List, Dict
 
 # --- CONFIGURATION ---
 # ⚠️ REPLACE THIS WITH YOUR REAL KEY ⚠️
-OPENROUTER_API_KEY = "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" 
+OPENROUTER_API_KEY = "sk-or-v1-.." 
 OPENROUTER_MODEL_NAME = "mistralai/mistral-7b-instruct-v0.2" 
 
 # Configure the OpenAI client to use OpenRouter API
@@ -63,4 +63,5 @@ def generate_interview_response(
 
     except Exception as e:
         print(f"Error generating response with OpenRouter: {e}")
+
         return "I'm sorry, I'm having trouble connecting to my brain right now. Could you repeat that?"
