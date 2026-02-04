@@ -1,0 +1,50 @@
+# JobLens Scraper Requirements
+# Category-Based Job Scraping for Egypt Market
+
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+
+# Web Scraping
+playwright==1.41.0
+playwright-stealth==1.0.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+httpx==0.26.0
+
+# AI & Embeddings
+sentence-transformers==2.3.1
+transformers==4.36.2
+torch==2.1.2
+
+# Vector Database
+chromadb==0.4.22
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.3
+
+# Async & Background Tasks
+nest-asyncio==1.6.0
+aiofiles==23.2.1
+
+# Utilities
+python-dotenv==1.0.0
+python-multipart==0.0.6
+
+# Optional: Redis for caching (if needed)
+# redis==5.0.1
+# aioredis==2.0.1
+
+# Optional: Database drivers
+# psycopg2-binary==2.9.9  # PostgreSQL
+# pymongo==4.6.1          # MongoDB
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0
+
+# Monitoring & Logging
+loguru==0.7.2
