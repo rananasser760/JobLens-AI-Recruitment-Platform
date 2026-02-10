@@ -29,10 +29,10 @@ class Config:
     HEAD_PITCH_DOWN_THRESHOLD = 20
     HEAD_ROLL_THRESHOLD = 25
 
-    EYE_MOVEMENT_LEFT_THRESHOLD = 0.35
-    EYE_MOVEMENT_RIGHT_THRESHOLD = 0.35
-    EYE_MOVEMENT_UP_THRESHOLD = 0.30
-    EYE_MOVEMENT_DOWN_THRESHOLD = 0.30
+    EYE_MOVEMENT_LEFT_THRESHOLD = 0.20
+    EYE_MOVEMENT_RIGHT_THRESHOLD = 0.20
+    EYE_MOVEMENT_UP_THRESHOLD = 0.17
+    EYE_MOVEMENT_DOWN_THRESHOLD = 0.17
 
     ALERT_COOLDOWN = 2.0
     SCORING_WINDOW_SECONDS = 60
@@ -85,7 +85,7 @@ class Config:
     SAVE_ALERTS = True
     ALERT_FRAMES_DIR = "outputs/alert_frames"
 
-    CALIBRATION_FRAMES = 45
+    CALIBRATION_FRAMES = 35
 
     BLUR_FACE = True
     BLUR_KERNEL_SIZE = 51
@@ -161,7 +161,7 @@ class EyeMovementTracker:
         self._cal_samples_left = []
         self._cal_samples_right = []
         self._calibrated = False
-        self._history_size = 5
+        self._history_size = 3
         self._history = []
 
     def _compute_iris_position(self, eye_pts, iris_pts):
