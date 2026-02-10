@@ -41,9 +41,9 @@ Recruitment today suffers from inefficiency and unfair filtering:
 | Branch | Description |
 |------|------------|
 | `main` | Stable version of the project |
-| `feature/candidate-automation` | Candidate-side automation & ATS features |
+| `feature/candidate-automation` | Candidate-side automation & ATS features & Job Matching |
 | `feature/ai-interview-engine` | STT, TTS, and AI question generation |
-| `feature/integrity-monitoring` | Cheating detection & proctoring system |
+| `feature/integrity-monitoring` | Cheating detection (MediaPipe / Yolo) & proctoring system |
 
 ---
 
@@ -51,22 +51,24 @@ Recruitment today suffers from inefficiency and unfair filtering:
 
 **Backend**
 - Python (FastAPI)
+- C# (.Net)
 
 **Frontend**
 - React
 - JavaScript
 
 **AI & NLP**
-- SBERT, Hugging Face  
-- Large Language Models (OpenAI / LLaMA)
+- mpnet-base-v2, Hugging Face  
+- Large Language Models (OpenAI / Google / LLaMA)
 
 **Speech Processing**
-- Whisper / Google STT  
-- ElevenLabs / Google TTS  
+- Whisper or Parakeet-AI / STT  
+- coqui-AI / TTS  
 
 **Computer Vision**
 - OpenCV  
-- MediaPipe  
+- MediaPipe
+- Yolo 
 
 **Databases**
 - PostgreSQL  
