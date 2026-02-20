@@ -57,14 +57,17 @@ Then open: **http://localhost:8000**
 
 ```
 joblens/
-├── main.py              # FastAPI backend + all ML processing
-├── requirements.txt
+├── main.py              # FastAPI backend + all Computer Vision processing
+├── requirements.txt     # requirements for cheating detection libraries
 ├── joblens.db           # SQLite database (auto-created on first run)
 ├── templates/
 │   └── index.html       # Frontend UI
 ├── static/              # Static assets
 └── outputs/             # Auto-generated reports and alert frames
-    └── alert_frames/
+    ├── alert_frames/    # Frames captured when alerts triggered
+    ├── session_report.txt   # Summary report per session
+    └── timeline_chart.png   # Score/timeline chart per session
+    
 ```
 
 ---
