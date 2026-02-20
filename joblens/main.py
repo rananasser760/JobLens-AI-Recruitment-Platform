@@ -11,6 +11,8 @@ import time
 import os
 import math
 from datetime import datetime
+import matplotlib
+matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
@@ -40,21 +42,20 @@ class Config:
     MAX_NUM_FACES = 2
     REFINE_LANDMARKS = True
 
-    # تحسين عتبات الـ Gaze - قيم أقل للحساسية الأعلى
-    GAZE_YAW_THRESHOLD = 20  # كان 25
-    GAZE_PITCH_UP_THRESHOLD = 18  # كان 20
-    GAZE_PITCH_DOWN_THRESHOLD = 20  # كان 25
+    GAZE_YAW_THRESHOLD = 20  
+    GAZE_PITCH_UP_THRESHOLD = 18  
+    GAZE_PITCH_DOWN_THRESHOLD = 20  
 
-    HEAD_YAW_THRESHOLD = 35  # كان 30
-    HEAD_PITCH_UP_THRESHOLD = 18  # كان 20
-    HEAD_PITCH_DOWN_THRESHOLD = 18  # كان 20
-    HEAD_ROLL_THRESHOLD = 22  # كان 25
+    HEAD_YAW_THRESHOLD = 35  
+    HEAD_PITCH_UP_THRESHOLD = 18 
+    HEAD_PITCH_DOWN_THRESHOLD = 18  
+    HEAD_ROLL_THRESHOLD = 22  
 
     
-    EYE_MOVEMENT_LEFT_THRESHOLD = 0.22   # كان 0.35
-    EYE_MOVEMENT_RIGHT_THRESHOLD = 0.22  # كان 0.35
-    EYE_MOVEMENT_UP_THRESHOLD = 0.20     # كان 0.30
-    EYE_MOVEMENT_DOWN_THRESHOLD = 0.20   # كان 0.30
+    EYE_MOVEMENT_LEFT_THRESHOLD = 0.22   
+    EYE_MOVEMENT_RIGHT_THRESHOLD = 0.22  
+    EYE_MOVEMENT_UP_THRESHOLD = 0.20     
+    EYE_MOVEMENT_DOWN_THRESHOLD = 0.20   
 
     ALERT_COOLDOWN = 2 
     SCORING_WINDOW_SECONDS = 60
