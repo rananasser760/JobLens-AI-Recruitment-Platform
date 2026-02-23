@@ -2,7 +2,7 @@
 #  JobLens AI — Web App
 #  Original detection code preserved exactly as-is.
 #  Only the FastAPI / Database / WebSocket layer is added around it.
-# ══════════════════════════════════════════════════════════════════════════════ 
+# ══════════════════════════════════════════════════════════════════════════════  
 
 import cv2
 import mediapipe as mp
