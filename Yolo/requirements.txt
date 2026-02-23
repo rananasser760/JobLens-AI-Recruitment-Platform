@@ -1,0 +1,7 @@
+# Core dependencies for Exam Monitoring with YOLO
+
+opencv-python>=4.7.0         # For video capture and image processing
+ultralytics>=8.0.0           # YOLOv8 for object detection
+numpy>=1.24.0                 # Numerical operations
+Pillow>=10.0.0                # Image handling if needed
+matplotlib>=3.7.0             # Optional plotting / charts
