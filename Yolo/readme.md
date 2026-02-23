@@ -38,9 +38,9 @@ Install the required Python packages:
 
 ```bash
 pip install -r requirements.txt
+```
 
-
-
+---
 
 ## Usage
 
@@ -51,3 +51,5 @@ pip install -r requirements.txt
 - Run the monitoring script:
 ```bash
 python yolo.py
+```
+---
