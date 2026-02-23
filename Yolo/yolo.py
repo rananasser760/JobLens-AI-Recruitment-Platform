@@ -4,16 +4,10 @@ import time
 from datetime import datetime
 from ultralytics import YOLO
 
-# ==============================
-# إعدادات
-# ==============================
 SESSION_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 OUTPUT_JSON = f"cheating_log_{SESSION_ID}.json"
 
-# ==============================
-# تحميل الموديلات
-# ==============================
 try:
     model_coco = YOLO('yolov8n.pt')
     model_custom = YOLO('phones.pt')
@@ -25,37 +19,29 @@ videoCap = cv2.VideoCapture(0)
 
 COCO_CLASSES = {0: 'Person'}
 
-# ==============================
-# بيانات الجلسة
-# ==============================
 session_data = {
     "session_id": SESSION_ID,
     "start_time": datetime.now().isoformat(),
     "end_time": None,
     "total_alerts": 0,
     "events": [],
-    "frame_statistics": {}   # هيتحط في النهاية
+    "frame_statistics": {}
 }
 
-# للتحكم في التسجيل
 COOLDOWN_SECONDS = 2
 last_alert_type = None
 last_alert_logged_time = 0
 
-# ==============================
-# Frame Counters
-# ==============================
 frame_counters = {
     "total_frames": 0,
     "secure_frames": 0,
-    "cheating_frames": 0,         # أي نوع غش
+    "cheating_frames": 0,
     "MULTIPLE_PEOPLE_frames": 0,
     "NO_CANDIDATE_frames": 0,
     "CHEATING_ITEM_MOBILE_frames": 0,
 }
 
 def log_event(alert_type: str, details: dict):
-    """تسجيل حدث غش في الـ session data"""
     global session_data
     
     event = {
@@ -71,7 +57,6 @@ def log_event(alert_type: str, details: dict):
     return event
 
 def save_json():
-    """حساب إحصائيات الفرامز وحفظ الـ JSON"""
     session_data["end_time"] = datetime.now().isoformat()
 
     total = frame_counters["total_frames"]
@@ -105,17 +90,14 @@ def save_json():
         json.dump(session_data, f, ensure_ascii=False, indent=2)
 
     stats = session_data["frame_statistics"]
-    print(f"\n✅ تم حفظ السجل في: {OUTPUT_JSON}")
-    print(f"📊 إجمالي الفرامز     : {stats['total_frames']}")
-    print(f"🟢 فرامز آمنة         : {stats['secure_frames']} ({stats['secure_percentage']}%)")
-    print(f"🔴 فرامز غش           : {stats['cheating_frames']} ({stats['cheating_percentage']}%)")
-    print(f"   ↳ أكتر من شخص     : {stats['breakdown']['MULTIPLE_PEOPLE']['frames']} ({stats['breakdown']['MULTIPLE_PEOPLE']['percentage']}%)")
-    print(f"   ↳ مفيش مرشح       : {stats['breakdown']['NO_CANDIDATE']['frames']} ({stats['breakdown']['NO_CANDIDATE']['percentage']}%)")
-    print(f"   ↳ موبايل           : {stats['breakdown']['CHEATING_ITEM_MOBILE']['frames']} ({stats['breakdown']['CHEATING_ITEM_MOBILE']['percentage']}%)")
+    print(f"\n✅ Log saved at: {OUTPUT_JSON}")
+    print(f"📊 Total frames     : {stats['total_frames']}")
+    print(f"🟢 Secure frames     : {stats['secure_frames']} ({stats['secure_percentage']}%)")
+    print(f"🔴 Cheating frames   : {stats['cheating_frames']} ({stats['cheating_percentage']}%)")
+    print(f"   ↳ Multiple people : {stats['breakdown']['MULTIPLE_PEOPLE']['frames']} ({stats['breakdown']['MULTIPLE_PEOPLE']['percentage']}%)")
+    print(f"   ↳ No candidate    : {stats['breakdown']['NO_CANDIDATE']['frames']} ({stats['breakdown']['NO_CANDIDATE']['percentage']}%)")
+    print(f"   ↳ Mobile          : {stats['breakdown']['CHEATING_ITEM_MOBILE']['frames']} ({stats['breakdown']['CHEATING_ITEM_MOBILE']['percentage']}%)")
 
-# ==============================
-# الـ Main Loop
-# ==============================
 start_time = time.time()
 
 while videoCap.isOpened():
@@ -127,7 +109,6 @@ while videoCap.isOpened():
     cheating_items = []
     detected_objects = []
 
-    # --- كشف الأشخاص ---
     results_coco = model_coco.predict(frame, conf=0.6, verbose=False)
     for result in results_coco:
         for box in result.boxes:
@@ -149,7 +130,6 @@ while videoCap.isOpened():
                 cv2.putText(frame, f"{label} {conf}", (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-    # --- كشف الموبايلات ---
     results_custom = model_custom.predict(frame, conf=0.5, verbose=False)
     for result in results_custom:
         for box in result.boxes:
@@ -162,7 +142,6 @@ while videoCap.isOpened():
             cv2.putText(frame, f"Mobile {conf}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
-    # --- منطق التنبيه ---
     alert_msg = "Status: Secure"
     msg_color = (0, 255, 0)
     current_alert_type = None
@@ -190,7 +169,6 @@ while videoCap.isOpened():
             "detected_objects": detected_objects
         }
 
-    # --- عدّ الفرامز ---
     frame_counters["total_frames"] += 1
     if current_alert_type is None:
         frame_counters["secure_frames"] += 1
@@ -200,7 +178,6 @@ while videoCap.isOpened():
         if key in frame_counters:
             frame_counters[key] += 1
 
-    # --- تسجيل الأحداث (مع cooldown عشان متكررش كتير) ---
     current_time = time.time()
     if current_alert_type is not None:
         time_since_last = current_time - last_alert_logged_time
@@ -211,11 +188,9 @@ while videoCap.isOpened():
             last_alert_type = current_alert_type
             last_alert_logged_time = current_time
     else:
-        # رجع للوضع الطبيعي
         if last_alert_type is not None:
             last_alert_type = None
 
-    # --- العرض ---
     cv2.putText(frame, alert_msg, (20, 50),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, msg_color, 3)
 
@@ -231,9 +206,7 @@ while videoCap.isOpened():
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# ==============================
-# حفظ الـ JSON عند الانتهاء
-# ==============================
+
 videoCap.release()
 cv2.destroyAllWindows()
 save_json()
