@@ -4,6 +4,8 @@
 #  1. Session Timeline Replay — blurred keyframe snapshots at alert events
 #  2. Candidate Profile — name/ID stored per session
 #  3. Exponential Decay Scoring — recent alerts weighted more heavily
+#  4. Auto-Stop on Prolonged No-Face — session ends + flagged as ABANDONED
+#     if NO_FACE alert fires continuously for > NO_FACE_AUTO_STOP_SECONDS
 # ══════════════════════════════════════════════════════════════════════════════
 
 import cv2
@@ -62,15 +64,9 @@ class Config:
     ALERT_COOLDOWN = 5   # اليرت مش بيتطلق أكتر من مرة كل 5 ثواني لنفس النوع
 
     # ══ Intelligent Scoring System ══════════════════════════════════════════
-    #  1. SLIDING WINDOW  - اخر 180 ثانية
-    #  2. SLOW DECAY      - half-life 200 ثانية (السكور بياخد وقت عشان ينزل)
-    #  3. SCORE FLOOR     - behavior memory
-    #  4. COOLDOWN TIMER  - بعد اخر اليرت, السكور يفضل ثابت 30 ثانية
-    # =====================================================================
     SCORING_WINDOW_SECONDS = 180
     DECAY_HALF_LIFE        = 200.0
-    SCORE_COOLDOWN_SECS    = 30          # 30 ثانية freeze بعد آخر اليرت
-    # لو وصل peak >= key, السكور مش ينزل تحت value ابدا في الجلسة
+    SCORE_COOLDOWN_SECS    = 30
     SCORE_FLOORS = {
         80: 78,
         60: 58,
@@ -78,7 +74,6 @@ class Config:
     }
 
     ALERT_WEIGHTS = {
-        # ── حركات العين والرأس (خفيفة) ──────────────────────────────
         'NO_FACE':           6,
         'MULTIPLE_FACES':    9,
         'LOOKING_LEFT':      2,
@@ -94,14 +89,13 @@ class Config:
         'EYE_RIGHT':         3,
         'EYE_UP':            3,
         'EYE_DOWN':          2,
-        # ── YOLO (ثقيلة - غش حقيقي) ─────────────────────────────────
         'MULTIPLE_PEOPLE'      : 20,
         'CHEATING_ITEM_MOBILE' : 25,
     }
 
     PHONE_CONFIDENCE    = 0.80
     PERSON_CONFIDENCE   = 0.65
-    MAX_RAW_SCORE_FOR_NORMALIZATION = 100  # معايرة عشان السكور يكون منطقي
+    MAX_RAW_SCORE_FOR_NORMALIZATION = 100
     EAR_THRESHOLD = 0.25
 
     GREEN  = (0, 220, 0)
@@ -140,9 +134,14 @@ class Config:
     DEBUG_MODE = False
 
     # ── Feature 1: Keyframe settings ──────────────────────────────────────
-    KEYFRAME_JPEG_QUALITY = 40       # Lower quality = smaller DB footprint
-    KEYFRAME_MAX_WIDTH    = 320      # Thumbnail width
-    KEYFRAME_BLUR_KERNEL  = 35       # Blur kernel for privacy
+    KEYFRAME_JPEG_QUALITY = 40
+    KEYFRAME_MAX_WIDTH    = 320
+    KEYFRAME_BLUR_KERNEL  = 35
+
+    # ══ Feature 4: Auto-Stop on Prolonged No-Face ═════════════════════════
+    # If NO_FACE is detected continuously for this many seconds, the session
+    # is automatically ended and flagged as ABANDONED.
+    NO_FACE_AUTO_STOP_SECONDS = 30
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -499,13 +498,11 @@ class AlertManager:
         self._last_time = {}
         self._session_start = time.time()
         self._score_history = []
-        # Feature 1: keyframe storage {alert_index: jpeg_bytes}
-        self._keyframes = {}  # type: dict
+        self._keyframes = {}
         if Config.SAVE_ALERTS:
             os.makedirs(Config.ALERT_FRAMES_DIR, exist_ok=True)
 
     def add(self, alert_type, frame=None, metadata=None):
-        """Add an alert. Optionally captures a blurred keyframe (Feature 1)."""
         now = time.time()
         if alert_type in self._last_time:
             if (now - self._last_time[alert_type]) < Config.ALERT_COOLDOWN:
@@ -521,7 +518,6 @@ class AlertManager:
             'keyframe_idx': alert_idx,
         }
 
-        # Feature 1: Capture blurred keyframe thumbnail
         if frame is not None:
             try:
                 keyframe_bytes = self._capture_keyframe(frame)
@@ -540,18 +536,14 @@ class AlertManager:
         return True
 
     def _capture_keyframe(self, frame):
-        """Resize + blur frame and encode as JPEG bytes for storage."""
         try:
             h, w = frame.shape[:2]
-            # Resize to thumbnail
             scale = Config.KEYFRAME_MAX_WIDTH / w
             new_w = Config.KEYFRAME_MAX_WIDTH
             new_h = int(h * scale)
             small = cv2.resize(frame, (new_w, new_h))
-            # Apply strong blur for privacy
             k = Config.KEYFRAME_BLUR_KERNEL
             blurred = cv2.GaussianBlur(small, (k, k), 0)
-            # Encode to JPEG
             _, buf = cv2.imencode('.jpg', blurred,
                                   [cv2.IMWRITE_JPEG_QUALITY, Config.KEYFRAME_JPEG_QUALITY])
             return buf.tobytes()
@@ -559,7 +551,6 @@ class AlertManager:
             return None
 
     def get_keyframe_b64(self, alert_idx: int):
-        """Return base64-encoded keyframe for given alert index."""
         import base64
         data = self._keyframes.get(alert_idx)
         if data:
@@ -572,30 +563,11 @@ class AlertManager:
         cutoff = now - Config.SCORING_WINDOW_SECONDS
         self._score_history = [(t, s) for t, s in self._score_history if t >= cutoff]
 
-    # ══ Intelligent Scoring System ══════════════════════════════════════════
     def suspicion_score(self):
-        """
-        نظام السكور المتكامل - 3 مكونات:
-
-        1. SLIDING WINDOW + SLOW DECAY
-           - بنحسب الاليرتات في اخر SCORING_WINDOW_SECONDS بس
-           - كل اليرت بياخد weight * exp(-lambda * age)
-           - لكن الـ lambda صغير (half-life = 90s) عشان الهبوط بطيء
-
-        2. COOLDOWN FREEZE
-           - بعد اخر اليرت، السكور مش بينزل لمدة SCORE_COOLDOWN_SECS
-           - يعني لو بطلت تغش 5 ثواني، السكور بيفضل ثابت مش بينزل
-
-        3. BEHAVIOR MEMORY (Score Floor)
-           - لو السكور وصل 60+ في اي وقت في الجلسة،
-             مش ممكن ينزل تحت 35 حتى لو بطلت تغش خالص
-           - بيعكس ان الشخص ده غش فعلاً حتى لو وقف دلوقتي
-        """
         now = time.time()
         cutoff = now - Config.SCORING_WINDOW_SECONDS
         lam = math.log(2) / Config.DECAY_HALF_LIFE
 
-        # ── 1. احسب الـ raw decay score ─────────────────────────────────
         raw = 0.0
         last_alert_time = 0.0
         for a in self._alerts:
@@ -608,26 +580,18 @@ class AlertManager:
             if a['time'] > last_alert_time:
                 last_alert_time = a['time']
 
-        # ── 2. COOLDOWN FREEZE ───────────────────────────────────────────
-        # لو في اخر SCORE_COOLDOWN_SECS ثانية فيه اليرت، السكور ثابت تماماً
-        # وبعد الـ cooldown ينزل ببطء شديد
         time_since_last = now - last_alert_time if last_alert_time > 0 else 9999
         if time_since_last < Config.SCORE_COOLDOWN_SECS:
-            # في فترة الـ freeze: السكور ثابت بالكامل - مش بيتحرك خالص
             freeze = 1.0 - (time_since_last / Config.SCORE_COOLDOWN_SECS)
-            # نعوّض الـ decay بالكامل خلال فترة الـ freeze
             raw = raw * (1.0 + freeze * 0.4)
 
         current_score = min((raw / Config.MAX_RAW_SCORE_FOR_NORMALIZATION) * 100.0, 100.0)
 
-        # ── 3. BEHAVIOR MEMORY FLOOR ─────────────────────────────────────
-        # تتبع الـ peak score طول الجلسة
         if not hasattr(self, '_peak_score'):
             self._peak_score = 0.0
         if current_score > self._peak_score:
             self._peak_score = current_score
 
-        # طبّق الـ floor بناءا على الـ peak
         floor = 0.0
         for threshold in sorted(Config.SCORE_FLOORS.keys(), reverse=True):
             if self._peak_score >= threshold:
@@ -659,7 +623,6 @@ class AlertManager:
         }
 
     def get_timeline_data(self):
-        """Return alert timeline with keyframe availability flag."""
         return [
             {
                 'elapsed': a['elapsed'],
@@ -766,54 +729,18 @@ except ImportError:
 
 
 class YOLODetector:
-    """
-    Accurate YOLO-based detector.
-
-    Improvements over the original:
-    ─────────────────────────────────────────────────────────────────────────
-    1. HIGHER CONFIDENCE THRESHOLDS
-       Person 0.60 → 0.70  |  Phone 0.50 → 0.75
-       Fewer false positives from low-confidence detections.
-
-    2. IoU DEDUPLICATION  (new)
-       The same person/phone can produce 2–3 overlapping YOLO boxes.
-       We keep only the highest-confidence box among overlapping ones,
-       so person_count is never inflated by duplicate detections.
-
-    3. MINIMUM AREA FILTER for phones  (improved)
-       Old code only checked min_side of the box; this can still pass
-       rectangular blobs that are tiny in area.
-       New code checks box_area >= 0.3% of frame area — much stricter.
-
-    4. SLIDING-WINDOW VOTE  (replaces consecutive count)
-       Old system: needed N consecutive frames → a single "clean" frame
-       resets the counter to 0, causing jitter.
-       New system: ring buffer of the last WINDOW frames. Alert confirmed
-       only when ≥ THRESHOLD frames inside the window contain that raw
-       detection. Immune to single-frame noise without adding lag.
-
-    5. DETECTION PRIORITY  (clarified)
-       MULTIPLE_PEOPLE > CHEATING_ITEM_MOBILE
-    ─────────────────────────────────────────────────────────────────────────
-    """
-
     COOLDOWN_SECONDS = 2
-
-    # ── confidence / geometry thresholds ────────────────────────────────
     PERSON_CONF      = 0.70
-    PHONE_CONF       = 0.65
-    PHONE_MIN_AREA   = 0.002   # phone box must cover ≥ 0.3% of frame area
-    PERSON_IOU_MERGE = 0.45    # boxes with IoU ≥ this are the same person
-
-    # ── sliding-window vote parameters ──────────────────────────────────
-    # alert confirmed only when ≥ THRESHOLD of the last WINDOW frames contain it
+    PHONE_CONF       = 0.70
+    PHONE_MIN_AREA   = 0.002
+    PERSON_IOU_MERGE = 0.45
     VOTE_WINDOW = {
         'MULTIPLE_PEOPLE'     : 5,
         'CHEATING_ITEM_MOBILE': 6,
     }
     VOTE_THRESHOLD = {
         'MULTIPLE_PEOPLE'     : 3,
-        'CHEATING_ITEM_MOBILE': 3,
+        'CHEATING_ITEM_MOBILE': 2,
     }
 
     def __init__(self, session_id: str = None):
@@ -853,7 +780,6 @@ class YOLODetector:
         self._last_alert_logged_time = 0.0
         self._start_time             = time.time()
 
-        # ring buffers — one per alert type
         self._vote_buffers = {
             k: _col.deque(maxlen=self.VOTE_WINDOW[k])
             for k in self.VOTE_WINDOW
@@ -863,7 +789,6 @@ class YOLODetector:
     def available(self) -> bool:
         return self._available
 
-    # ── helpers ──────────────────────────────────────────────────────────
     @staticmethod
     def _iou(a, b) -> float:
         ax1,ay1,ax2,ay2 = a
@@ -876,7 +801,6 @@ class YOLODetector:
 
     @classmethod
     def _deduplicate(cls, boxes_confs: list, iou_thresh: float) -> list:
-        """Keep highest-confidence box; discard overlapping duplicates."""
         sorted_bc = sorted(boxes_confs, key=lambda x: x[4], reverse=True)
         kept = []
         for cand in sorted_bc:
@@ -884,7 +808,6 @@ class YOLODetector:
                 kept.append(cand)
         return kept
 
-    # ── logging ──────────────────────────────────────────────────────────
     def log_event(self, alert_type: str, details: dict) -> dict:
         event = {
             "event_id"       : len(self.session_data["events"]) + 1,
@@ -896,11 +819,9 @@ class YOLODetector:
         self.session_data["events"].append(event)
         self.session_data["total_alerts"] = len(self.session_data["events"])
         print(f"[YOLO LOG] {event['timestamp']} | {alert_type} | {details}")
-        # ── broadcast to live log buffer (picked up by /ws/logs) ─────────
         _push_log(f"[YOLO] {alert_type}", details, self.session_id)
         return event
 
-    # ── main detection ────────────────────────────────────────────────────
     def detect(self, frame):
         if not self._available:
             return None, "Status: Secure", frame
@@ -911,7 +832,6 @@ class YOLODetector:
         phone_boxes  = []
         detected_objects = []
 
-        # 1. Person detection ─────────────────────────────────────────────
         results_coco = self._model_coco.predict(
             frame, conf=self.PERSON_CONF, iou=0.45, verbose=False
         )
@@ -923,7 +843,6 @@ class YOLODetector:
                 conf = round(float(box.conf[0]), 2)
                 person_boxes.append((x1,y1,x2,y2,conf))
 
-        # Remove duplicate person boxes (same person detected by 2 anchors)
         person_boxes = self._deduplicate(person_boxes, self.PERSON_IOU_MERGE)
         person_count = len(person_boxes)
 
@@ -933,7 +852,6 @@ class YOLODetector:
             cv2.putText(frame, f"Person {conf}", (x1, y1-10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,220,0), 2)
 
-        # 2. Phone detection ──────────────────────────────────────────────
         results_custom = self._model_custom.predict(
             frame, conf=self.PHONE_CONF, iou=0.40, verbose=False
         )
@@ -942,7 +860,6 @@ class YOLODetector:
                 x1,y1,x2,y2 = map(int, box.xyxy[0])
                 conf     = round(float(box.conf[0]), 2)
                 box_area = (x2-x1) * (y2-y1)
-                # Reject tiny blobs — strict area-based filter
                 if box_area < frame_area * self.PHONE_MIN_AREA:
                     continue
                 phone_boxes.append((x1,y1,x2,y2,conf))
@@ -956,8 +873,6 @@ class YOLODetector:
             cv2.putText(frame, f"Mobile {conf}", (x1, y1-10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,220), 2)
 
-        # 3. Raw alert for this frame ──────────────────────────────────────
-        # Priority: MULTIPLE_PEOPLE > CHEATING_ITEM_MOBILE
         if person_count > 1:
             raw_alert   = "MULTIPLE_PEOPLE"
             raw_details = {"person_count": person_count, "detected": detected_objects}
@@ -969,8 +884,8 @@ class YOLODetector:
         else:
             raw_alert   = None
             raw_details = {}
+            self._vote_buffers['CHEATING_ITEM_MOBILE'].clear()
 
-        # 4. Sliding-window vote ──────────────────────────────────────────
         for atype, buf in self._vote_buffers.items():
             buf.append(raw_alert == atype)
 
@@ -982,7 +897,6 @@ class YOLODetector:
                 confirmed_details    = raw_details if raw_alert == atype else {}
                 break
 
-        # 5. Build display message ────────────────────────────────────────
         if confirmed_alert_type == "MULTIPLE_PEOPLE":
             alert_msg = "ALERT: MULTIPLE PEOPLE DETECTED!"
             msg_color = (0, 0, 220)
@@ -993,7 +907,6 @@ class YOLODetector:
             alert_msg = "Status: Secure"
             msg_color = (0, 220, 0)
 
-        # 6. Frame counters ───────────────────────────────────────────────
         self.frame_counters["total_frames"] += 1
         if confirmed_alert_type is None:
             self.frame_counters["secure_frames"] += 1
@@ -1003,7 +916,6 @@ class YOLODetector:
             if key in self.frame_counters:
                 self.frame_counters[key] += 1
 
-        # 7. Cooldown-gated event logging ─────────────────────────────────
         current_time = time.time()
         if confirmed_alert_type is not None:
             time_since_last = current_time - self._last_alert_logged_time
@@ -1015,7 +927,6 @@ class YOLODetector:
         else:
             self._last_alert_type = None
 
-        # 8. On-frame overlay ─────────────────────────────────────────────
         cv2.putText(frame, alert_msg, (20, 90),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, msg_color, 2)
 
@@ -1081,7 +992,12 @@ class UIRenderer:
              head_dir, head_pitch, head_yaw, head_roll,
              eye_dir, eye_h, eye_v,
              score, current_alert, fps,
-             calibrating=False, cal_progress=0.0, show_consent=False):
+             calibrating=False, cal_progress=0.0, show_consent=False,
+             no_face_countdown=None):
+        """
+        no_face_countdown (int|None): seconds remaining before auto-stop.
+        When provided and > 0, a warning overlay is shown on the camera view.
+        """
         if show_consent and not self._consent_accepted:
             self._draw_consent_notice(frame)
             return frame
@@ -1097,7 +1013,53 @@ class UIRenderer:
             y = self._draw_head_section(frame, y, head_dir, head_pitch, head_yaw, head_roll)
             y = self._draw_score_section(frame, y, score)
             self._draw_alert_bar(frame, current_alert)
+
+        # ── Feature 4: No-face countdown warning overlay ───────────────────
+        if no_face_countdown is not None and no_face_countdown > 0:
+            self._draw_no_face_warning(frame, no_face_countdown)
+
         return frame
+
+    def _draw_no_face_warning(self, frame, seconds_remaining):
+        """
+        Draws a prominent warning bar on the camera view showing how many
+        seconds remain before the session is automatically abandoned.
+        The bar transitions from yellow → red as time runs out.
+        """
+        # Colour: yellow when > 10 s left, orange at > 5 s, red otherwise
+        if seconds_remaining > 10:
+            colour = (0, 200, 230)   # yellow-ish (BGR)
+        elif seconds_remaining > 5:
+            colour = (0, 140, 255)   # orange
+        else:
+            colour = (0, 0, 230)     # red
+
+        cam_w = self.panel_x   # camera area width (excludes side panel)
+
+        # Semi-transparent background strip
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (0, 0), (cam_w, 52), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+
+        # Warning text – line 1
+        cv2.putText(
+            frame,
+            "! NO FACE DETECTED — SESSION WILL BE ABANDONED",
+            (10, 20),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, colour, 2, cv2.LINE_AA
+        )
+        # Warning text – line 2 (countdown)
+        cv2.putText(
+            frame,
+            f"Auto-stop in {seconds_remaining}s  (return to camera to cancel)",
+            (10, 44),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.45, colour, 1, cv2.LINE_AA
+        )
+
+        # Progress bar showing time remaining (fills left→right, drains right→left)
+        total = Config.NO_FACE_AUTO_STOP_SECONDS
+        fill_w = int(cam_w * seconds_remaining / total)
+        cv2.rectangle(frame, (0, 52), (fill_w, 56), colour, -1)
 
     def _draw_consent_notice(self, frame):
         overlay = frame.copy()
@@ -1251,13 +1213,11 @@ class DBSession(Base):
     final_score      = Column(Float, default=0.0)
     recommendation   = Column(String(50), default="PENDING")
     duration_seconds = Column(Float, default=0.0)
-    # Feature 2: Candidate profile fields
     candidate_name   = Column(String(200), nullable=True)
     candidate_id     = Column(String(100), nullable=True)
     alerts           = relationship("DBAlert",        back_populates="session", cascade="all, delete-orphan")
     score_history    = relationship("DBScoreHistory", back_populates="session", cascade="all, delete-orphan")
     yolo_alerts      = relationship("DBYoloAlert",    back_populates="session", cascade="all, delete-orphan")
-    # Feature 1: Keyframes
     keyframes        = relationship("DBKeyframe",     back_populates="session", cascade="all, delete-orphan")
 
 
@@ -1292,7 +1252,6 @@ class DBScoreHistory(Base):
     session    = relationship("DBSession", back_populates="score_history")
 
 
-# Feature 1: Keyframe table — stores blurred JPEG thumbnail per alert event
 class DBKeyframe(Base):
     __tablename__ = "keyframes"
     id            = Column(Integer, primary_key=True, index=True)
@@ -1300,7 +1259,7 @@ class DBKeyframe(Base):
     alert_type    = Column(String(100))
     timestamp     = Column(DateTime, default=datetime.utcnow)
     elapsed_secs  = Column(Float, default=0.0)
-    image_data    = Column(LargeBinary, nullable=True)  # JPEG bytes (blurred)
+    image_data    = Column(LargeBinary, nullable=True)
     session       = relationship("DBSession", back_populates="keyframes")
 
 
@@ -1312,10 +1271,6 @@ Base.metadata.create_all(bind=engine)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _run_migrations():
-    """
-    يفحص الاعمدة الموجودة في الـ DB ويضيف اللي ناقص تلقائيا.
-    بيحل مشكلة الـ DB القديمة اللي مش فيها الاعمدة الجديدة.
-    """
     import sqlite3
     db_path = "./joblens.db"
 
@@ -1359,7 +1314,36 @@ _run_migrations()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  WEB SESSION PROCESSOR
+#  LIVE LOG BUFFER
+# ══════════════════════════════════════════════════════════════════════════════
+
+import collections as _col_logs
+
+_log_buffers: dict = {}
+_log_subscribers: dict = {}
+
+
+def _push_log(alert_type: str, details: dict, session_id=None):
+    entry = {
+        "ts"         : datetime.now().strftime("%H:%M:%S"),
+        "alert_type" : alert_type,
+        "details"    : details,
+        "session_id" : session_id,
+    }
+    sid = str(session_id) if session_id else "global"
+    if sid not in _log_buffers:
+        _log_buffers[sid] = _col_logs.deque(maxlen=200)
+    _log_buffers[sid].append(entry)
+
+    for q in _log_subscribers.get(sid, []):
+        try:
+            q.put_nowait(entry)
+        except Exception:
+            pass
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  WEB SESSION PROCESSOR  (Feature 4 wired in here)
 # ══════════════════════════════════════════════════════════════════════════════
 
 import threading
@@ -1381,6 +1365,11 @@ class WebSessionProcessor:
         self._thread        = None
         self._lock          = threading.Lock()
 
+        # ── Feature 4: No-face auto-stop state ────────────────────────────
+        self._no_face_since: Optional[float] = None  # timestamp when continuous no-face began
+        self.abandoned      = False               # True once the session is auto-stopped
+        # ──────────────────────────────────────────────────────────────────
+
         self._latest_state  = {
             "face_count": 0, "calibrated": False, "cal_progress": 0.0,
             "gaze_dir": "—", "gaze_yaw": 0.0, "gaze_pitch": 0.0,
@@ -1390,13 +1379,14 @@ class WebSessionProcessor:
             "frame_b64": None,
             "yolo_alert": None,
             "fps": 0.0,
+            # Feature 4 fields surfaced to the front-end:
+            "abandoned": False,
+            "no_face_countdown": None,
         }
 
-        # Try to open camera — on Windows use CAP_DSHOW to avoid long init delays
         self.cap = None
         indices_to_try = [Config.CAMERA_INDEX] + [i for i in range(4) if i != Config.CAMERA_INDEX]
         for idx in indices_to_try:
-            # Try DirectShow first (Windows), then fallback
             for backend in [cv2.CAP_DSHOW, cv2.CAP_ANY]:
                 cap_attempt = cv2.VideoCapture(idx + backend)
                 if cap_attempt.isOpened():
@@ -1436,7 +1426,6 @@ class WebSessionProcessor:
         self._ui = UIRenderer(Config.FRAME_WIDTH, Config.FRAME_HEIGHT)
         self._ui.accept_consent()
 
-        # Feature 1: pending keyframes to persist to DB
         self._pending_keyframes = []
         self._keyframe_lock = threading.Lock()
 
@@ -1460,7 +1449,6 @@ class WebSessionProcessor:
             self._fps_counter = 0
 
     def _yolo_loop(self, db_factory):
-        # بنرن YOLO كل 4 فريمات بدل 15 → استجابة أسرع للموبايل
         YOLO_EVERY_N = 4
         frame_counter = 0
 
@@ -1484,7 +1472,6 @@ class WebSessionProcessor:
             if yolo_alert_type:
                 elapsed = time.time() - self._session_start
                 _push_log(f"[YOLO] {yolo_alert_type}", {"elapsed": round(elapsed,1)}, self.session_id)
-                # Add to alert manager with keyframe capture
                 self.alerts.add(yolo_alert_type, frame_copy)
 
                 db = db_factory()
@@ -1508,6 +1495,49 @@ class WebSessionProcessor:
                         db.commit()
                 finally:
                     db.close()
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Feature 4: _check_no_face_auto_stop
+    # ══════════════════════════════════════════════════════════════════════
+    def _check_no_face_auto_stop(self, face_count: int) -> Optional[int]:
+        """
+        Call every frame in the monitoring phase.
+
+        - If face_count == 0: start (or continue) the no-face streak timer.
+        - If face_count > 0 : reset the timer (face is back).
+
+        Returns:
+            int  — seconds remaining before auto-stop (≥ 1), OR
+            0    — threshold reached → set self.abandoned = True and stop loop
+            None — timer not active (face present)
+        """
+        now = time.time()
+        threshold = Config.NO_FACE_AUTO_STOP_SECONDS
+
+        if face_count > 0:
+            # Face detected → cancel any active countdown
+            self._no_face_since = None
+            return None
+
+        # No face in this frame
+        if self._no_face_since is None:
+            self._no_face_since = now
+
+        elapsed_no_face = now - self._no_face_since
+        remaining = int(threshold - elapsed_no_face)
+
+        if remaining <= 0:
+            # Threshold crossed → trigger abandonment
+            self.abandoned  = True
+            self._running   = False   # signals camera loop to exit
+            _push_log(
+                "[AUTO-STOP] Session abandoned — no face detected",
+                {"duration_no_face": round(elapsed_no_face, 1)},
+                self.session_id
+            )
+            return 0
+
+        return max(remaining, 1)
 
     def _camera_loop(self, db_factory):
         _pending_mediapipe_alerts = []
@@ -1557,15 +1587,35 @@ class WebSessionProcessor:
                 b64 = base64.b64encode(jpg).decode('utf-8')
 
                 with self._lock:
-                    self._latest_state["calibrated"]   = False
-                    self._latest_state["cal_progress"]  = progress
-                    self._latest_state["face_count"]    = face_count
-                    self._latest_state["frame_b64"]     = b64
-                    self._latest_state["fps"]           = round(self._fps, 1)
+                    self._latest_state["calibrated"]       = False
+                    self._latest_state["cal_progress"]      = progress
+                    self._latest_state["face_count"]        = face_count
+                    self._latest_state["frame_b64"]         = b64
+                    self._latest_state["fps"]               = round(self._fps, 1)
+                    self._latest_state["abandoned"]         = False
+                    self._latest_state["no_face_countdown"] = None
                 self._tick_fps()
                 continue
 
             # ── monitoring phase ──────────────────────────────────────────
+
+            # ── Feature 4: No-face auto-stop check ───────────────────────
+            no_face_countdown = self._check_no_face_auto_stop(face_count)
+
+            if self.abandoned:
+                # Finalize the session in a separate thread to avoid blocking
+                threading.Thread(
+                    target=self._auto_abandon,
+                    args=(db_factory,),
+                    daemon=True
+                ).start()
+                # Push final abandoned frame to UI before loop exits
+                with self._lock:
+                    self._latest_state["abandoned"]         = True
+                    self._latest_state["no_face_countdown"] = 0
+                break
+            # ─────────────────────────────────────────────────────────────
+
             if face_count == 0:
                 if self.alerts.add("NO_FACE", frame):
                     current_alert = "NO_FACE"
@@ -1636,13 +1686,11 @@ class WebSessionProcessor:
                             metadata_json = json.dumps({}),
                         ))
 
-                    # Feature 1: Persist keyframes for recent alerts
                     timeline = self.alerts.get_timeline_data()
                     for entry in timeline[-len(_pending_mediapipe_alerts)-2:]:
                         if entry['has_keyframe']:
                             kf_data = self.alerts._keyframes.get(entry['keyframe_idx'])
                             if kf_data:
-                                # Check if already saved
                                 exists = db.query(DBKeyframe).filter(
                                     DBKeyframe.session_id == self.session_id,
                                     DBKeyframe.elapsed_secs == round(entry['elapsed'], 1)
@@ -1681,17 +1729,20 @@ class WebSessionProcessor:
                 cv2.putText(frame, msg, (20, 90),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 130, 255), 2)
 
+            with self._yolo_frame_lock:
+                self._yolo_latest_frame = frame.copy()
+                
             frame = self._ui.draw(
                 frame, face_count,
                 gaze_dir, gaze_yaw, gaze_pitch,
                 head_dir, head_pitch, head_yaw, head_roll,
                 eye_dir, eye_h, eye_v,
-                score, current_alert, self._fps
+                score, current_alert, self._fps,
+                no_face_countdown=no_face_countdown,
             )
             UIRenderer.draw_hints(frame)
 
-            with self._yolo_frame_lock:
-                self._yolo_latest_frame = frame.copy()
+            
 
             _, jpg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
             b64    = base64.b64encode(jpg).decode('utf-8')
@@ -1717,9 +1768,79 @@ class WebSessionProcessor:
                     "frame_b64"      : b64,
                     "fps"            : round(self._fps, 1),
                     "yolo_alert"     : yolo_alert_type,
+                    # Feature 4
+                    "abandoned"         : False,
+                    "no_face_countdown" : no_face_countdown,
                 }
 
             self._tick_fps()
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Feature 4: _auto_abandon — finalize the session as ABANDONED
+    # ══════════════════════════════════════════════════════════════════════
+    def _auto_abandon(self, db_factory):
+        """
+        Called in a daemon thread when the no-face threshold is crossed.
+        Finalizes the DB record with recommendation = 'ABANDONED', removes
+        the processor from active_processors, and pushes a log entry.
+        """
+        db = db_factory()
+        try:
+            score    = self.alerts.suspicion_score()
+            duration = time.time() - self._session_start
+
+            # Persist remaining score history & keyframes
+            timeline = self.alerts.get_timeline_data()
+            for entry in timeline:
+                if entry['has_keyframe']:
+                    kf_data = self.alerts._keyframes.get(entry['keyframe_idx'])
+                    if kf_data:
+                        exists = db.query(DBKeyframe).filter(
+                            DBKeyframe.session_id == self.session_id,
+                            DBKeyframe.elapsed_secs == round(entry['elapsed'], 1)
+                        ).first()
+                        if not exists:
+                            db.add(DBKeyframe(
+                                session_id   = self.session_id,
+                                alert_type   = entry['type'],
+                                elapsed_secs = round(entry['elapsed'], 1),
+                                image_data   = kf_data,
+                            ))
+
+            for t, s in self.alerts._score_history:
+                db.add(DBScoreHistory(session_id=self.session_id, score=s))
+
+            db.query(DBSession).filter(DBSession.id == self.session_id).update({
+                "ended_at"        : datetime.utcnow(),
+                "final_score"     : score,
+                "recommendation"  : "ABANDONED",   # ← distinct from ACCEPT/REVIEW/REJECT
+                "duration_seconds": duration,
+            })
+            db.commit()
+        except Exception as e:
+            print(f"Auto-abandon DB error: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
+        # Clean up resources
+        try:
+            self.cap.release()
+            self.face_det.close()
+            self._yolo.save_json(f"outputs/yolo_session_{self.session_id}.json")
+            self.alerts.export_report(f"session_{self.session_id}_report.txt")
+        except Exception as e:
+            print(f"Auto-abandon cleanup error: {e}")
+
+        # Remove from active processors registry
+        active_processors.pop(self.session_id, None)
+
+        _push_log(
+            "[AUTO-STOP] Session finalized as ABANDONED",
+            {"session_id": self.session_id, "score": round(score, 1)},
+            self.session_id
+        )
+        print(f"[AUTO-STOP] Session {self.session_id} abandoned after prolonged no-face.")
 
     def start(self):
         self._running = True
@@ -1754,7 +1875,10 @@ class WebSessionProcessor:
         rec, _   = self.alerts.recommendation()
         duration = time.time() - self._session_start
 
-        # Persist all remaining keyframes
+        # Use ABANDONED if the session was auto-stopped
+        if self.abandoned:
+            rec = "ABANDONED"
+
         timeline = self.alerts.get_timeline_data()
         for entry in timeline:
             if entry['has_keyframe']:
@@ -1792,39 +1916,6 @@ class WebSessionProcessor:
 #  FASTAPI APP
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  LIVE LOG BUFFER  — بدل ما اللوج يتطبع في التيرمنال، بيتبعت للداشبورد
-# ══════════════════════════════════════════════════════════════════════════════
-
-import collections as _col_logs
-
-# {session_id: deque of log dicts}  — آخر 200 رسالة لكل سيشن
-_log_buffers: dict = {}
-_log_subscribers: dict = {}  # {session_id: list of asyncio.Queue}
-
-
-def _push_log(alert_type: str, details: dict, session_id=None):
-    """يخزن اللوج في الـ buffer بدل print. بدون أي طباعة في التيرمنال."""
-    entry = {
-        "ts"         : datetime.now().strftime("%H:%M:%S"),
-        "alert_type" : alert_type,
-        "details"    : details,
-        "session_id" : session_id,
-    }
-    # خزّن في buffer
-    sid = str(session_id) if session_id else "global"
-    if sid not in _log_buffers:
-        _log_buffers[sid] = _col_logs.deque(maxlen=200)
-    _log_buffers[sid].append(entry)
-
-    # ابعت لكل المشتركين في الـ session دي
-    for q in _log_subscribers.get(sid, []):
-        try:
-            q.put_nowait(entry)
-        except Exception:
-            pass
-
-
 active_processors = {}  # type: dict
 
 app = FastAPI(title="JobLens AI — Integrity Monitor")
@@ -1839,7 +1930,6 @@ async def index():
         return HTMLResponse(f.read())
 
 
-# ── Feature 2: Pydantic model for session start with candidate profile ────────
 class StartSessionRequest(BaseModel):
     candidate_name: Optional[str] = None
     candidate_id: Optional[str] = None
@@ -1847,7 +1937,6 @@ class StartSessionRequest(BaseModel):
 
 @app.post("/api/sessions/start")
 def start_session(req: StartSessionRequest = None):
-    """Start a session, optionally with candidate name and ID (Feature 2)."""
     if req is None:
         req = StartSessionRequest()
     db = DBSessionLocal()
@@ -1891,11 +1980,27 @@ def end_session(session_id: int):
     db = DBSessionLocal()
     try:
         if session_id not in active_processors:
+            # Session may have already been auto-abandoned
+            session = db.query(DBSession).filter(DBSession.id == session_id).first()
+            if session and session.recommendation == "ABANDONED":
+                rec, reason = "ABANDONED", "Session auto-stopped — no face detected for prolonged period"
+                return {
+                    "session_id"      : session_id,
+                    "final_score"     : session.final_score,
+                    "recommendation"  : rec,
+                    "reason"          : reason,
+                    "duration_seconds": session.duration_seconds,
+                    "candidate_name"  : session.candidate_name,
+                    "candidate_id"    : session.candidate_id,
+                }
             raise HTTPException(status_code=404, detail="Session not found or already ended")
         processor = active_processors.pop(session_id)
         processor.finalize(db)
         session = db.query(DBSession).filter(DBSession.id == session_id).first()
         rec, reason = processor.alerts.recommendation()
+        if processor.abandoned:
+            rec    = "ABANDONED"
+            reason = "Session auto-stopped — no face detected for prolonged period"
         return {
             "session_id"      : session_id,
             "final_score"     : session.final_score,
@@ -1952,7 +2057,6 @@ def get_report(session_id: int):
         for ya in session.yolo_alerts:
             yolo_breakdown[ya.alert_type] = yolo_breakdown.get(ya.alert_type, 0) + 1
 
-        # Feature 1: Build timeline events with keyframe availability
         timeline_events = []
         seen_elapsed = set()
         for a in sorted(session.alerts, key=lambda x: x.elapsed_secs):
@@ -1969,7 +2073,6 @@ def get_report(session_id: int):
                     "keyframe_id" : kf.id if kf else None,
                     "has_keyframe": kf is not None,
                 })
-        # Also add YOLO alerts to timeline
         for ya in sorted(session.yolo_alerts, key=lambda x: x.elapsed_secs):
             timeline_events.append({
                 "alert_type"  : ya.alert_type,
@@ -1995,13 +2098,12 @@ def get_report(session_id: int):
             "total_yolo_alerts"   : len(session.yolo_alerts),
             "candidate_name"      : session.candidate_name,
             "candidate_id"        : session.candidate_id,
-            "timeline_events"     : timeline_events,   # Feature 1
+            "timeline_events"     : timeline_events,
         }
     finally:
         db.close()
 
 
-# Feature 1: Endpoint to serve keyframe image
 @app.get("/api/keyframes/{keyframe_id}")
 def get_keyframe(keyframe_id: int):
     from fastapi.responses import Response
@@ -2027,10 +2129,11 @@ def dashboard_stats():
     db = DBSessionLocal()
     try:
         sessions = db.query(DBSession).filter(DBSession.ended_at.isnot(None)).all()
-        total   = len(sessions)
-        accept  = sum(1 for s in sessions if s.recommendation == "ACCEPT")
-        review  = sum(1 for s in sessions if s.recommendation == "REVIEW")
-        reject  = sum(1 for s in sessions if s.recommendation == "REJECT")
+        total    = len(sessions)
+        accept   = sum(1 for s in sessions if s.recommendation == "ACCEPT")
+        review   = sum(1 for s in sessions if s.recommendation == "REVIEW")
+        reject   = sum(1 for s in sessions if s.recommendation == "REJECT")
+        abandoned = sum(1 for s in sessions if s.recommendation == "ABANDONED")  # Feature 4
         scores    = [s.final_score for s in sessions if s.final_score is not None]
         durations = [s.duration_seconds for s in sessions if s.duration_seconds]
         avg_score    = round(sum(scores) / len(scores), 1)    if scores    else 0.0
@@ -2045,6 +2148,7 @@ def dashboard_stats():
             "accept"           : accept,
             "review"           : review,
             "reject"           : reject,
+            "abandoned"        : abandoned,    # Feature 4
             "avg_score"        : avg_score,
             "avg_duration"     : avg_duration,
             "most_common_alert": most_common,
@@ -2112,6 +2216,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int):
             try:
                 state = processor.get_state()
                 await websocket.send_json(state)
+
+                # Feature 4: tell the client to stop polling if abandoned
+                if state.get("abandoned"):
+                    await asyncio.sleep(0.5)  # give client time to receive the flag
+                    break
+
                 await asyncio.sleep(0.02)
             except WebSocketDisconnect:
                 break
@@ -2127,10 +2237,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int):
 
 @app.websocket("/ws/logs/{session_id}")
 async def websocket_logs(websocket: WebSocket, session_id: int):
-    """
-    WebSocket بيبعت اللوج live للداشبورد بدل التيرمنال.
-    بيبعت الـ history الموجود أول ما حد يتصل، وبعدين updates live.
-    """
     await websocket.accept()
     sid = str(session_id)
     q: asyncio.Queue = asyncio.Queue()
@@ -2140,18 +2246,15 @@ async def websocket_logs(websocket: WebSocket, session_id: int):
     _log_subscribers[sid].append(q)
 
     try:
-        # ابعت الـ history الموجود أولاً
         existing = list(_log_buffers.get(sid, []))
         for entry in existing:
             await websocket.send_json(entry)
 
-        # بعدين استنى updates جديدة
         while True:
             try:
                 entry = await asyncio.wait_for(q.get(), timeout=30.0)
                 await websocket.send_json(entry)
             except asyncio.TimeoutError:
-                # keep-alive ping
                 try:
                     await websocket.send_json({"ping": True})
                 except Exception:
@@ -2172,13 +2275,12 @@ async def websocket_logs(websocket: WebSocket, session_id: int):
 
 @app.get("/api/logs/{session_id}")
 def get_logs_history(session_id: int):
-    """REST endpoint للداشبورد يجيب الـ log history."""
     sid = str(session_id)
     return list(_log_buffers.get(sid, []))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  STANDALONE DESKTOP MODE (unchanged)
+#  STANDALONE DESKTOP MODE  (Feature 4 wired in here too)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class CheatingDetectionSystem:
@@ -2197,6 +2299,9 @@ class CheatingDetectionSystem:
         self._fps_prev    = time.time()
         self._fps_counter = 0
 
+        # Feature 4: no-face auto-stop tracking
+        self._no_face_since: Optional[float] = None
+
     def _blur_face(self, frame, face_landmarks, img_w, img_h):
         x_min, y_min, x_max, y_max = self.face_det.get_face_bbox(face_landmarks, img_w, img_h)
         face_roi = frame[y_min:y_max, x_min:x_max]
@@ -2204,6 +2309,30 @@ class CheatingDetectionSystem:
             blurred = cv2.GaussianBlur(face_roi, (Config.BLUR_KERNEL_SIZE, Config.BLUR_KERNEL_SIZE), 0)
             frame[y_min:y_max, x_min:x_max] = blurred
         return frame
+
+    def _check_no_face_auto_stop(self, face_count: int):
+        """
+        Same logic as WebSessionProcessor.  Returns (should_stop, countdown).
+        should_stop = True means the threshold was crossed.
+        countdown   = int seconds remaining, or None if face present.
+        """
+        now       = time.time()
+        threshold = Config.NO_FACE_AUTO_STOP_SECONDS
+
+        if face_count > 0:
+            self._no_face_since = None
+            return False, None
+
+        if self._no_face_since is None:
+            self._no_face_since = now
+
+        elapsed   = now - self._no_face_since
+        remaining = int(threshold - elapsed)
+
+        if remaining <= 0:
+            return True, 0
+
+        return False, max(remaining, 1)
 
     def _process(self, frame):
         img_h, img_w = frame.shape[:2]
@@ -2231,7 +2360,13 @@ class CheatingDetectionSystem:
             frame = self.ui.draw(frame, face_count, "—", 0, 0, "—", 0, 0, 0, "—", 0, 0, 0, None, self._fps,
                                  calibrating=True, cal_progress=progress)
             UIRenderer.draw_hints(frame)
-            return frame
+            return frame, False  # (frame, should_abandon)
+
+        # ── Feature 4: no-face auto-stop ─────────────────────────────────
+        should_abandon, no_face_countdown = self._check_no_face_auto_stop(face_count)
+        if should_abandon:
+            print(f"\n[AUTO-STOP] No face detected for {Config.NO_FACE_AUTO_STOP_SECONDS}s — session abandoned.")
+            return frame, True
 
         if face_count == 0:
             current_alert = "NO_FACE"
@@ -2272,9 +2407,10 @@ class CheatingDetectionSystem:
         self.alerts.update_score_history(score)
         frame = self.ui.draw(frame, face_count, gaze_dir, gaze_yaw, gaze_pitch,
                              head_dir, head_pitch, head_yaw, head_roll,
-                             eye_dir, eye_h, eye_v, score, current_alert, self._fps)
+                             eye_dir, eye_h, eye_v, score, current_alert, self._fps,
+                             no_face_countdown=no_face_countdown)
         UIRenderer.draw_hints(frame)
-        return frame
+        return frame, False
 
     def _tick_fps(self):
         self._fps_counter += 1
@@ -2303,12 +2439,18 @@ class CheatingDetectionSystem:
                     cv2.destroyAllWindows()
                     return
 
+        abandoned = False
         while True:
             ret, frame = self.cap.read()
             if not ret:
                 break
-            frame = self._process(frame)
+            frame, should_abandon = self._process(frame)
             self._tick_fps()
+
+            if should_abandon:
+                abandoned = True
+                break
+
             cv2.imshow("JobLens AI — Integrity Monitor", frame)
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
@@ -2322,13 +2464,16 @@ class CheatingDetectionSystem:
                     cv2.imshow("Timeline & Score Chart", timeline_img)
             if key == ord('d'):
                 Config.DEBUG_MODE = not Config.DEBUG_MODE
-        self._shutdown()
 
-    
-    def _shutdown(self):
+        self._shutdown(abandoned=abandoned)
+
+    def _shutdown(self, abandoned: bool = False):
         path = self.alerts.export_report("final_report.txt")
         summ = self.alerts.summary()
         rec, reason = self.alerts.recommendation()
+        if abandoned:
+            rec    = "ABANDONED"
+            reason = f"Session auto-stopped — no face detected for {Config.NO_FACE_AUTO_STOP_SECONDS}s"
         print(f"Score: {summ['score']:.0f}% | {rec}: {reason}")
         self.cap.release()
         cv2.destroyAllWindows()
