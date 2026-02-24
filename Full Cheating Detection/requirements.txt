@@ -1,0 +1,28 @@
+# =========================================
+# JobLens – Cheating Detection Engine
+# =========================================
+
+# Python Version
+# Requires: Python 3.9
+
+# Core Computer Vision
+opencv-python==4.13.0.90
+mediapipe==0.10.5
+numpy==2.0.2
+matplotlib==3.9.4
+
+# YOLO / Deep Learning
+ultralytics==8.4.14
+torch==2.8.0
+torchvision==0.39.0
+
+# Backend
+fastapi==0.115.0
+uvicorn[standard]==0.39.0
+pydantic==2.12.5
+
+# Database
+sqlalchemy==2.0.46
+
+# Realtime / Networking
+websockets==15.0.1
