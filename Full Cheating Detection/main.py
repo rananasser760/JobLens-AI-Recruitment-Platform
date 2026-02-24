@@ -801,8 +801,8 @@ class YOLODetector:
 
     # ── confidence / geometry thresholds ────────────────────────────────
     PERSON_CONF      = 0.70
-    PHONE_CONF       = 0.75
-    PHONE_MIN_AREA   = 0.003   # phone box must cover ≥ 0.3% of frame area
+    PHONE_CONF       = 0.65
+    PHONE_MIN_AREA   = 0.002   # phone box must cover ≥ 0.3% of frame area
     PERSON_IOU_MERGE = 0.45    # boxes with IoU ≥ this are the same person
 
     # ── sliding-window vote parameters ──────────────────────────────────
@@ -813,7 +813,7 @@ class YOLODetector:
     }
     VOTE_THRESHOLD = {
         'MULTIPLE_PEOPLE'     : 3,
-        'CHEATING_ITEM_MOBILE': 4,
+        'CHEATING_ITEM_MOBILE': 3,
     }
 
     def __init__(self, session_id: str = None):
@@ -1337,7 +1337,6 @@ def _run_migrations():
                 cursor.execute("ALTER TABLE {} ADD COLUMN {} {}".format(table, column, definition))
                 print("Migration: added '{}' to '{}'".format(column, table))
 
-        # جدول keyframes جديد كليا - اتأكد انه موجود
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS keyframes (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2325,6 +2324,7 @@ class CheatingDetectionSystem:
                 Config.DEBUG_MODE = not Config.DEBUG_MODE
         self._shutdown()
 
+    
     def _shutdown(self):
         path = self.alerts.export_report("final_report.txt")
         summ = self.alerts.summary()
