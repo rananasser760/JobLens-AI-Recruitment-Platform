@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JobLens AI — Integrity Monitor</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0b0e;
+      --surface: #111318;
+      --surface2: #181b22;
+      --border: #1e2230;
+      --border2: #252a38;
+      --green: #00e676;
+      --yellow: #ffd600;
+      --red: #ff1744;
+      --cyan: #00e5ff;
+      --orange: #ff6d00;
+      --text: #e8eaf0;
+      --text-dim: #5c6273;
+      --text-mid: #8892a4;
+      --mono: 'Space Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+      --display: 'Bebas Neue', sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: linear-gradient(rgba(255, 255, 255, .015) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .015) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ── */
+    header {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 11, 14, .95);
+      backdrop-filter: blur(12px);
+    }
+
+    .logo {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .logo-name {
+      font-family: var(--display);
+      font-size: 26px;
+      letter-spacing: 2px;
+      color: var(--cyan);
+    }
+
+    .logo-sub {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border2);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--text-mid);
+      background: var(--surface);
+    }
+
+    .status-pill .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: background .3s, box-shadow .3s;
+    }
+
+    .status-pill.live .dot {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse-dot 1.5s infinite;
+    }
+
+    .status-pill.calibrating .dot {
+      background: var(--yellow);
+      box-shadow: 0 0 8px var(--yellow);
+      animation: pulse-dot 1s infinite;
+    }
+
+    @keyframes pulse-dot {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .3
+      }
+    }
+
+    /* ── Main layout ── */
+    .main {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      grid-template-rows: 1fr auto;
+      gap: 0;
+      height: calc(100vh - 56px);
+      max-height: calc(100vh - 56px);
+    }
+
+    /* ── Camera panel ── */
+    .camera-panel {
+      position: relative;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .camera-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      flex-shrink: 0;
+    }
+
+    .camera-toolbar-left {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .fps-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-mid);
+      background: var(--border);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .camera-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #canvasEl {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .camera-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-dim);
+    }
+
+    .camera-placeholder svg {
+      opacity: .3;
+    }
+
+    .camera-placeholder p {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 1px;
+    }
+
+    /* Brackets */
+    .bracket {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border-color: var(--cyan);
+      border-style: solid;
+      opacity: .4;
+      pointer-events: none;
+      transition: opacity .3s;
+    }
+
+    .bracket.tl {
+      top: 60px;
+      left: 12px;
+      border-width: 2px 0 0 2px;
+    }
+
+    .bracket.tr {
+      top: 60px;
+      right: 12px;
+      border-width: 2px 2px 0 0;
+    }
+
+    .bracket.bl {
+      bottom: 12px;
+      left: 12px;
+      border-width: 0 0 2px 2px;
+    }
+
+    .bracket.br {
+      bottom: 12px;
+      right: 12px;
+      border-width: 0 2px 2px 0;
+    }
+
+    .camera-panel.active .bracket {
+      opacity: .9;
+    }
+
+    /* Alert flash */
+    .alert-flash {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 10px 16px;
+      background: rgba(255, 23, 68, .15);
+      border-top: 2px solid var(--red);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--red);
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 5;
+    }
+
+    .alert-flash.show {
+      display: flex;
+    }
+
+    .alert-flash::before {
+      content: '!';
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    /* Calibration overlay */
+    .cal-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 11, 14, .85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 10;
+      backdrop-filter: blur(4px);
+    }
+
+    .cal-overlay.hidden {
+      display: none;
+    }
+
+    .cal-title {
+      font-family: var(--display);
+      font-size: 36px;
+      letter-spacing: 4px;
+      color: var(--yellow);
+    }
+
+    .cal-sub {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: var(--text-mid);
+      text-align: center;
+    }
+
+    .cal-bar-wrap {
+      width: 280px;
+      height: 4px;
+      background: var(--border2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .cal-bar-fill {
+      height: 100%;
+      background: var(--yellow);
+      width: 0%;
+      transition: width .2s ease;
+      box-shadow: 0 0 12px var(--yellow);
+    }
+
+    .cal-pct {
+      font-family: var(--mono);
+      font-size: 22px;
+      color: var(--yellow);
+    }
+
+    /* YOLO flash */
+    .yolo-flash {
+      position: absolute;
+      top: 48px;
+      left: 0;
+      right: 0;
+      padding: 7px 16px;
+      background: rgba(255, 109, 0, .15);
+      border-bottom: 2px solid var(--orange);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: var(--orange);
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 6;
+    }
+
+    .yolo-flash.show {
+      display: flex;
+    }
+
+    /* Scan line */
+    .camera-wrap::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(0, 229, 255, .08), transparent);
+      animation: scan 4s linear infinite;
+      pointer-events: none;
+    }
+
+    @keyframes scan {
+      from {
+        top: 48px
+      }
+
+      to {
+        top: 100%
+      }
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+      background: var(--surface);
+      scrollbar-width: thin;
+      scrollbar-color: var(--border2) transparent;
+    }
+
+    .sidebar-section {
+      border-bottom: 1px solid var(--border);
+      padding: 14px 16px;
+    }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    /* Score */
+    .score-big {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .score-num {
+      font-family: var(--display);
+      font-size: 52px;
+      line-height: 1;
+      color: var(--green);
+      transition: color .5s;
+    }
+
+    .score-num.medium {
+      color: var(--yellow);
+    }
+
+    .score-num.high {
+      color: var(--red);
+    }
+
+    .score-unit {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-dim);
+      padding-bottom: 8px;
+    }
+
+    .score-bar-track {
+      height: 6px;
+      background: var(--border2);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+
+    .score-bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 3px;
+      background: var(--green);
+      transition: width .5s ease, background .5s ease;
+    }
+
+    .score-bar-fill.medium {
+      background: var(--yellow);
+    }
+
+    .score-bar-fill.high {
+      background: var(--red);
+    }
+
+    .score-thresholds {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 8px;
+      color: var(--text-dim);
+    }
+
+    /* Feature 3: Decay indicator */
+    .decay-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 8px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    .decay-icon {
+      font-size: 10px;
+    }
+
+    .rec-label {
+      margin-top: 10px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-align: center;
+      border: 1px solid;
+    }
+
+    .rec-label.accept {
+      color: var(--green);
+      border-color: rgba(0, 230, 118, .3);
+      background: rgba(0, 230, 118, .05);
+    }
+
+    .rec-label.review {
+      color: var(--yellow);
+      border-color: rgba(255, 214, 0, .3);
+      background: rgba(255, 214, 0, .05);
+    }
+
+    .rec-label.reject {
+      color: var(--red);
+      border-color: rgba(255, 23, 68, .3);
+      background: rgba(255, 23, 68, .05);
+    }
+
+    /* Stat rows */
+    .stat-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+
+    .stat-label {
+      font-family: var(--sans);
+      font-size: 11px;
+      color: var(--text-mid);
+      font-weight: 300;
+    }
+
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text);
+      transition: color .3s;
+    }
+
+    .stat-value.alert-color {
+      color: var(--red);
+    }
+
+    /* Face indicator */
+    .face-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      margin-bottom: 2px;
+    }
+
+    .face-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      transition: border-color .3s, box-shadow .3s;
+    }
+
+    .face-icon.ok {
+      border-color: var(--green);
+      box-shadow: 0 0 10px rgba(0, 230, 118, .3);
+    }
+
+    .face-icon.err {
+      border-color: var(--red);
+      box-shadow: 0 0 10px rgba(255, 23, 68, .3);
+    }
+
+    .face-text {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-mid);
+    }
+
+    .face-status {
+      font-family: var(--mono);
+      font-size: 10px;
+      margin-left: auto;
+      color: var(--text-dim);
+    }
+
+    .face-status.ok {
+      color: var(--green);
+    }
+
+    .face-status.err {
+      color: var(--red);
+    }
+
+    /* Alert breakdown */
+    .alert-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .alert-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 6px;
+      border-radius: 3px;
+      background: var(--surface2);
+    }
+
+    .alert-item-name {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-mid);
+      letter-spacing: .5px;
+    }
+
+    .alert-item-count {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--yellow);
+      background: rgba(255, 214, 0, .1);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 14px 16px;
+    }
+
+    .btn {
+      padding: 9px 16px;
+      border-radius: 5px;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--text-mid);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all .2s;
+      text-align: center;
+    }
+
+    .btn:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: rgba(0, 229, 255, .05);
+    }
+
+    .btn.primary {
+      background: var(--cyan);
+      color: var(--bg);
+      border-color: var(--cyan);
+      font-weight: 700;
+    }
+
+    .btn.primary:hover {
+      background: #00b8d4;
+      border-color: #00b8d4;
+    }
+
+    .btn.danger {
+      border-color: rgba(255, 23, 68, .4);
+      color: var(--red);
+    }
+
+    .btn.danger:hover {
+      background: rgba(255, 23, 68, .1);
+    }
+
+    .btn:disabled {
+      opacity: .3;
+      cursor: not-allowed;
+    }
+
+    .btn:disabled:hover {
+      border-color: var(--border2);
+      color: var(--text-mid);
+      background: var(--surface2);
+    }
+
+    /* YOLO badges */
+    .yolo-badge {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 8px;
+      border-radius: 5px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      margin-top: 6px;
+    }
+
+    .yolo-badge-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    .yolo-badge-val {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--green);
+      letter-spacing: 1px;
+      transition: color .3s;
+    }
+
+    .yolo-badge-val.alert {
+      color: var(--orange);
+    }
+
+    /* Past sessions */
+    .session-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border2);
+      background: var(--surface);
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-mid);
+      white-space: nowrap;
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+
+    .session-chip:hover {
+      border-color: var(--cyan);
+    }
+
+    .session-chip .chip-score.accept {
+      color: var(--green);
+    }
+
+    .session-chip .chip-score.review {
+      color: var(--yellow);
+    }
+
+    .session-chip .chip-score.reject {
+      color: var(--red);
+    }
+
+    /* Bottom bar */
+    .bottom-bar {
+      grid-column: 1 / -1;
+      border-top: 1px solid var(--border);
+      background: var(--surface2);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      overflow-x: auto;
+      flex-shrink: 0;
+      min-height: 46px;
+    }
+
+    .bottom-label {
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .session-chips {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border2);
+      border-radius: 2px;
+    }
+
+    /* ══ CANDIDATE FORM MODAL (Feature 2) ══ */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .75);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(8px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .3s;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      padding: 28px;
+      width: 540px;
+      max-width: 95vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      transform: translateY(20px);
+      transition: transform .3s;
+      position: relative;
+    }
+
+    .modal-overlay.open .modal {
+      transform: translateY(0);
+    }
+
+    .modal-title {
+      font-family: var(--display);
+      font-size: 26px;
+      letter-spacing: 3px;
+      color: var(--cyan);
+      margin-bottom: 20px;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 20px;
+      cursor: pointer;
+      color: var(--text-dim);
+      font-size: 20px;
+      line-height: 1;
+      background: none;
+      border: none;
+    }
+
+    .modal-close:hover {
+      color: var(--text);
+    }
+
+    .modal-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .modal-row-label {
+      color: var(--text-mid);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .modal-row-value {
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .modal-section-title {
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin: 16px 0 8px;
+    }
+
+    /* Form inputs */
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 9px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--cyan);
+    }
+
+    .form-input::placeholder {
+      color: var(--text-dim);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .form-actions .btn {
+      flex: 1;
+    }
+
+    /* ══ TIMELINE REPLAY (Feature 1) ══ */
+    .timeline-section {
+      margin-top: 16px;
+    }
+
+    .timeline-title {
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .timeline-track {
+      position: relative;
+      height: 48px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .timeline-ruler {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: flex-end;
+      padding-bottom: 4px;
+    }
+
+    .timeline-tick {
+      position: absolute;
+      bottom: 0;
+      width: 1px;
+      background: var(--border2);
+      height: 8px;
+    }
+
+    .timeline-tick-label {
+      position: absolute;
+      bottom: -1px;
+      font-family: var(--mono);
+      font-size: 7px;
+      color: var(--text-dim);
+      transform: translateX(-50%);
+    }
+
+    .timeline-event {
+      position: absolute;
+      top: 6px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      transform: translateX(-50%);
+      cursor: pointer;
+      transition: transform .15s, box-shadow .15s;
+      border: 1.5px solid rgba(0, 0, 0, .4);
+    }
+
+    .timeline-event:hover {
+      transform: translateX(-50%) scale(1.6);
+      z-index: 10;
+    }
+
+    .timeline-event.has-kf {
+      box-shadow: 0 0 6px currentColor;
+    }
+
+    .timeline-event.selected {
+      transform: translateX(-50%) scale(1.8);
+      box-shadow: 0 0 10px currentColor;
+      z-index: 11;
+    }
+
+    /* Keyframe preview */
+    .keyframe-preview {
+      display: none;
+      border-radius: 6px;
+      overflow: hidden;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      margin-top: 8px;
+    }
+
+    .keyframe-preview.show {
+      display: block;
+    }
+
+    .keyframe-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .keyframe-alert-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 1px;
+    }
+
+    .keyframe-time {
+      font-family: var(--mono);
+      font-size: 8px;
+      color: var(--text-dim);
+    }
+
+    .keyframe-img-wrap {
+      position: relative;
+      background: #000;
+      text-align: center;
+    }
+
+    .keyframe-img-wrap img {
+      max-width: 100%;
+      display: block;
+      opacity: .85;
+    }
+
+    .keyframe-blur-badge {
+      position: absolute;
+      bottom: 6px;
+      right: 8px;
+      font-family: var(--mono);
+      font-size: 7px;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, .5);
+      background: rgba(0, 0, 0, .5);
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .keyframe-no-img {
+      padding: 20px;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    /* Candidate badge in sidebar */
+    .candidate-badge {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+    }
+
+    .candidate-name-display {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+    }
+
+    .candidate-id-display {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    /* Consent */
+    .consent-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .9);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(8px);
+    }
+
+    .consent-box {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      padding: 40px;
+      max-width: 480px;
+      width: 95vw;
+    }
+
+    .consent-title {
+      font-family: var(--display);
+      font-size: 30px;
+      letter-spacing: 4px;
+      color: var(--yellow);
+      margin-bottom: 16px;
+    }
+
+    .consent-text {
+      font-size: 13px;
+      color: var(--text-mid);
+      line-height: 1.7;
+      margin-bottom: 8px;
+    }
+
+    .consent-list {
+      list-style: none;
+      padding: 12px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .consent-list li {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .consent-list li::before {
+      content: '→';
+      color: var(--cyan);
+    }
+
+    .consent-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .consent-actions .btn {
+      flex: 1;
+    }
+
+    /* Alert type color map */
+    .color-NO_FACE,
+    .color-MULTIPLE_FACES,
+    .color-MULTIPLE_PEOPLE,
+    .color-CHEATING_ITEM_MOBILE {
+      background: var(--red);
+    }
+
+    .color-LOOKING_LEFT,
+    .color-LOOKING_RIGHT,
+    .color-LOOKING_UP,
+    .color-LOOKING_DOWN {
+      background: var(--yellow);
+    }
+
+    .color-HEAD_TURNED_LEFT,
+    .color-HEAD_TURNED_RIGHT,
+    .color-HEAD_TILTED_UP,
+    .color-HEAD_TILTED_DOWN,
+    .color-HEAD_TILTED_SIDE {
+      background: var(--orange);
+    }
+
+    .color-EYE_LEFT,
+    .color-EYE_RIGHT,
+    .color-EYE_UP,
+    .color-EYE_DOWN {
+      background: var(--cyan);
+    }
+
+    .color-NO_CANDIDATE {
+      background: var(--text-mid);
+    }
+
+    /* Legend dots */
+    .legend-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Consent overlay -->
+  <div class="consent-overlay" id="consentOverlay">
+    <div class="consent-box">
+      <div class="consent-title">CONSENT NOTICE</div>
+      <p class="consent-text">This system monitors facial behavior to ensure academic integrity during exams and
+        interviews.</p>
+      <ul class="consent-list">
+        <li>Facial landmarks and gaze direction are tracked</li>
+        <li>Alert keyframes (blurred) are stored for review</li>
+        <li>No raw video is saved or transmitted</li>
+        <li>All processing happens locally</li>
+        <li>Data is stored in a local database only</li>
+      </ul>
+      <div class="consent-actions">
+        <button class="btn danger" onclick="window.location.reload()">DECLINE</button>
+        <button class="btn primary" onclick="acceptConsent()">ACCEPT & CONTINUE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Feature 2: Candidate Profile Modal ══ -->
+  <div class="modal-overlay" id="candidateModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeCandidateModal()">✕</button>
+      <div class="modal-title">NEW SESSION</div>
+      <p style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:20px;letter-spacing:1px;">
+        Enter candidate details before starting the session.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Candidate Name</label>
+        <input class="form-input" id="inputCandidateName" type="text" placeholder="e.g. Jane Smith" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Candidate ID / Reference</label>
+        <input class="form-input" id="inputCandidateId" type="text" placeholder="e.g. CAND-2024-001" autocomplete="off">
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeCandidateModal()">CANCEL</button>
+        <button class="btn primary" onclick="confirmStartSession()">START SESSION →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report modal -->
+  <div class="modal-overlay" id="reportModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">SESSION REPORT</div>
+      <div id="reportContent"></div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <span class="logo-name">JOBLENS AI</span>
+      <span class="logo-sub">Integrity Monitor</span>
+    </div>
+    <div class="header-status">
+      <a href="/dashboard"
+        style="font-family:var(--mono);font-size:9px;letter-spacing:2px;color:var(--text-dim);text-decoration:none;padding:4px 10px;border:1px solid var(--border2);border-radius:4px;transition:all .2s;"
+        onmouseover="this.style.color='var(--cyan)';this.style.borderColor='var(--cyan)'"
+        onmouseout="this.style.color='var(--text-dim)';this.style.borderColor='var(--border2)'">DASHBOARD →</a>
+      <div class="status-pill idle" id="statusPill">
+        <div class="dot"></div>
+        <span id="statusText">IDLE</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Camera panel -->
+    <div class="camera-panel" id="cameraPanel">
+      <div class="camera-toolbar">
+        <span class="camera-toolbar-left">LIVE FEED · CAM 0</span>
+        <span class="fps-badge" id="fpsBadge">-- FPS</span>
+      </div>
+      <div class="camera-wrap">
+        <canvas id="canvasEl"></canvas>
+        <div class="camera-placeholder" id="cameraPlaceholder">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+            <path d="M23 7l-7 5 7 5V7z" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+          <p>START SESSION TO BEGIN</p>
+        </div>
+        <div class="cal-overlay hidden" id="calOverlay">
+          <div class="cal-title">CALIBRATING</div>
+          <div class="cal-sub">Look straight at the camera<br>Keep your head still</div>
+          <div class="cal-bar-wrap">
+            <div class="cal-bar-fill" id="calBarFill"></div>
+          </div>
+          <div class="cal-pct" id="calPct">0%</div>
+        </div>
+        <div class="bracket tl"></div>
+        <div class="bracket tr"></div>
+        <div class="bracket bl"></div>
+        <div class="bracket br"></div>
+      </div>
+      <div class="alert-flash" id="alertFlash"></div>
+      <div class="yolo-flash" id="yoloFlash"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <!-- Controls -->
+      <div class="controls">
+        <button class="btn primary" id="startBtn" onclick="openCandidateModal()">START SESSION</button>
+        <button class="btn danger" id="stopBtn" onclick="stopSession()" disabled>STOP & SAVE</button>
+      </div>
+
+      <!-- Feature 2: Candidate info display -->
+      <div class="sidebar-section" id="candidateSection" style="display:none">
+        <div class="section-label">Candidate</div>
+        <div class="candidate-badge">
+          <div class="candidate-name-display" id="displayCandidateName">—</div>
+          <div class="candidate-id-display" id="displayCandidateId">ID: —</div>
+        </div>
+      </div>
+
+      <!-- Score -->
+      <div class="sidebar-section">
+        <div class="section-label">Suspicion Score</div>
+        <div class="score-big">
+          <div class="score-num" id="scoreNum">0</div>
+          <div class="score-unit">/ 100</div>
+        </div>
+        <div class="score-bar-track">
+          <div class="score-bar-fill" id="scoreBarFill"></div>
+        </div>
+        <div class="score-thresholds">
+          <span>0 — CLEAR</span><span>30</span><span>70</span><span>100 — FLAGGED</span>
+        </div>
+        <!-- Feature 3: Decay indicator -->
+        <div class="decay-badge">
+          <span class="decay-icon">⏳</span>
+          <span>Sliding window · slow decay · behavior memory floor</span>
+        </div>
+        <div class="rec-label accept" id="recLabel">AWAITING DATA</div>
+      </div>
+
+      <!-- Face -->
+      <div class="sidebar-section">
+        <div class="section-label">Face Detection</div>
+        <div class="face-indicator">
+          <div class="face-icon" id="faceIcon">👤</div>
+          <span class="face-text">DETECTED</span>
+          <span class="face-status" id="faceStatus">—</span>
+        </div>
+      </div>
+
+      <!-- Gaze -->
+      <div class="sidebar-section">
+        <div class="section-label">Gaze Tracking</div>
+        <div class="stat-row"><span class="stat-label">Direction</span><span class="stat-value" id="gazeDir">—</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Yaw</span><span class="stat-value" id="gazeYaw">—</span></div>
+        <div class="stat-row"><span class="stat-label">Pitch</span><span class="stat-value" id="gazePitch">—</span>
+        </div>
+      </div>
+
+      <!-- Head pose -->
+      <div class="sidebar-section">
+        <div class="section-label">Head Pose</div>
+        <div class="stat-row"><span class="stat-label">Direction</span><span class="stat-value" id="headDir">—</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Pitch</span><span class="stat-value" id="headPitch">—</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Yaw</span><span class="stat-value" id="headYaw">—</span></div>
+        <div class="stat-row"><span class="stat-label">Roll</span><span class="stat-value" id="headRoll">—</span></div>
+      </div>
+
+      <!-- Eye movement -->
+      <div class="sidebar-section">
+        <div class="section-label">Eye Movement</div>
+        <div class="stat-row"><span class="stat-label">Direction</span><span class="stat-value" id="eyeDir">—</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Horizontal</span><span class="stat-value" id="eyeH">—</span>
+        </div>
+        <div class="stat-row"><span class="stat-label">Vertical</span><span class="stat-value" id="eyeV">—</span></div>
+      </div>
+
+      <!-- Alerts breakdown -->
+      <div class="sidebar-section">
+        <div class="section-label">Alert Breakdown (60s)</div>
+        <div class="alert-list" id="alertList">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">No alerts yet</div>
+        </div>
+      </div>
+
+      <!-- YOLO Detection -->
+      <div class="sidebar-section">
+        <div class="section-label">YOLO Detection</div>
+        <div class="yolo-badge"><span class="yolo-badge-label">👤 PEOPLE</span><span class="yolo-badge-val"
+            id="yoloPeopleStatus">—</span></div>
+        <div class="yolo-badge"><span class="yolo-badge-label">📱 MOBILE</span><span class="yolo-badge-val"
+            id="yoloMobileStatus">—</span></div>
+        <div class="yolo-badge"><span class="yolo-badge-label">🚨 LAST ALERT</span><span class="yolo-badge-val"
+            id="yoloLastAlert">—</span></div>
+      </div>
+
+      <!-- Past sessions -->
+      <div class="sidebar-section">
+        <div class="section-label">Past Sessions</div>
+        <div id="pastSessions" style="display:flex;flex-direction:column;gap:6px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">No sessions yet</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="bottom-bar">
+      <span class="bottom-label">HISTORY</span>
+      <div class="session-chips" id="sessionChips">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">No completed sessions</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let sessionId = null, ws = null;
+    let alertTimeout = null, consentGiven = false, lastAlertShown = null;
+    let yoloFlashTimeout = null, lastYoloAlert = null;
+    let pendingCandidateName = '', pendingCandidateId = '';
+
+    const canvas = document.getElementById('canvasEl');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 640; canvas.height = 480;
+
+    // ── Consent ────────────────────────────────────────────────────────────
+    function acceptConsent() {
+      consentGiven = true;
+      document.getElementById('consentOverlay').style.display = 'none';
+      loadPastSessions();
+    }
+
+    // ── Feature 2: Candidate Modal ─────────────────────────────────────────
+    function openCandidateModal() {
+      if (!consentGiven) return;
+      document.getElementById('inputCandidateName').value = '';
+      document.getElementById('inputCandidateId').value = '';
+      document.getElementById('candidateModal').classList.add('open');
+      setTimeout(() => document.getElementById('inputCandidateName').focus(), 150);
+    }
+    function closeCandidateModal() {
+      document.getElementById('candidateModal').classList.remove('open');
+    }
+    function confirmStartSession() {
+      pendingCandidateName = document.getElementById('inputCandidateName').value.trim();
+      pendingCandidateId = document.getElementById('inputCandidateId').value.trim();
+      closeCandidateModal();
+      startSession();
+    }
+
+    // Allow Enter key to confirm
+    document.getElementById('inputCandidateId').addEventListener('keydown', e => {
+      if (e.key === 'Enter') confirmStartSession();
+    });
+    document.getElementById('inputCandidateName').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('inputCandidateId').focus();
+    });
+
+    // ── Start session ──────────────────────────────────────────────────────
+    async function startSession() {
+      let res;
+      try {
+        res = await fetch('/api/sessions/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            candidate_name: pendingCandidateName || null,
+            candidate_id: pendingCandidateId || null,
+          })
+        });
+      } catch (networkErr) {
+        showStartError('Cannot reach server. Make sure uvicorn is running.');
+        return;
+      }
+      if (!res.ok) {
+        let errMsg = 'Unknown error';
+        try { const err = await res.json(); errMsg = err.detail || errMsg; } catch { }
+        showStartError(errMsg);
+        return;
+      }
+      const data = await res.json();
+      sessionId = data.session_id;
+
+      // Feature 2: Show candidate info in sidebar
+      if (data.candidate_name || data.candidate_id) {
+        document.getElementById('displayCandidateName').textContent = data.candidate_name || '—';
+        document.getElementById('displayCandidateId').textContent = 'ID: ' + (data.candidate_id || '—');
+        document.getElementById('candidateSection').style.display = '';
+      }
+
+      document.getElementById('cameraPlaceholder').style.display = 'none';
+      document.getElementById('calOverlay').classList.remove('hidden');
+      document.getElementById('cameraPanel').classList.add('active');
+      setStatus('calibrating', 'CALIBRATING');
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('stopBtn').disabled = false;
+
+      ws = new WebSocket(`ws://${location.host}/ws/${sessionId}`);
+      ws.onmessage = handleWsMessage;
+      ws.onerror = e => console.error('WS error', e);
+      ws.onclose = () => console.log('WS closed');
+    }
+
+    // ── WebSocket message handler ──────────────────────────────────────────
+    function handleWsMessage(event) {
+      let state;
+      try { state = JSON.parse(event.data); } catch { return; }
+      if (state.error) { console.error(state.error); return; }
+
+      if (state.frame_b64) {
+        const img = new Image();
+        img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        img.src = 'data:image/jpeg;base64,' + state.frame_b64;
+      }
+
+      if (state.fps !== undefined)
+        document.getElementById('fpsBadge').textContent = `${state.fps} FPS`;
+
+      if (!state.calibrated) {
+        const pct = Math.round((state.cal_progress || 0) * 100);
+        document.getElementById('calBarFill').style.width = pct + '%';
+        document.getElementById('calPct').textContent = pct + '%';
+        return;
+      }
+
+      document.getElementById('calOverlay').classList.add('hidden');
+      setStatus('live', 'LIVE');
+
+      updateScore(state.score || 0);
+
+      const fc = state.face_count;
+      const faceIcon = document.getElementById('faceIcon');
+      const faceStatus = document.getElementById('faceStatus');
+      if (fc === 1) {
+        faceIcon.className = 'face-icon ok'; faceStatus.className = 'face-status ok'; faceStatus.textContent = 'DETECTED';
+      } else if (fc === 0) {
+        faceIcon.className = 'face-icon err'; faceStatus.className = 'face-status err'; faceStatus.textContent = 'NOT FOUND';
+      } else {
+        faceIcon.className = 'face-icon err'; faceStatus.className = 'face-status err'; faceStatus.textContent = `MULTIPLE (${fc})`;
+      }
+
+      updateStat('gazeDir', state.gaze_dir, state.gaze_dir !== 'CENTER' && state.gaze_dir !== '—');
+      updateStat('gazeYaw', `${state.gaze_yaw}°`);
+      updateStat('gazePitch', `${state.gaze_pitch}°`);
+      updateStat('headDir', state.head_dir, state.head_dir !== 'FORWARD' && state.head_dir !== '—');
+      updateStat('headPitch', `${state.head_pitch}°`);
+      updateStat('headYaw', `${state.head_yaw}°`);
+      updateStat('headRoll', `${state.head_roll}°`);
+      updateStat('eyeDir', state.eye_dir, state.eye_dir !== 'CENTER' && state.eye_dir !== '—');
+      updateStat('eyeH', state.eye_h?.toFixed(3) || '—');
+      updateStat('eyeV', state.eye_v?.toFixed(3) || '—');
+
+      if (state.current_alert && state.current_alert !== lastAlertShown) {
+        showAlertFlash(state.current_alert);
+        lastAlertShown = state.current_alert;
+        setTimeout(() => { lastAlertShown = null; }, 2000);
+      }
+
+      updateAlertBreakdown(state.alert_breakdown || {});
+      updateYoloState(state.yolo_alert || null);
+    }
+
+    function updateStat(id, value, isAlert = false) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = value ?? '—';
+      el.className = 'stat-value' + (isAlert ? ' alert-color' : '');
+    }
+
+    function updateScore(score) {
+      const num = document.getElementById('scoreNum');
+      const fill = document.getElementById('scoreBarFill');
+      const rec = document.getElementById('recLabel');
+      num.textContent = Math.round(score);
+      fill.style.width = score + '%';
+      if (score < 30) {
+        num.className = 'score-num'; fill.className = 'score-bar-fill';
+        rec.className = 'rec-label accept'; rec.textContent = '✓ ACCEPT';
+      } else if (score < 70) {
+        num.className = 'score-num medium'; fill.className = 'score-bar-fill medium';
+        rec.className = 'rec-label review'; rec.textContent = '⚠ REVIEW NEEDED';
+      } else {
+        num.className = 'score-num high'; fill.className = 'score-bar-fill high';
+        rec.className = 'rec-label reject'; rec.textContent = '✗ FLAG FOR REVIEW';
+      }
+    }
+
+    // Alert label map
+    const ALERT_LABELS = {
+      'NO_FACE': 'No face detected', 'MULTIPLE_FACES': 'Multiple faces detected',
+      'LOOKING_LEFT': 'Looking left', 'LOOKING_RIGHT': 'Looking right',
+      'LOOKING_UP': 'Looking up', 'LOOKING_DOWN': 'Looking down',
+      'HEAD_TURNED_LEFT': 'Head turned left', 'HEAD_TURNED_RIGHT': 'Head turned right',
+      'HEAD_TILTED_UP': 'Head tilted up', 'HEAD_TILTED_DOWN': 'Head tilted down',
+      'HEAD_TILTED_SIDE': 'Head tilted sideways',
+      'EYE_LEFT': 'Eye movement — LEFT', 'EYE_RIGHT': 'Eye movement — RIGHT',
+      'EYE_UP': 'Eye movement — UP', 'EYE_DOWN': 'Eye movement — DOWN',
+      'MULTIPLE_PEOPLE': 'Multiple people detected', 'NO_CANDIDATE': 'No candidate in frame',
+      'CHEATING_ITEM_MOBILE': 'Mobile phone detected',
+    };
+
+    function showAlertFlash(alertType) {
+      const flash = document.getElementById('alertFlash');
+      flash.textContent = ALERT_LABELS[alertType] || alertType;
+      flash.classList.add('show');
+      clearTimeout(alertTimeout);
+      alertTimeout = setTimeout(() => flash.classList.remove('show'), 2500);
+    }
+
+    function updateYoloState(yoloAlert) {
+      const peopleEl = document.getElementById('yoloPeopleStatus');
+      const mobileEl = document.getElementById('yoloMobileStatus');
+      const lastEl = document.getElementById('yoloLastAlert');
+      if (yoloAlert === 'MULTIPLE_PEOPLE') {
+        peopleEl.textContent = 'MULTIPLE'; peopleEl.className = 'yolo-badge-val alert';
+        mobileEl.textContent = 'OK'; mobileEl.className = 'yolo-badge-val';
+      } else if (yoloAlert === 'NO_CANDIDATE') {
+        peopleEl.textContent = 'ABSENT'; peopleEl.className = 'yolo-badge-val alert';
+        mobileEl.textContent = '—'; mobileEl.className = 'yolo-badge-val';
+      } else if (yoloAlert && yoloAlert.startsWith('CHEATING_ITEM')) {
+        peopleEl.textContent = 'OK'; peopleEl.className = 'yolo-badge-val';
+        mobileEl.textContent = 'DETECTED'; mobileEl.className = 'yolo-badge-val alert';
+      } else {
+        peopleEl.textContent = 'OK'; peopleEl.className = 'yolo-badge-val';
+        mobileEl.textContent = 'OK'; mobileEl.className = 'yolo-badge-val';
+      }
+      if (yoloAlert && yoloAlert !== lastYoloAlert) {
+        lastEl.textContent = (ALERT_LABELS[yoloAlert] || yoloAlert.replace(/_/g, ' ')).replace(/^.*?— /, '');
+        lastEl.className = 'yolo-badge-val alert';
+        showYoloFlash(yoloAlert);
+        lastYoloAlert = yoloAlert;
+        setTimeout(() => { lastYoloAlert = null; }, 2500);
+      }
+    }
+
+    function showYoloFlash(alertType) {
+      const flash = document.getElementById('yoloFlash');
+      flash.textContent = '⬛ ' + (ALERT_LABELS[alertType] || alertType.replace(/_/g, ' '));
+      flash.classList.add('show');
+      clearTimeout(yoloFlashTimeout);
+      yoloFlashTimeout = setTimeout(() => flash.classList.remove('show'), 2500);
+    }
+
+    function updateAlertBreakdown(breakdown) {
+      const list = document.getElementById('alertList');
+      const entries = Object.entries(breakdown);
+      if (!entries.length) {
+        list.innerHTML = '<div style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">No alerts yet</div>';
+        return;
+      }
+      list.innerHTML = entries.sort((a, b) => b[1] - a[1]).map(([type, count]) => `
+        <div class="alert-item">
+          <span class="alert-item-name">${type.replace(/_/g, ' ')}</span>
+          <span class="alert-item-count">${count}</span>
+        </div>`).join('');
+    }
+
+    // ── Stop session ───────────────────────────────────────────────────────
+    async function stopSession() {
+      if (!sessionId) return;
+      if (ws) { ws.close(); ws = null; }
+      const res = await fetch(`/api/sessions/${sessionId}/end`, { method: 'POST' });
+      const data = await res.json();
+
+      setStatus('idle', 'IDLE');
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+      document.getElementById('cameraPanel').classList.remove('active');
+      document.getElementById('cameraPlaceholder').style.display = 'flex';
+      document.getElementById('fpsBadge').textContent = '-- FPS';
+      document.getElementById('candidateSection').style.display = 'none';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      document.getElementById('alertFlash').classList.remove('show');
+      document.getElementById('yoloFlash').classList.remove('show');
+      resetYoloBadges();
+
+      loadPastSessions();
+      showReport(sessionId);
+      sessionId = null;
+    }
+
+    function resetYoloBadges() {
+      ['yoloPeopleStatus', 'yoloMobileStatus', 'yoloLastAlert'].forEach(id => {
+        const el = document.getElementById(id);
+        el.textContent = '—'; el.className = 'yolo-badge-val';
+      });
+    }
+
+    // ── Past sessions ──────────────────────────────────────────────────────
+    async function loadPastSessions() {
+      const res = await fetch('/api/sessions');
+      const sessions = await res.json();
+      const chips = document.getElementById('sessionChips');
+      const past = document.getElementById('pastSessions');
+      const completed = sessions.filter(s => s.ended_at);
+      if (!completed.length) {
+        chips.innerHTML = '<span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">No completed sessions</span>';
+        past.innerHTML = '<div style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">No sessions yet</div>';
+        return;
+      }
+      chips.innerHTML = completed.slice(0, 10).map(s => {
+        const rec = s.recommendation.toLowerCase();
+        const d = new Date(s.started_at + 'Z');
+        const name = s.candidate_name ? ` · ${s.candidate_name.split(' ')[0]}` : '';
+        return `<div class="session-chip" onclick="showReport(${s.id})">
+          <span>#${s.id}${name}</span>
+          <span>${d.toLocaleTimeString()}</span>
+          <span class="chip-score ${rec}">${Math.round(s.final_score)}%</span>
+        </div>`;
+      }).join('');
+      past.innerHTML = completed.slice(0, 5).map(s => {
+        const rec = s.recommendation.toLowerCase();
+        const d = new Date(s.started_at + 'Z');
+        const nameStr = s.candidate_name ? `<span style="color:var(--text)">${s.candidate_name}</span> · ` : '';
+        return `<div class="alert-item" style="cursor:pointer" onclick="showReport(${s.id})">
+          <span class="alert-item-name">${nameStr}#${s.id} · ${d.toLocaleDateString()}</span>
+          <span class="alert-item-count" style="color:var(--${rec === 'accept' ? 'green' : rec === 'review' ? 'yellow' : 'red'})">${Math.round(s.final_score)}%</span>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Report modal with Feature 1 timeline ──────────────────────────────
+    async function showReport(sid) {
+      const res = await fetch(`/api/sessions/${sid}/report`);
+      const r = await res.json();
+      const rec = r.recommendation.toLowerCase();
+      const recColor = rec === 'accept' ? 'var(--green)' : rec === 'review' ? 'var(--yellow)' : 'var(--red)';
+      const dur = r.duration_seconds ? `${Math.round(r.duration_seconds)}s` : '—';
+      const started = r.started_at ? new Date(r.started_at + 'Z').toLocaleString() : '—';
+      const candidateRow = (r.candidate_name || r.candidate_id) ? `
+        <div class="modal-row">
+          <span class="modal-row-label">CANDIDATE</span>
+          <span class="modal-row-value" style="color:var(--cyan)">${r.candidate_name || '—'}</span>
+        </div>
+        <div class="modal-row">
+          <span class="modal-row-label">CANDIDATE ID</span>
+          <span class="modal-row-value">${r.candidate_id || '—'}</span>
+        </div>` : '';
+
+      const breakdown = Object.entries(r.alert_breakdown || {}).map(([t, c]) =>
+        `<div class="modal-row"><span class="modal-row-label">${t.replace(/_/g, ' ')}</span><span class="modal-row-value">${c}</span></div>`
+      ).join('');
+      const yoloBreakdown = Object.entries(r.yolo_alert_breakdown || {}).map(([t, c]) =>
+        `<div class="modal-row"><span class="modal-row-label" style="color:var(--orange)">${t.replace(/_/g, ' ')}</span><span class="modal-row-value" style="color:var(--orange)">${c}</span></div>`
+      ).join('');
+
+      // Feature 1: Build timeline HTML
+      const timelineHtml = buildTimelineHtml(r.timeline_events || [], r.duration_seconds || 60);
+
+      document.getElementById('reportContent').innerHTML = `
+        ${candidateRow}
+        <div class="modal-row"><span class="modal-row-label">SESSION ID</span><span class="modal-row-value">#${r.session_id}</span></div>
+        <div class="modal-row"><span class="modal-row-label">STARTED</span><span class="modal-row-value">${started}</span></div>
+        <div class="modal-row"><span class="modal-row-label">DURATION</span><span class="modal-row-value">${dur}</span></div>
+        <div class="modal-row">
+          <span class="modal-row-label">FINAL SCORE</span>
+          <span class="modal-row-value" style="font-size:18px;color:${recColor}">${Math.round(r.final_score)}%</span>
+        </div>
+        <div class="modal-row">
+          <span class="modal-row-label">SCORING METHOD</span>
+          <span class="modal-row-value" style="color:var(--text-dim)">Sliding window + Slow decay + Memory floor</span>
+        </div>
+        <div class="modal-row">
+          <span class="modal-row-label">RECOMMENDATION</span>
+          <span class="modal-row-value" style="color:${recColor}">${r.recommendation}</span>
+        </div>
+        <div class="modal-row"><span class="modal-row-label">TOTAL ALERTS (MediaPipe)</span><span class="modal-row-value">${r.total_alerts}</span></div>
+        <div class="modal-row"><span class="modal-row-label">TOTAL ALERTS (YOLO)</span><span class="modal-row-value" style="color:var(--orange)">${r.total_yolo_alerts || 0}</span></div>
+
+        ${timelineHtml}
+
+        <div class="modal-section-title">MediaPipe Alert Breakdown</div>
+        ${breakdown || '<div class="modal-row"><span class="modal-row-label">No alerts recorded</span></div>'}
+        <div class="modal-section-title" style="color:var(--orange)">YOLO Alert Breakdown</div>
+        ${yoloBreakdown || '<div class="modal-row"><span class="modal-row-label" style="color:var(--text-dim)">No YOLO alerts recorded</span></div>'}
+      `;
+      document.getElementById('reportModal').classList.add('open');
+    }
+
+    // ── Feature 1: Build interactive timeline HTML ─────────────────────────
+    function buildTimelineHtml(events, durationSecs) {
+      if (!events || events.length === 0) return '';
+      const totalDur = Math.max(durationSecs || 60, 10);
+
+      // Color map per alert type category
+      function alertColor(type) {
+        if (['NO_FACE', 'MULTIPLE_FACES', 'MULTIPLE_PEOPLE', 'CHEATING_ITEM_MOBILE'].includes(type)) return '#ff1744';
+        if (['LOOKING_LEFT', 'LOOKING_RIGHT', 'LOOKING_UP', 'LOOKING_DOWN'].includes(type)) return '#ffd600';
+        if (type.startsWith('HEAD_')) return '#ff6d00';
+        if (type.startsWith('EYE_')) return '#00e5ff';
+        if (type === 'NO_CANDIDATE') return '#8892a4';
+        return '#aaa';
+      }
+
+      // Build tick marks every 10s
+      const ticksHtml = [];
+      for (let t = 0; t <= totalDur; t += 10) {
+        const pct = (t / totalDur) * 100;
+        ticksHtml.push(`
+          <div class="timeline-tick" style="left:${pct}%"></div>
+          <div class="timeline-tick-label" style="left:${pct}%">${t}s</div>
+        `);
+      }
+
+      // Build event dots
+      const dotsHtml = events.map((ev, i) => {
+        const pct = Math.min((ev.elapsed_secs / totalDur) * 100, 99.5);
+        const color = alertColor(ev.alert_type);
+        const hasKf = ev.has_keyframe && ev.keyframe_id;
+        return `<div
+          class="timeline-event ${hasKf ? 'has-kf' : ''}"
+          style="left:${pct}%;top:${8 + (i % 3) * 10}px;background:${color};color:${color}"
+          data-idx="${i}"
+          data-type="${ev.alert_type}"
+          data-elapsed="${ev.elapsed_secs.toFixed(1)}"
+          data-kfid="${ev.keyframe_id || ''}"
+          onclick="selectTimelineEvent(this, ${ev.keyframe_id || 'null'})"
+          title="${ev.alert_type.replace(/_/g, ' ')} @ ${ev.elapsed_secs.toFixed(1)}s${hasKf ? ' (keyframe available)' : ''}"
+        ></div>`;
+      }).join('');
+
+      // Legend
+      const legendTypes = [...new Set(events.map(e => e.alert_type))];
+      const legendHtml = legendTypes.map(t =>
+        `<span style="font-size:9px;color:var(--text-dim);font-family:var(--mono)">
+          <span class="legend-dot" style="background:${alertColor(t)}"></span>${t.replace(/_/g, ' ')}
+        </span>`
+      ).join(' &nbsp; ');
+
+      return `
+        <div class="timeline-section">
+          <div class="timeline-title">
+            ▶ SESSION TIMELINE REPLAY
+            <span style="font-size:8px;color:var(--text-dim)">(click a dot to preview keyframe)</span>
+          </div>
+          <div class="timeline-track" id="timelineTrack">
+            <div class="timeline-ruler">${ticksHtml.join('')}</div>
+            ${dotsHtml}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">${legendHtml}</div>
+          <div class="keyframe-preview" id="kfPreview">
+            <div class="keyframe-header">
+              <span class="keyframe-alert-label" id="kfAlertLabel">—</span>
+              <span class="keyframe-time" id="kfTime">—</span>
+            </div>
+            <div class="keyframe-img-wrap" id="kfImgWrap">
+              <div class="keyframe-no-img">SELECT AN EVENT TO PREVIEW</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // ── Feature 1: Select timeline event and show keyframe ─────────────────
+    function selectTimelineEvent(dot, keyframeId) {
+      // Deselect previous
+      document.querySelectorAll('.timeline-event.selected').forEach(d => d.classList.remove('selected'));
+      dot.classList.add('selected');
+
+      const alertType = dot.dataset.type;
+      const elapsed = dot.dataset.elapsed;
+      const preview = document.getElementById('kfPreview');
+      const label = document.getElementById('kfAlertLabel');
+      const timeEl = document.getElementById('kfTime');
+      const imgWrap = document.getElementById('kfImgWrap');
+
+      label.textContent = (ALERT_LABELS[alertType] || alertType.replace(/_/g, ' ')).toUpperCase();
+      label.style.color = getAlertColor(alertType);
+      timeEl.textContent = `t = ${elapsed}s`;
+      preview.classList.add('show');
+
+      if (keyframeId) {
+        imgWrap.innerHTML = `
+          <img src="/api/keyframes/${keyframeId}" alt="keyframe"
+               onerror="this.parentNode.innerHTML='<div class=\\'keyframe-no-img\\'>KEYFRAME NOT AVAILABLE</div>'" />
+          <div class="keyframe-blur-badge">PRIVACY BLURRED</div>`;
+      } else {
+        imgWrap.innerHTML = '<div class="keyframe-no-img">NO KEYFRAME FOR THIS EVENT</div>';
+      }
+    }
+
+    function getAlertColor(type) {
+      if (['NO_FACE', 'MULTIPLE_FACES', 'MULTIPLE_PEOPLE', 'CHEATING_ITEM_MOBILE'].includes(type)) return '#ff1744';
+      if (['LOOKING_LEFT', 'LOOKING_RIGHT', 'LOOKING_UP', 'LOOKING_DOWN'].includes(type)) return '#ffd600';
+      if (type.startsWith('HEAD_')) return '#ff6d00';
+      if (type.startsWith('EYE_')) return '#00e5ff';
+      return '#aaa';
+    }
+
+    function closeModal() {
+      document.getElementById('reportModal').classList.remove('open');
+    }
+
+    function setStatus(type, text) {
+      const pill = document.getElementById('statusPill');
+      const span = document.getElementById('statusText');
+      pill.className = 'status-pill ' + type;
+      span.textContent = text;
+    }
+
+    // Click outside modals to close
+    document.getElementById('reportModal').addEventListener('click', function (e) {
+      if (e.target === this) closeModal();
+    });
+    document.getElementById('candidateModal').addEventListener('click', function (e) {
+      if (e.target === this) closeCandidateModal();
+    });
+
+    window.addEventListener('load', () => { loadPastSessions(); });
+  </script>
+</body>
+
+</html>
