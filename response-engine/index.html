@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Audio Interview</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        max-width: 800px;
+        margin: 40px auto;
+        padding: 20px;
+        background: #f4f4f9;
+        color: #333;
+      }
+      .card {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+      input,
+      textarea,
+      button {
+        width: 100%;
+        margin-top: 8px;
+        margin-bottom: 16px;
+        padding: 10px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        box-sizing: border-box;
+      }
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      #chat-log {
+        max-height: 400px;
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #eee;
+        background: #fafafa;
+        border-radius: 4px;
+        margin-top: 10px;
+      }
+      .msg {
+        margin-bottom: 10px;
+        padding: 10px;
+        border-radius: 6px;
+      }
+      .msg.user {
+        background: #e3f2fd;
+        text-align: right;
+        margin-left: 40px;
+      }
+      .msg.ai {
+        background: #f1f8e9;
+        margin-right: 40px;
+      }
+      #status-bar {
+        text-align: center;
+        font-weight: bold;
+        color: #d32f2f;
+        padding: 10px;
+      }
+      pre {
+        white-space: pre-wrap;
+        background: #eee;
+        padding: 10px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="setup-view" class="card">
+      <h2>Start Interview</h2>
+      <label>Paste CV / Context:</label>
+      <textarea id="cvInput" rows="4">
+Experienced Python backend developer.</textarea
+      >
+
+      <label>Evaluation Criteria:</label>
+      <input
+        type="text"
+        id="criteriaInput"
+        value="Technical accuracy, clarity, and communication."
+      />
+
+      <label>Max Questions:</label>
+      <input type="number" id="maxQuestions" value="3" />
+
+      <button onclick="startInterview()">Start Seamless Interview</button>
+    </div>
+
+    <div id="interview-view" class="card" style="display: none">
+      <h2>Live Interview</h2>
+      <div id="status-bar">Connecting...</div>
+      <div id="chat-log"></div>
+    </div>
+
+    <div id="summary-view" class="card" style="display: none">
+      <h2>Final Review</h2>
+      <pre id="summary-content"></pre>
+    </div>
+
+    <audio id="audio-player"></audio>
+
+    <script>
+      let sessionId = null;
+      let ws = null;
+
+      // Audio & VAD Variables
+      let audioContext, analyser, mediaRecorder;
+      let audioChunks = [];
+      let isRecording = false;
+      let isProcessing = false; // Prevents recording while AI is thinking/talking
+      let silenceTimer = null;
+
+      const SILENCE_THRESHOLD_MS = 1500; // 1.5 seconds of silence triggers the send
+      const VOLUME_THRESHOLD = 5; // Sensitivity
+
+      const statusEl = document.getElementById("status-bar");
+      const chatEl = document.getElementById("chat-log");
+      const audioPlayer = document.getElementById("audio-player");
+
+      async function startInterview() {
+        const cv = document.getElementById("cvInput").value;
+        const criteria = document.getElementById("criteriaInput").value;
+        const maxQ = document.getElementById("maxQuestions").value;
+
+        // 1. Initialize HTTP Session
+        const formData = new FormData();
+        formData.append("cv_text", cv);
+        formData.append("max_questions", maxQ);
+        formData.append("evaluation_criteria", criteria);
+
+        const res = await fetch("/start", { method: "POST", body: formData });
+        const data = await res.json();
+        sessionId = data.session_id;
+
+        document.getElementById("setup-view").style.display = "none";
+        document.getElementById("interview-view").style.display = "block";
+
+        // 2. Setup Mic & WebSockets
+        await setupMicrophone();
+        connectWebSocket();
+      }
+
+      async function setupMicrophone() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          // When recording stops (silence detected), send the blob to backend
+          if (
+            audioChunks.length > 0 &&
+            ws &&
+            ws.readyState === WebSocket.OPEN
+          ) {
+            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+            ws.send(audioBlob);
+            audioChunks = [];
+          }
+        };
+
+        // Start the volume monitoring loop
+        monitorVolume();
+      }
+
+      function monitorVolume() {
+        requestAnimationFrame(monitorVolume);
+
+        // If the server is processing or the AI is speaking, ignore the mic
+        if (isProcessing) return;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        let avgVolume = sum / dataArray.length;
+
+        if (avgVolume > VOLUME_THRESHOLD) {
+          // User is talking
+          if (!isRecording) {
+            isRecording = true;
+            mediaRecorder.start();
+            statusEl.innerText = "🟢 Listening (Speak now)...";
+            statusEl.style.color = "green";
+          }
+          // Clear the silence timeout because they are still talking
+          clearTimeout(silenceTimer);
+          silenceTimer = null;
+        } else {
+          // User is quiet
+          if (isRecording && !silenceTimer) {
+            // Wait 1.5 seconds. If they don't speak again, stop recording.
+            silenceTimer = setTimeout(() => {
+              isRecording = false;
+              isProcessing = true; // Lock the mic
+              statusEl.innerText = "⏳ Processing your answer...";
+              statusEl.style.color = "orange";
+              mediaRecorder.stop();
+            }, SILENCE_THRESHOLD_MS);
+          }
+        }
+      }
+
+      function connectWebSocket() {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        ws = new WebSocket(
+          `${protocol}//${window.location.host}/ws/interview/${sessionId}`,
+        );
+
+        ws.onopen = () => {
+          statusEl.innerText = "Waiting for you to speak...";
+          statusEl.style.color = "#333";
+        };
+
+        ws.onmessage = async (event) => {
+          // 1. Text Data (Transcripts & Status)
+          if (typeof event.data === "string") {
+            const data = JSON.parse(event.data);
+
+            chatEl.innerHTML += `<div class="msg user"><b>You:</b> ${data.user}</div>`;
+            chatEl.innerHTML += `<div class="msg ai"><b>AI:</b> ${data.ai}</div>`;
+            chatEl.scrollTop = chatEl.scrollHeight;
+
+            if (data.is_complete) {
+              statusEl.innerText = "Interview Complete. Fetching Review...";
+              statusEl.style.color = "blue";
+              setTimeout(fetchSummary, 2000); // Wait for the AI's final sign off audio to start playing
+            }
+          }
+          // 2. Binary Data (AI Audio)
+          else if (event.data instanceof Blob) {
+            const audioUrl = URL.createObjectURL(event.data);
+            audioPlayer.src = audioUrl;
+
+            statusEl.innerText = "🔊 AI is speaking...";
+            statusEl.style.color = "purple";
+
+            audioPlayer.play();
+          }
+        };
+
+        // Unlock the mic again when the AI finishes speaking
+        audioPlayer.onended = () => {
+          isProcessing = false;
+          statusEl.innerText = "Waiting for you to speak...";
+          statusEl.style.color = "#333";
+        };
+      }
+
+      async function fetchSummary() {
+        const res = await fetch(`/interview/${sessionId}/summary`);
+        const data = await res.json();
+
+        document.getElementById("interview-view").style.display = "none";
+        document.getElementById("summary-view").style.display = "block";
+
+        // Pretty print the JSON evaluation
+        document.getElementById("summary-content").innerText = JSON.stringify(
+          data.summary,
+          null,
+          2,
+        );
+      }
+    </script>
+  </body>
+</html>
