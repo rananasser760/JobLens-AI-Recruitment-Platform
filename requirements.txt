@@ -1,0 +1,26 @@
+# --- Core API & Server ---
+fastapi
+uvicorn
+python-multipart
+requests
+websockets
+
+# --- LLM ---
+openai
+google-generativeai
+
+# --- Speech-to-Text (NeMo ASR) ---
+# We use [asr] instead of [all] to avoid Linux-only dependencies
+nemo_toolkit[asr]
+torch
+torchaudio
+torchvision
+
+# --- Text-to-Speech (Coqui) ---
+coqui-tts
+scipy
+numpy
+
+# --- Audio Processing ---
+pydub
+ffmpeg-python
