@@ -1,0 +1,19 @@
+# ---------------------------------------------------
+# JobLens AI .gitignore
+# ---------------------------------------------------
+
+# 1. Output Reports & Alert Frames
+outputs/
+
+# 2. Python Cache Files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 3. Database (Don't commit real candidate data!)
+joblens.db
+
+# 4. Temporary Audio Files (From STT/TTS engine)
+temp_raw_*.webm
+temp_clean_*.wav
+*.mp3
