@@ -10,14 +10,28 @@ import base64
 import json
 import math
 import os
+import sys
 import threading
 import time
+import queue # Added for WebSocket frame routing
 from datetime import datetime
 from typing import Optional
+
+# Dynamically add the root folder to the Python path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
 
 import cv2
 import mediapipe as mp
 import numpy as np
+
+# Pre-load MediaPipe solutions in the main thread
+mp_face_mesh = mp.solutions.face_mesh
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
+
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 from pydantic import BaseModel
@@ -36,7 +50,6 @@ router = APIRouter(prefix="/api", tags=["integrity"])
 # ══════════════════════════════════════════════════════════════════════════════
 
 class Config:
-    CAMERA_INDEX = 0
     FRAME_WIDTH  = 640
     FRAME_HEIGHT = 480
     FPS          = 30
@@ -104,14 +117,12 @@ class Config:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  DETECTION CLASSES  (FaceDetector, GazeEstimator, HeadPoseEstimator,
-#                      EyeMovementTracker, AlertManager, YOLODetector)
-#  — identical logic to joblens_main.py, just referencing local Config —
+#  DETECTION CLASSES  
 # ══════════════════════════════════════════════════════════════════════════════
 
 class FaceDetector:
     def __init__(self):
-        self._mesh = mp.solutions.face_mesh.FaceMesh(
+        self._mesh = mp_face_mesh.FaceMesh(
             max_num_faces=Config.MAX_NUM_FACES,
             refine_landmarks=Config.REFINE_LANDMARKS,
             min_detection_confidence=Config.MIN_DETECTION_CONFIDENCE,
@@ -426,7 +437,7 @@ class YOLODetector:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  WebSessionProcessor
+#  WebSessionProcessor (Updated to receive frames via WebSocket queue)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class WebSessionProcessor:
@@ -456,24 +467,10 @@ class WebSessionProcessor:
             "abandoned":False,"no_face_countdown":None,
         }
 
-        # camera
-        self.cap = None
-        for idx in [Config.CAMERA_INDEX]+[i for i in range(4) if i!=Config.CAMERA_INDEX]:
-            for backend in [cv2.CAP_DSHOW, cv2.CAP_ANY]:
-                cap=cv2.VideoCapture(idx+backend)
-                if cap.isOpened():
-                    ret,fr=cap.read()
-                    if ret and fr is not None:
-                        self.cap=cap; break
-                    cap.release()
-                else: cap.release()
-            if self.cap: break
-        if not self.cap:
-            raise RuntimeError("Cannot open camera")
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, Config.FRAME_WIDTH)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT,Config.FRAME_HEIGHT)
-        self.cap.set(cv2.CAP_PROP_FPS,         Config.FPS)
-
+        # --- FIX: Removed cv2.VideoCapture() completely ---
+        # Instead of pulling frames from hardware, we queue them from the browser
+        self._frame_queue = queue.Queue(maxsize=5) 
+        
         self._yolo           = YOLODetector(session_id=str(session_id))
         self._yolo_frame     = None
         self._yolo_lock      = threading.Lock()
@@ -482,6 +479,11 @@ class WebSessionProcessor:
         self._fps            = 0.
         self._fps_prev       = time.time()
         self._fps_cnt        = 0
+
+    def push_frame(self, frame):
+        """Called by the WebSocket endpoint when a new frame arrives from the browser."""
+        if not self._frame_queue.full():
+            self._frame_queue.put(frame)
 
     # ── helpers ───────────────────────────────────────────────────────────
     def _blur_face(self, frame, lms, w, h):
@@ -540,8 +542,12 @@ class WebSessionProcessor:
     def _camera_loop(self, db_factory):
         pending=[]
         while self._running:
-            ret,frame=self.cap.read()
-            if not ret: time.sleep(0.01); continue
+            # --- FIX: Pull from Queue instead of cv2.VideoCapture ---
+            try:
+                frame = self._frame_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
             h,w=frame.shape[:2]
             results=self.face_det.detect(frame)
             fc=self.face_det.face_count(results)
@@ -648,7 +654,7 @@ class WebSessionProcessor:
         except Exception as e: print(f"abandon DB error: {e}"); db.rollback()
         finally: db.close()
         try:
-            self.cap.release(); self.face_det.close()
+            self.face_det.close()
             self.alerts.export_report(f"session_{self.session_id}_report.txt")
         except: pass
         ACTIVE_PROCESSORS.pop(self.session_id,None)
@@ -668,7 +674,7 @@ class WebSessionProcessor:
         self._running=False
         for t in [self._thread,self._yolo_thread]:
             if t: t.join(timeout=3)
-        self.cap.release()
+            
         score=self.alerts.suspicion_score()
         rec,_=self.alerts.recommendation()
         if self.abandoned: rec="ABANDONED"
@@ -857,18 +863,39 @@ def dashboard_stats():
     finally: db.close()
 
 
-# ── WebSocket: live camera state ──────────────────────────────────────────────
+# ── WebSocket: live camera state (Updated for Ping-Pong Routing) ──────────────
 @router.websocket("/ws/{session_id}")
 async def ws_state(websocket: WebSocket, session_id: int):
     await websocket.accept()
     try:
         proc = ACTIVE_PROCESSORS.get(session_id)
         if not proc:
-            await websocket.send_json({"error":"Session not found"}); await websocket.close(); return
+            await websocket.send_json({"error":"Session not found"})
+            await websocket.close()
+            return
+            
         while True:
+            # 1. Wait for the browser to send a frame
+            data = await websocket.receive_json()
+            if data.get("type") == "frame" and data.get("frame_b64"):
+                try:
+                    img_data = base64.b64decode(data["frame_b64"])
+                    nparr = np.frombuffer(img_data, np.uint8)
+                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    if frame is not None:
+                        proc.push_frame(frame)
+                except Exception as e:
+                    print(f"Error decoding frame: {e}")
+
+            # 2. Reply with the analyzed state and the processed face-mesh image
             state = proc.get_state()
             await websocket.send_json(state)
-            if state.get("abandoned"): await asyncio.sleep(0.5); break
-            await asyncio.sleep(0.02)
-    except WebSocketDisconnect: pass
-    except Exception as e: print(f"WS error: {e}")
+            
+            if state.get("abandoned"):
+                await asyncio.sleep(0.5)
+                break
+                
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"WS error: {e}")

@@ -184,6 +184,25 @@ async def ws_interview(websocket: WebSocket, session_id: str):
                 transcript = speech_to_text(wav_path)
                 print(f"[interview] user ({session_id}): {transcript}")
 
+                # --- GUARDRAIL FOR EMPTY AUDIO ---
+                if not transcript or not transcript.strip():
+                    print("[interview] STT returned empty. Asking user to repeat.")
+                    ai_text = "I'm sorry, I didn't quite catch that. Could you please repeat your answer?"
+                    
+                    await websocket.send_text(json.dumps({
+                        "type":        "transcript",
+                        "user":        "(Silence / Inaudible)",
+                        "ai":          ai_text,
+                        "is_complete": False,
+                    }))
+                    
+                    audio_out = text_to_speech_file(ai_text)
+                    with open(audio_out, "rb") as f:
+                        await websocket.send_bytes(f.read())
+                        
+                    continue # Bypasses LLM and starts waiting for audio again
+                # ---------------------------------
+
                 sess["history"].append({"role": "user", "content": transcript})
                 sess["turn_count"] += 1
                 is_complete = sess["turn_count"] >= sess["max_questions"]

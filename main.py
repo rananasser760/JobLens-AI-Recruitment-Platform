@@ -14,6 +14,7 @@ import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from routers.integrity import router as integrity_router
 from routers.interview  import router as interview_router
@@ -238,6 +239,11 @@ def _combined_recommendation(
     return {"verdict": "REVIEW",
             "reason": f"Interview {interview_score:.0f}% / Cheating {cheating_score:.0f}% — manual review"}
 
+
+@app.get("/")
+def serve_home():
+    """Serves the main frontend UI."""
+    return FileResponse("index.html")
 
 # ── Dev entry point ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
