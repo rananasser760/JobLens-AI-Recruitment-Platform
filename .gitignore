@@ -23,6 +23,10 @@ temp_audio/
 joblens_db/
 .cache/
 
+# 5b. ML model artifacts
+*.pt
+*.pth
+
 # 6. Environment secrets
 .env
 .env.local

@@ -67,7 +67,6 @@ def _persist_summary(interview_sid: str, summary: dict) -> None:
         ).first()
         if row:
             score = None
-            # try to extract a numeric score from the summary dict
             for key in ("score", "overall_score", "total_score", "rating"):
                 if key in summary:
                     try: score = float(summary[key])
@@ -105,38 +104,30 @@ def _is_integrity_abandoned(integrity_id: Optional[int]) -> bool:
 @router.post("/start")
 async def start_interview(
     cv_text: str = Form(...),
+    job_description: str = Form(...),
+    evaluation_criteria: str = Form(...),
     max_questions: int = Form(5),
-    evaluation_criteria: str = Form(
-        "Technical accuracy, clarity, and relevance to the CV"
-    ),
     candidate_name: Optional[str] = Form(None),
     candidate_id:   Optional[str] = Form(None),
-    # Pass the DB session id if integrity monitoring was already started
     integrity_db_session_id: Optional[int] = Form(None),
 ):
     """
-    Create a new interview session.
-
-    Flow:
-    1.  Frontend calls POST /api/sessions/start  → gets integrity db_session_id
-    2.  Frontend calls POST /interview/start      → passes integrity_db_session_id
-    3.  This endpoint links the two and returns interview_session_id
+    Create a new interview session with Job Description and Criteria.
     """
     sid = str(uuid.uuid4())
     INTERVIEW_SESSIONS[sid] = {
-        "cv_text":        cv_text,
-        "history":        [],
-        "turn_count":     0,
-        "max_questions":  max_questions,
-        "criteria":       evaluation_criteria,
-        "summary":        None,
-        "candidate_name": candidate_name,
-        "candidate_id":   candidate_id,
-        "integrity_id":   integrity_db_session_id,
+        "cv_text":         cv_text,
+        "job_description": job_description,
+        "criteria":        evaluation_criteria,
+        "history":         [],
+        "turn_count":      0,
+        "max_questions":   max_questions,
+        "summary":         None,
+        "candidate_name":  candidate_name,
+        "candidate_id":    candidate_id,
+        "integrity_id":    integrity_db_session_id,
     }
 
-    # Persist the interview_session_id on the DBSession row so the unified
-    # report endpoint can join on it later.
     if integrity_db_session_id is not None:
         link_integrity_to_interview(sid, integrity_db_session_id)
         db = DBSessionLocal()
@@ -168,11 +159,6 @@ async def start_interview(
 async def ws_interview(websocket: WebSocket, session_id: str):
     """
     Bidirectional WebSocket for the live interview.
-
-    Client sends  : raw audio bytes  (webm)
-    Server sends  :
-        1. JSON  {"type":"transcript","user":"…","ai":"…","is_complete":bool}
-        2. bytes  TTS audio (mp3 / wav)
     """
     await websocket.accept()
 
@@ -221,7 +207,6 @@ async def ws_interview(websocket: WebSocket, session_id: str):
                 transcript = speech_to_text(wav_path)
                 print(f"[interview] user ({session_id}): {transcript}")
 
-                # --- GUARDRAIL FOR EMPTY AUDIO ---
                 if not transcript or not transcript.strip():
                     print("[interview] STT returned empty. Asking user to repeat.")
                     ai_text = "I'm sorry, I didn't quite catch that. Could you please repeat your answer?"
@@ -241,8 +226,7 @@ async def ws_interview(websocket: WebSocket, session_id: str):
                         print(f"[interview] TTS warning: {tts_exc}")
                         audio_out = None
                         
-                    continue # Bypasses LLM and starts waiting for audio again
-                # ---------------------------------
+                    continue 
 
                 sess["history"].append({"role": "user", "content": transcript})
                 sess["turn_count"] += 1
@@ -252,6 +236,7 @@ async def ws_interview(websocket: WebSocket, session_id: str):
                     summary = generate_interview_summary(
                         chat_history=sess["history"],
                         cv_text=sess["cv_text"],
+                        job_description=sess["job_description"],
                         criteria=sess["criteria"],
                     )
                     sess["summary"] = summary
@@ -267,11 +252,11 @@ async def ws_interview(websocket: WebSocket, session_id: str):
                         current_transcript=transcript,
                         chat_history=sess["history"],
                         cv_text=sess["cv_text"],
+                        job_description=sess["job_description"],
                     )
 
                 sess["history"].append({"role": "assistant", "content": ai_text})
 
-                # 1. send transcript JSON first
                 await websocket.send_text(json.dumps({
                     "type":        "transcript",
                     "user":        transcript,
@@ -315,7 +300,6 @@ def get_summary(session_id: str):
 
 @router.get("/{session_id}/history")
 def get_history(session_id: str):
-    """Return the full conversation history (useful for HR review)."""
     if session_id not in INTERVIEW_SESSIONS:
         raise HTTPException(status_code=404, detail="Session not found")
     sess = INTERVIEW_SESSIONS[session_id]

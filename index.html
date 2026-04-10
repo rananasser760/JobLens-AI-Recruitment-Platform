@@ -226,6 +226,16 @@
       <label>Paste CV / Context:</label>
       <textarea id="cvInput" rows="4">Experienced developer.</textarea>
 
+      <label>Job Description:</label>
+      <textarea id="jobDescriptionInput" rows="3">
+Senior Python Backend Engineer. Required skills: FastAPI, SQLite, WebSocket integrations, and API design.</textarea
+      >
+
+      <label>Evaluation Criteria (For Final Report):</label>
+      <textarea id="evalCriteriaInput" rows="2">
+Technical accuracy, problem-solving ability, clarity of communication, and alignment with the job description.</textarea
+      >
+
       <label>Max Questions:</label>
       <input type="number" id="maxQuestions" value="3" />
 
@@ -315,6 +325,8 @@
       let cameraStream = null;
       let frameInterval = null;
 
+      let isInterviewStarted = false;
+
       // Audio Variables
       let audioContext, analyser, mediaRecorder;
       let audioChunks = [];
@@ -336,10 +348,13 @@
       async function startUnifiedSession() {
         const name = document.getElementById("candidateName").value;
         const cv = document.getElementById("cvInput").value;
+        const jd = document.getElementById("jobDescriptionInput").value;
+        const criteria = document.getElementById("evalCriteriaInput").value;
         const maxQ = document.getElementById("maxQuestions").value;
 
         document.getElementById("setup-view").style.display = "none";
         document.getElementById("interview-view").style.display = "block";
+        isInterviewStarted = false;
 
         try {
           statusEl.innerText = "Starting Camera Engine...";
@@ -351,9 +366,12 @@
           const integrityData = await integrityRes.json();
           integrityId = integrityData.session_id;
 
-          statusEl.innerText = "Starting Audio Engine...";
+          statusEl.innerText = "Registering Audio Engine...";
+
           const formData = new FormData();
           formData.append("cv_text", cv);
+          formData.append("job_description", jd);
+          formData.append("evaluation_criteria", criteria);
           formData.append("max_questions", maxQ);
           formData.append("candidate_name", name);
           formData.append("integrity_db_session_id", integrityId);
@@ -367,7 +385,6 @@
 
           await connectIntegrityWebSocket();
           await setupMicrophone();
-          connectInterviewWebSocket();
         } catch (error) {
           statusEl.innerText = "Error starting session. Check console.";
           console.error(error);
@@ -376,7 +393,6 @@
 
       async function connectIntegrityWebSocket() {
         try {
-          // 1. Ask for Camera BEFORE touching the WebSocket
           cameraStream = await navigator.mediaDevices.getUserMedia({
             video: { width: 640, height: 480 },
           });
@@ -387,7 +403,6 @@
           hiddenVideo.playsInline = true;
           hiddenVideo.srcObject = cameraStream;
 
-          // Wait for the video feed to actively start playing
           await new Promise((resolve) => {
             hiddenVideo.onplaying = resolve;
             hiddenVideo.play().catch(console.error);
@@ -398,7 +413,6 @@
           canvas.height = 480;
           const ctx = canvas.getContext("2d");
 
-          // 2. NOW open the WebSocket
           const protocol =
             window.location.protocol === "https:" ? "wss:" : "ws:";
           integrityWs = new WebSocket(
@@ -406,7 +420,6 @@
           );
 
           integrityWs.onopen = () => {
-            // 3. Start sending frames to the backend roughly ~6 FPS (150ms)
             frameInterval = setInterval(() => {
               if (integrityWs.readyState === WebSocket.OPEN) {
                 ctx.drawImage(hiddenVideo, 0, 0, canvas.width, canvas.height);
@@ -429,11 +442,27 @@
 
             if (!state.calibrated) {
               integrityStatusEl.innerText = `Calibrating Tracking: ${Math.round(state.cal_progress * 100)}%`;
+              statusEl.innerText =
+                "🔒 Please look straight at the camera to calibrate...";
+              statusEl.style.color = "orange";
             } else {
-              let alertText = state.current_alert
-                ? `⚠️ ${state.current_alert.replace(/_/g, " ")}`
-                : "✅ Secure";
-              integrityStatusEl.innerText = `Suspicion: ${state.score}% | ${alertText}`;
+              if (!isInterviewStarted) {
+                isInterviewStarted = true;
+                connectInterviewWebSocket();
+              }
+
+              let activeAlerts = [];
+              if (state.current_alert)
+                activeAlerts.push(state.current_alert.replace(/_/g, " "));
+              if (state.yolo_alert)
+                activeAlerts.push(state.yolo_alert.replace(/_/g, " "));
+
+              let alertText =
+                activeAlerts.length > 0
+                  ? `⚠️ ${activeAlerts.join(" & ")}`
+                  : "✅ Secure";
+
+              integrityStatusEl.innerText = `Suspicion: ${Math.round(state.score)}% | ${alertText}`;
             }
 
             if (state.abandoned) {
@@ -512,7 +541,6 @@
       }
 
       function buildDashboard(report) {
-        // 1. Populate Metrics
         document.getElementById("dash-int-score").innerText = Math.round(
           report.final_score,
         );
@@ -565,7 +593,6 @@
             "Interview did not complete or generated no summary.";
         }
 
-        // 2. Build Timeline Line Chart
         const timelineCtx = document
           .getElementById("timelineChart")
           .getContext("2d");
@@ -612,19 +639,25 @@
           },
         });
 
-        // 3. Build Alert Breakdown Doughnut Chart
         const breakdownCtx = document
           .getElementById("breakdownChart")
           .getContext("2d");
-        const alerts = report.alert_breakdown || {};
 
-        const alertLabels = Object.keys(alerts).map((k) =>
+        const alerts = report.alert_breakdown || {};
+        const yoloAlerts = report.yolo_alert_breakdown || {};
+        const combinedAlerts = { ...alerts };
+
+        for (const [key, value] of Object.entries(yoloAlerts)) {
+          combinedAlerts[key] = (combinedAlerts[key] || 0) + value;
+        }
+
+        const alertLabels = Object.keys(combinedAlerts).map((k) =>
           k
             .replace(/_/g, " ")
             .toLowerCase()
             .replace(/\b\w/g, (c) => c.toUpperCase()),
         );
-        const alertData = Object.values(alerts);
+        const alertData = Object.values(combinedAlerts);
 
         new Chart(breakdownCtx, {
           type: "doughnut",
@@ -696,7 +729,8 @@
 
       function monitorVolume() {
         requestAnimationFrame(monitorVolume);
-        if (isProcessing) return;
+
+        if (!isInterviewStarted || isProcessing) return;
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteFrequencyData(dataArray);

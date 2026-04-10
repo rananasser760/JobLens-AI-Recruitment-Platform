@@ -451,12 +451,12 @@ class YOLODetector:
         if not self._ok: return None,"Secure",frame
         h,w=frame.shape[:2]; area=h*w
         pb=[]; phb=[]
-        for r in self._coco.predict(frame,conf=self.PERSON_CONF,iou=0.45,verbose=False):
+        for r in self._coco.predict(frame,conf=self.PERSON_CONF,iou=0.45,verbose=False, device='cpu'):
             for b in r.boxes:
                 if int(b.cls[0])!=0: continue
                 x1,y1,x2,y2=map(int,b.xyxy[0]); pb.append((x1,y1,x2,y2,round(float(b.conf[0]),2)))
         pb=self._dedup(pb,0.45); pc=len(pb)
-        for r in self._custom.predict(frame,conf=self.PHONE_CONF,iou=0.40,verbose=False):
+        for r in self._custom.predict(frame,conf=self.PHONE_CONF,iou=0.40,verbose=False, device='cpu'):
             for b in r.boxes:
                 x1,y1,x2,y2=map(int,b.xyxy[0]); conf=round(float(b.conf[0]),2)
                 if (x2-x1)*(y2-y1)<area*self.PHONE_MIN_AREA: continue
