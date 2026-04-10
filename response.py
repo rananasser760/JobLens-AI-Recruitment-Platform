@@ -2,16 +2,23 @@ import os
 import openai
 from typing import List, Dict
 import json
+import re
 
 # --- CONFIGURATION ---
-# ⚠️ REPLACE THIS WITH YOUR REAL KEY ⚠️
-OPENROUTER_API_KEY = "sk-or-v1-..." 
-OPENROUTER_MODEL_NAME = "mistralai/mistral-small-3.2-24b-instruct" 
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL_NAME = os.getenv(
+    "JOBLENS_INTERVIEW_MODEL",
+    "mistralai/mistral-small-3.2-24b-instruct",
+)
 
 # Configure the OpenAI client to use OpenRouter API
-openrouter_client = openai.OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY,
+openrouter_client = (
+    openai.OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+    )
+    if OPENROUTER_API_KEY
+    else None
 )
 
 def generate_interview_response(
@@ -46,6 +53,9 @@ def generate_interview_response(
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": current_transcript})
 
+    if openrouter_client is None:
+        return "Interview model is not configured. Please set OPENROUTER_API_KEY."
+
     try:
         response = openrouter_client.chat.completions.create(
             model=OPENROUTER_MODEL_NAME,
@@ -54,12 +64,11 @@ def generate_interview_response(
             max_tokens=100,
         )
         
-        # --- NEW: Post-processing cleanup ---
-        raw_content = response.choices[0].message.content
-        
-        # Remove asterisks (*) and other markdown symbols that mess up TTS
-        clean_content = raw_content.replace("*", "").replace("#", "").strip()
-        
+        # Keep semantic content intact while removing markdown-only wrappers.
+        raw_content = response.choices[0].message.content or ""
+        clean_content = re.sub(r"^\s*[#]+\s*", "", raw_content, flags=re.MULTILINE)
+        clean_content = clean_content.replace("**", "").strip()
+
         return clean_content
 
     except Exception as e:
@@ -110,6 +119,15 @@ def generate_interview_summary(
     """
 
     messages = [{"role": "user", "content": user_prompt}]
+
+    if openrouter_client is None:
+        return {
+            "review": "Interview model is not configured.",
+            "strengths": [],
+            "weaknesses": [],
+            "score": 0,
+            "recommendation": "Set OPENROUTER_API_KEY to enable summary generation.",
+        }
 
     try:
         response = openrouter_client.chat.completions.create(

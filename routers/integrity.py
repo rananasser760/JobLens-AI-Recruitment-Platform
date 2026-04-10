@@ -44,6 +44,46 @@ from session_store import ACTIVE_PROCESSORS, push_log
 
 router = APIRouter(prefix="/api", tags=["integrity"])
 
+# Shared state guards for concurrent API/thread access.
+_ACTIVE_PROCESSORS_LOCK = threading.Lock()
+_WS_CONNECTIONS_LOCK = threading.Lock()
+_WS_CONNECTIONS: dict[int, int] = {}
+
+
+def _active_get(session_id: int):
+    with _ACTIVE_PROCESSORS_LOCK:
+        return ACTIVE_PROCESSORS.get(session_id)
+
+
+def _active_set(session_id: int, processor) -> None:
+    with _ACTIVE_PROCESSORS_LOCK:
+        ACTIVE_PROCESSORS[session_id] = processor
+
+
+def _active_pop(session_id: int):
+    with _ACTIVE_PROCESSORS_LOCK:
+        return ACTIVE_PROCESSORS.pop(session_id, None)
+
+
+def _ws_inc(session_id: int) -> None:
+    with _WS_CONNECTIONS_LOCK:
+        _WS_CONNECTIONS[session_id] = _WS_CONNECTIONS.get(session_id, 0) + 1
+
+
+def _ws_dec(session_id: int) -> int:
+    with _WS_CONNECTIONS_LOCK:
+        remaining = max(0, _WS_CONNECTIONS.get(session_id, 0) - 1)
+        if remaining == 0:
+            _WS_CONNECTIONS.pop(session_id, None)
+        else:
+            _WS_CONNECTIONS[session_id] = remaining
+        return remaining
+
+
+def _ws_count(session_id: int) -> int:
+    with _WS_CONNECTIONS_LOCK:
+        return _WS_CONNECTIONS.get(session_id, 0)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  CONFIG
@@ -379,7 +419,10 @@ class YOLODetector:
         self._ok=_YOLO_AVAILABLE; self._coco=None; self._custom=None
         if self._ok:
             try:
-                self._coco=_YOLO('yolov8n.pt'); self._custom=_YOLO('phones.pt')
+                coco_model_path = os.path.join(current_dir, "yolov8n.pt")
+                phone_model_path = os.path.join(current_dir, "phones.pt")
+                self._coco = _YOLO(coco_model_path)
+                self._custom = _YOLO(phone_model_path)
             except Exception as e:
                 print(f"YOLO load error: {e}"); self._ok=False
         self.session_id=session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -454,6 +497,7 @@ class WebSessionProcessor:
         self._running        = False
         self._thread         = None
         self._lock           = threading.Lock()
+        self._dropped_frames = 0
         self._no_face_since: Optional[float] = None
         self.abandoned       = False
 
@@ -465,6 +509,7 @@ class WebSessionProcessor:
             "score":0.,"current_alert":None,"alert_breakdown":{},
             "frame_b64":None,"yolo_alert":None,"fps":0.,
             "abandoned":False,"no_face_countdown":None,
+            "dropped_frames":0,
         }
 
         # --- FIX: Removed cv2.VideoCapture() completely ---
@@ -482,8 +527,23 @@ class WebSessionProcessor:
 
     def push_frame(self, frame):
         """Called by the WebSocket endpoint when a new frame arrives from the browser."""
-        if not self._frame_queue.full():
-            self._frame_queue.put(frame)
+        if self._frame_queue.full():
+            try:
+                self._frame_queue.get_nowait()
+                with self._lock:
+                    self._dropped_frames += 1
+                    dropped = self._dropped_frames
+                if dropped % 50 == 0:
+                    push_log("[FRAME_DROP] input queue overflow", {"dropped_frames": dropped}, self.session_id)
+            except queue.Empty:
+                pass
+
+        try:
+            self._frame_queue.put_nowait(frame)
+        except queue.Full:
+            # In rare races where queue fills again before put, skip this frame.
+            with self._lock:
+                self._dropped_frames += 1
 
     # ── helpers ───────────────────────────────────────────────────────────
     def _blur_face(self, frame, lms, w, h):
@@ -569,7 +629,8 @@ class WebSessionProcessor:
                 b64=base64.b64encode(jpg).decode()
                 with self._lock:
                     self._latest_state.update({"calibrated":False,"cal_progress":prog,
-                                               "face_count":fc,"frame_b64":b64,"fps":round(self._fps,1)})
+                                               "face_count":fc,"frame_b64":b64,"fps":round(self._fps,1),
+                                               "dropped_frames":self._dropped_frames})
                 self._tick_fps(); continue
 
             # monitoring phase
@@ -578,6 +639,7 @@ class WebSessionProcessor:
                 threading.Thread(target=self._auto_abandon,args=(db_factory,),daemon=True).start()
                 with self._lock:
                     self._latest_state["abandoned"]=True; self._latest_state["no_face_countdown"]=0
+                    self._latest_state["dropped_frames"]=self._dropped_frames
                 break
 
             if fc==0:
@@ -641,6 +703,7 @@ class WebSessionProcessor:
                     "score":round(score,1),"current_alert":alert,"alert_breakdown":bd,
                     "frame_b64":b64,"fps":round(self._fps,1),"yolo_alert":self._yolo_alert,
                     "abandoned":False,"no_face_countdown":countdown,
+                    "dropped_frames":self._dropped_frames,
                 }
             self._tick_fps()
 
@@ -657,7 +720,7 @@ class WebSessionProcessor:
             self.face_det.close()
             self.alerts.export_report(f"session_{self.session_id}_report.txt")
         except: pass
-        ACTIVE_PROCESSORS.pop(self.session_id,None)
+        _active_pop(self.session_id)
 
     def start(self):
         self._running=True
@@ -724,7 +787,7 @@ def start_session(req: StartSessionRequest = None):
             db.delete(session); db.commit()
             raise HTTPException(status_code=503, detail=str(e))
         proc.start()
-        ACTIVE_PROCESSORS[session.id] = proc
+        _active_set(session.id, proc)
         return {"session_id": session.id, "started_at": session.started_at.isoformat(),
                 "candidate_name": session.candidate_name, "candidate_id": session.candidate_id}
     finally: db.close()
@@ -734,13 +797,13 @@ def start_session(req: StartSessionRequest = None):
 def end_session(session_id: int):
     db = DBSessionLocal()
     try:
-        if session_id not in ACTIVE_PROCESSORS:
+        proc = _active_pop(session_id)
+        if not proc:
             s = db.query(DBSession).filter(DBSession.id==session_id).first()
             if s and s.recommendation=="ABANDONED":
                 return {"session_id":session_id,"final_score":s.final_score,
                         "recommendation":"ABANDONED","duration_seconds":s.duration_seconds}
             raise HTTPException(status_code=404, detail="Session not found or already ended")
-        proc = ACTIVE_PROCESSORS.pop(session_id)
         proc.finalize(db)
         s = db.query(DBSession).filter(DBSession.id==session_id).first()
         rec,reason = proc.alerts.recommendation()
@@ -863,12 +926,47 @@ def dashboard_stats():
     finally: db.close()
 
 
+def _cleanup_orphan_processor(session_id: int, grace_seconds: float = 20.0):
+    """Graceful cleanup when client disconnects and never calls /sessions/{id}/end."""
+    time.sleep(grace_seconds)
+
+    if _ws_count(session_id) > 0:
+        return
+
+    proc = _active_pop(session_id)
+    if not proc:
+        return
+
+    db = DBSessionLocal()
+    try:
+        session = db.query(DBSession).filter(DBSession.id == session_id).first()
+        if session and session.ended_at is None:
+            proc.abandoned = True
+            proc.finalize(db)
+            push_log("[AUTO-CLEANUP] websocket disconnected", {"grace_seconds": grace_seconds}, session_id)
+        else:
+            proc._running = False
+            for t in [proc._thread, proc._yolo_thread]:
+                if t:
+                    t.join(timeout=2)
+            try:
+                proc.face_det.close()
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"orphan cleanup error: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 # ── WebSocket: live camera state (Updated for Ping-Pong Routing) ──────────────
 @router.websocket("/ws/{session_id}")
 async def ws_state(websocket: WebSocket, session_id: int):
     await websocket.accept()
+    _ws_inc(session_id)
     try:
-        proc = ACTIVE_PROCESSORS.get(session_id)
+        proc = _active_get(session_id)
         if not proc:
             await websocket.send_json({"error":"Session not found"})
             await websocket.close()
@@ -899,3 +997,7 @@ async def ws_state(websocket: WebSocket, session_id: int):
         pass
     except Exception as e:
         print(f"WS error: {e}")
+    finally:
+        remaining = _ws_dec(session_id)
+        if remaining == 0:
+            threading.Thread(target=_cleanup_orphan_processor, args=(session_id,), daemon=True).start()

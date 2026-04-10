@@ -29,6 +29,14 @@ Sessions are logged to a SQLite database, scored using an intelligent exponentia
 - Browser activity monitoring during assessments  
 - Fair and secure remote evaluation  
 
+### 🔎 Recruitment Intelligence (Merged Notebook Features)
+- CV parsing from PDF, DOCX, and image files
+- AI-authorship probability analysis (perplexity + burstiness)
+- ATS scoring and prioritized improvement plans
+- Job scraping from Wuzzuf and LinkedIn into ChromaDB
+- Candidate and job embedding CRUD
+- Job-to-candidate and candidate-to-job recommendations
+
 ---
 
 ## 🌿 Repository Branches
@@ -133,6 +141,60 @@ BLUR_FACE                = True  # blur faces in saved frames
 KEYFRAME_JPEG_QUALITY    = 40    # lower = smaller DB footprint
 KEYFRAME_BLUR_KERNEL     = 35    # Gaussian blur strength
 ```
+
+## 🚀 Unified Backend Quick Start
+
+1. Create and activate your environment.
+  - Use one environment only (either Conda or `.venv`), not both at the same time.
+  - Recommended Python: 3.11 or 3.12 for full NeMo STT support.
+2. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Install Playwright browser runtime:
+
+```bash
+playwright install chromium
+```
+
+4. Configure environment variables:
+- Copy `.env.example` values into your environment manager or shell.
+- Set at least one LLM provider key (`OPENROUTER_API_KEY` or `GROQ_API_KEY`).
+
+5. Start server:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+6. Open docs:
+- `http://127.0.0.1:8000/docs`
+
+## 🔌 Unified API Groups
+
+- Integrity Monitoring:
+  - `POST /api/sessions/start`
+  - `POST /api/sessions/{id}/end`
+  - `GET /api/sessions/{id}/report`
+- AI Interview:
+  - `POST /interview/start`
+  - `WS /interview/ws/{session_id}`
+  - `GET /interview/{session_id}/summary`
+- Recruitment (Notebook merged):
+  - `GET /api/scraping/jobs`
+  - `POST /api/scraping/trigger`
+  - `POST /api/cv/parse`
+  - `POST /api/cv/parse-text`
+  - `POST /api/cv/ats-score`
+  - `POST /api/cv/improvements`
+  - `POST /api/cv/full-analysis`
+  - `POST|PUT|DELETE /api/embeddings/candidate...`
+  - `POST|PUT|DELETE /api/embeddings/job...`
+  - `GET /api/recommendations/jobs/{candidate_id}`
+  - `GET /api/recommendations/candidates/{job_id}`
+  - `POST /api/recommendations/match-from-text`
 
 ---
 

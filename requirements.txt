@@ -1,26 +1,48 @@
-# --- Core API & Server ---
+# Core API and app server
 fastapi
 uvicorn
 python-multipart
 requests
 websockets
+python-dotenv
 
-# --- LLM ---
+# Database and ORM
+sqlalchemy
+
+# LLM providers
 openai
-google-generativeai
 
-# --- Speech-to-Text (NeMo ASR) ---
-# We use [asr] instead of [all] to avoid Linux-only dependencies
+# Speech-to-text and text-to-speech
 nemo_toolkit[asr]
+coqui-tts
 torch
 torchaudio
 torchvision
 
-# --- Text-to-Speech (Coqui) ---
-coqui-tts
-scipy
-numpy
-
-# --- Audio Processing ---
+# Audio processing
 pydub
 ffmpeg-python
+imageio-ffmpeg
+scipy
+gTTS
+
+# Integrity and computer vision
+opencv-python
+mediapipe
+ultralytics
+numpy
+
+# Recruitment notebook stack (now API modules)
+chromadb
+playwright
+playwright-stealth
+sentence-transformers
+scikit-learn
+PyMuPDF
+python-docx
+pillow
+docling
+textstat
+transformers
+apscheduler
+pyngrok

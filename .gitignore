@@ -17,3 +17,16 @@ joblens.db
 temp_raw_*.webm
 temp_clean_*.wav
 *.mp3
+temp_audio/
+
+# 5. Vector DB and model caches
+joblens_db/
+.cache/
+
+# 6. Environment secrets
+.env
+.env.local
+
+# 7. Frontend build artifacts (future integration)
+dist/
+build/

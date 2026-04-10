@@ -10,27 +10,61 @@
 import asyncio
 import json
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from routers.integrity import router as integrity_router
 from routers.interview  import router as interview_router
+from routers.recruitment import router as recruitment_router
 from models             import DBSession, DBSessionLocal
 from session_store      import LOG_BUFFERS, LOG_SUBSCRIBERS
+from recruitment.scheduler import start_scheduler, stop_scheduler
 
 # ── App ───────────────────────────────────────────────────────────────────────
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        app.state.recruitment_scheduler = start_scheduler()
+    except Exception as exc:
+        app.state.recruitment_scheduler = {
+            "enabled": False,
+            "running": False,
+            "error": str(exc),
+        }
+
+    yield
+
+    try:
+        stop_scheduler()
+    except Exception:
+        pass
+
+
 app = FastAPI(
     title="JobLens AI",
-    description="Unified AI interview + integrity monitoring platform",
+    description="Unified interview, integrity, CV parsing, scraping, and matching platform",
     version="2.0.0",
+    lifespan=lifespan,
 )
+
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("JOBLENS_CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+] or ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -38,6 +72,7 @@ app.add_middleware(
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(integrity_router)   # /api/sessions/…  /api/ws/…  /api/dashboard/…
 app.include_router(interview_router)   # /interview/start  /interview/ws/…
+app.include_router(recruitment_router) # /api/cv/… /api/scraping/… /api/recommendations/…
 
 # ── Static files (templates served by the UI layer) ──────────────────────────
 if os.path.isdir("static"):
@@ -178,6 +213,19 @@ def unified_report(session_id: int):
             "started_at":       s.started_at.isoformat() if s.started_at else None,
             "ended_at":         s.ended_at.isoformat()   if s.ended_at   else None,
             "duration_seconds": s.duration_seconds,
+
+            # Backward-compatible flat fields for clients that previously
+            # consumed integrity-style report payloads directly.
+            "final_score":       cheating_score,
+            "recommendation":    int_rec,
+            "alert_breakdown":   integrity_bd,
+            "yolo_alert_breakdown": yolo_bd,
+            "total_alerts":      len(s.alerts),
+            "total_yolo_alerts": len(s.yolo_alerts),
+            "score_history":     score_history,
+            "timeline_events":   timeline,
+            "interview_summary": interview_summary,
+            "interview_score":   interview_score,
 
             "candidate": {
                 "name": s.candidate_name,

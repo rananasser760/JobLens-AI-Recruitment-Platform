@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import uuid
+import asyncio
 from typing import Optional
 
 import imageio_ffmpeg
@@ -79,6 +80,20 @@ def _persist_summary(interview_sid: str, summary: dict) -> None:
     except Exception as e:
         print(f"[interview] persist summary error: {e}")
         db.rollback()
+    finally:
+        db.close()
+
+
+def _is_integrity_abandoned(integrity_id: Optional[int]) -> bool:
+    if integrity_id is None:
+        return False
+
+    db = DBSessionLocal()
+    try:
+        row = db.query(DBSession).filter(DBSession.id == integrity_id).first()
+        return bool(row and row.recommendation == "ABANDONED")
+    except Exception:
+        return False
     finally:
         db.close()
 
@@ -166,10 +181,32 @@ async def ws_interview(websocket: WebSocket, session_id: str):
         return
 
     sess = INTERVIEW_SESSIONS[session_id]
+    integrity_id = sess.get("integrity_id")
 
     try:
         while True:
-            audio_bytes = await websocket.receive_bytes()
+            if _is_integrity_abandoned(integrity_id):
+                ai_text = (
+                    "This interview session has been stopped because the linked integrity "
+                    "monitoring session was abandoned."
+                )
+                try:
+                    await websocket.send_text(json.dumps({
+                        "type":        "transcript",
+                        "user":        "(System)",
+                        "ai":          ai_text,
+                        "is_complete": True,
+                    }))
+                except Exception:
+                    pass
+                push_log("[INTERVIEW] stopped due to abandoned integrity session", {"sid": session_id})
+                await websocket.close(code=1000)
+                break
+
+            try:
+                audio_bytes = await asyncio.wait_for(websocket.receive_bytes(), timeout=2.0)
+            except asyncio.TimeoutError:
+                continue
 
             uid        = uuid.uuid4()
             raw_path   = f"temp_raw_{uid}.webm"
@@ -195,10 +232,14 @@ async def ws_interview(websocket: WebSocket, session_id: str):
                         "ai":          ai_text,
                         "is_complete": False,
                     }))
-                    
-                    audio_out = text_to_speech_file(ai_text)
-                    with open(audio_out, "rb") as f:
-                        await websocket.send_bytes(f.read())
+
+                    try:
+                        audio_out = text_to_speech_file(ai_text)
+                        with open(audio_out, "rb") as f:
+                            await websocket.send_bytes(f.read())
+                    except Exception as tts_exc:
+                        print(f"[interview] TTS warning: {tts_exc}")
+                        audio_out = None
                         
                     continue # Bypasses LLM and starts waiting for audio again
                 # ---------------------------------
@@ -239,9 +280,13 @@ async def ws_interview(websocket: WebSocket, session_id: str):
                 }))
 
                 # 2. send TTS audio bytes
-                audio_out = text_to_speech_file(ai_text)
-                with open(audio_out, "rb") as f:
-                    await websocket.send_bytes(f.read())
+                try:
+                    audio_out = text_to_speech_file(ai_text)
+                    with open(audio_out, "rb") as f:
+                        await websocket.send_bytes(f.read())
+                except Exception as tts_exc:
+                    print(f"[interview] TTS warning: {tts_exc}")
+                    audio_out = None
 
             finally:
                 _cleanup(raw_path, wav_path, audio_out)
