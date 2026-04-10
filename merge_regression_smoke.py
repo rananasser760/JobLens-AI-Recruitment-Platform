@@ -77,7 +77,7 @@ def test_interview_flow(client: TestClient, wav_path: str) -> None:
     def fake_speech_to_text(path: str) -> str:
         return "sample candidate answer"
 
-    def fake_generate_interview_response(current_transcript, chat_history, cv_text) -> str:
+    def fake_generate_interview_response(current_transcript, chat_history, cv_text, job_description) -> str:
         return "Thanks. Next question please."
 
     def fake_tts(text: str) -> str:
@@ -93,6 +93,7 @@ def test_interview_flow(client: TestClient, wav_path: str) -> None:
             "/interview/start",
             data={
                 "cv_text": "test cv",
+                "job_description": "backend python role",
                 "max_questions": "3",
                 "evaluation_criteria": "technical",
             },
@@ -123,6 +124,7 @@ def test_linked_handoff_abandonment(client: TestClient) -> None:
         "/interview/start",
         data={
             "cv_text": "linked cv",
+            "job_description": "backend python role",
             "max_questions": "3",
             "evaluation_criteria": "technical",
             "integrity_db_session_id": str(integrity_id),
