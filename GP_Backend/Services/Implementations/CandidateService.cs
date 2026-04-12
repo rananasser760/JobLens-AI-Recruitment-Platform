@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using GP_Backend.Data;
 using GP_Backend.Models.DTOs.Candidate;
 using GP_Backend.Models.DTOs.Common;
 using GP_Backend.Models.Entities;
+using GP_Backend.Models.Enums;
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
 
 namespace GP_Backend.Services.Implementations;
 
@@ -11,14 +14,14 @@ public class CandidateService : ICandidateService
 {
     private readonly AppDbContext _context;
     private readonly IFileStorageService _fileStorage;
-    private readonly IAIBackendService _aiBackend;
+    private readonly IAiService _aiBackend;
     private readonly IAuditService _auditService;
     private readonly ILogger<CandidateService> _logger;
 
     public CandidateService(
         AppDbContext context,
         IFileStorageService fileStorage,
-        IAIBackendService aiBackend,
+        IAiService aiBackend,
         IAuditService auditService,
         ILogger<CandidateService> logger)
     {
@@ -50,6 +53,119 @@ public class CandidateService : ICandidateService
         {
             _logger.LogError(ex, "Error getting candidate profile");
             return ApiResponse<CandidateProfileDto>.FailureResponse("An error occurred");
+        }
+    }
+
+    public async Task<ApiResponse<CandidateDashboardDto>> GetDashboardAsync(long userId)
+    {
+        try
+        {
+            var candidate = await _context.Candidates
+                .Include(c => c.Resumes)
+                .FirstOrDefaultAsync(c => c.UserId == userId);
+
+            if (candidate == null)
+            {
+                return ApiResponse<CandidateDashboardDto>.FailureResponse("Candidate profile not found");
+            }
+
+            var applications = await _context.Applications
+                .Where(a => a.CandidateId == candidate.Id)
+                .Select(a => new
+                {
+                    a.Id,
+                    a.JobId,
+                    a.AppliedAt,
+                    a.Status,
+                    JobTitle = a.Job.Title,
+                    CompanyName = a.Job.Company != null ? a.Job.Company.Name : null,
+                    AtsScore = a.Resume != null ? a.Resume.AtsScore : null
+                })
+                .ToListAsync();
+
+            var interviews = await _context.InterviewSessions
+                .Where(i => i.Application.CandidateId == candidate.Id)
+                .Select(i => new
+                {
+                    i.Id,
+                    i.ApplicationId,
+                    JobTitle = i.Application.Job.Title,
+                    i.InterviewTitle,
+                    i.ScheduledAt,
+                    i.Status,
+                    i.CheatingDetected,
+                    i.OverallScore
+                })
+                .ToListAsync();
+
+            var activeStatuses = new[]
+            {
+                ApplicationStatus.Pending,
+                ApplicationStatus.UnderReview,
+                ApplicationStatus.Shortlisted,
+                ApplicationStatus.InterviewScheduled,
+                ApplicationStatus.InterviewCompleted
+            };
+
+            var totalApplications = applications.Count;
+            var activeApplications = applications.Count(a => activeStatuses.Contains(a.Status));
+
+            var interviewsCompleted = interviews.Count(i =>
+                string.Equals(i.Status, "Completed", StringComparison.OrdinalIgnoreCase));
+
+            var interviewsScheduled = interviews.Count(i =>
+                !string.Equals(i.Status, "Completed", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(i.Status, "Cancelled", StringComparison.OrdinalIgnoreCase));
+
+            var dashboard = new CandidateDashboardDto
+            {
+                TotalApplications = totalApplications,
+                ActiveApplications = activeApplications,
+                InterviewsCompleted = interviewsCompleted,
+                InterviewsScheduled = interviewsScheduled,
+                HighestAtsScore = candidate.Resumes.Count == 0
+                    ? 0
+                    : candidate.Resumes.Max(r => r.AtsScore ?? 0),
+                RecentApplications = applications
+                    .OrderByDescending(a => a.AppliedAt)
+                    .Take(5)
+                    .Select(a => new CandidateRecentApplicationDto
+                    {
+                        ApplicationId = a.Id,
+                        JobId = a.JobId,
+                        JobTitle = a.JobTitle,
+                        CompanyName = a.CompanyName,
+                        AppliedAt = a.AppliedAt,
+                        Status = a.Status.ToString(),
+                        AtsScore = a.AtsScore
+                    })
+                    .ToList(),
+                UpcomingInterviews = interviews
+                    .Where(i =>
+                        !string.Equals(i.Status, "Completed", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(i.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(i => i.ScheduledAt ?? DateTime.MaxValue)
+                    .Take(5)
+                    .Select(i => new CandidateUpcomingInterviewDto
+                    {
+                        SessionId = i.Id,
+                        ApplicationId = i.ApplicationId,
+                        JobTitle = i.JobTitle,
+                        InterviewTitle = i.InterviewTitle,
+                        ScheduledAt = i.ScheduledAt,
+                        Status = i.Status ?? "Unknown",
+                        CheatingDetected = i.CheatingDetected,
+                        OverallScore = i.OverallScore
+                    })
+                    .ToList()
+            };
+
+            return ApiResponse<CandidateDashboardDto>.SuccessResponse(dashboard);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting candidate dashboard");
+            return ApiResponse<CandidateDashboardDto>.FailureResponse("An error occurred");
         }
     }
 
@@ -106,9 +222,15 @@ public class CandidateService : ICandidateService
 
             await _context.SaveChangesAsync();
 
-            // Update embedding in AI backend
-            // TODO: Call AI backend to update candidate embedding
-            // await _aiBackend.UpdateCandidateEmbeddingAsync(candidate.Id, BuildProfileData(candidate));
+            var embeddingPayload = BuildProfileData(candidate);
+            var embeddingResult = await _aiBackend.UpdateCandidateEmbeddingAsync(candidate.Id, embeddingPayload);
+            if (!embeddingResult.Success)
+            {
+                _logger.LogWarning(
+                    "Candidate embedding update failed for candidate {CandidateId}: {Message}",
+                    candidate.Id,
+                    embeddingResult.Message);
+            }
 
             await _auditService.LogAsync(userId, "UpdateProfile", "Candidate", candidate.Id);
 
@@ -398,7 +520,7 @@ public class CandidateService : ICandidateService
                         {
                             CandidateId = candidate.Id,
                             SkillName = skillName,
-                            SkillConfidence = (int)(parsingResult.Confidence * 100)
+                            SkillConfidence = (int)((parsingResult.Confidence ?? 0f) * 100)
                         });
                     }
                 }
@@ -406,6 +528,16 @@ public class CandidateService : ICandidateService
 
             candidate.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+
+            var embeddingPayload = BuildProfileData(candidate);
+            var embeddingResult = await _aiBackend.UpdateCandidateEmbeddingAsync(candidate.Id, embeddingPayload);
+            if (!embeddingResult.Success)
+            {
+                _logger.LogWarning(
+                    "Candidate embedding update failed after fill-from-resume for candidate {CandidateId}: {Message}",
+                    candidate.Id,
+                    embeddingResult.Message);
+            }
 
             await _auditService.LogAsync(userId, "FillProfileFromResume", "Candidate", candidate.Id);
 
@@ -419,6 +551,27 @@ public class CandidateService : ICandidateService
     }
 
     #region Helper Methods
+
+    private static string BuildProfileData(Candidate candidate)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["full_name"] = candidate.FullName,
+            ["current_title"] = candidate.CurrentTitle,
+            ["summary"] = candidate.Summary,
+            ["skills"] = candidate.Skills
+                .Select(s => s.SkillName)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            ["experience_years"] = candidate.YearsOfExperience,
+            ["location"] = candidate.Location,
+            ["linkedin_url"] = candidate.LinkedInUrl,
+            ["portfolio_url"] = candidate.PortfolioUrl
+        };
+
+        return JsonSerializer.Serialize(payload);
+    }
 
     private static CandidateProfileDto MapToProfileDto(Candidate candidate)
     {

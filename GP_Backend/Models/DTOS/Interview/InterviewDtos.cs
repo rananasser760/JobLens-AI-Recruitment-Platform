@@ -17,6 +17,8 @@ public class InterviewSessionDto
     public int TotalQuestions { get; set; }
     public int AnsweredQuestions { get; set; }
     public string Status { get; set; } = string.Empty;
+    public long? IntegritySessionId { get; set; }
+    public string? InterviewBackendSessionId { get; set; }
     public string? FinalReport { get; set; }
     public string? AiFeedback { get; set; }
 
@@ -32,6 +34,8 @@ public class InterviewSessionListDto
     public string? InterviewTitle { get; set; }
     public DateTime? ScheduledAt { get; set; }
     public string Status { get; set; } = string.Empty;
+    public long? IntegritySessionId { get; set; }
+    public string? InterviewBackendSessionId { get; set; }
     public float? OverallScore { get; set; }
     public bool CheatingDetected { get; set; }
     public string CandidateName { get; set; } = string.Empty;

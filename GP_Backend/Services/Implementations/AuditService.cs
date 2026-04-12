@@ -1,6 +1,7 @@
 using GP_Backend.Data;
 using GP_Backend.Models.Entities;
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
 using Microsoft.EntityFrameworkCore;
 
 namespace GP_Backend.Services.Implementations;

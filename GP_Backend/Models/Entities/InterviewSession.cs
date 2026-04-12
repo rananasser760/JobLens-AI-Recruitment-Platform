@@ -34,6 +34,11 @@ public class InterviewSession
     [MaxLength(50)]
     public string? Status { get; set; } = "Scheduled";
 
+    public long? IntegritySessionId { get; set; }
+
+    [MaxLength(100)]
+    public string? InterviewBackendSessionId { get; set; }
+
     public string? FinalReport { get; set; }
 
     public string? AiFeedback { get; set; }

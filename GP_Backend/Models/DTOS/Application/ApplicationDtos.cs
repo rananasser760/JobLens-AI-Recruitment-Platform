@@ -60,6 +60,27 @@ public class UpdateApplicationStatusDto
     public string? Notes { get; set; }
 }
 
+public class BulkUpdateApplicationStatusDto
+{
+    [Required]
+    [MinLength(1)]
+    public List<long> ApplicationIds { get; set; } = new();
+
+    [Required]
+    public ApplicationStatus Status { get; set; }
+
+    public string? Notes { get; set; }
+}
+
+public class BulkUpdateApplicationStatusResultDto
+{
+    public int RequestedCount { get; set; }
+    public int UpdatedCount { get; set; }
+    public int SkippedCount { get; set; }
+    public List<long> NotFoundIds { get; set; } = new();
+    public List<long> UnauthorizedIds { get; set; } = new();
+}
+
 public class ApplicationSearchParams : Models.DTOs.Common.PaginationParams
 {
     public long? JobId { get; set; }

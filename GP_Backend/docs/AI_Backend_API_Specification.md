@@ -1255,12 +1255,12 @@ The .NET backend calls these APIs using `HttpClient`. Example configuration in `
   "AIBackend": {
     "BaseUrl": "http://localhost:8000",
     "ApiKey": "your-internal-api-key",
-    "TimeoutSeconds": 300
+    "Timeout": 300
   }
 }
 ```
 
-All endpoints are consumed by `AIBackendService.cs` in the .NET project.
+All endpoints are consumed by `Services/AI/AiService.cs` through the `IAiService` contract in the .NET project.
 
 ---
 

@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace GP_Backend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260201104818_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20260410200124_AddInterviewGatewaySessionIds")]
+    partial class AddInterviewGatewaySessionIds
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -583,6 +583,13 @@ namespace GP_Backend.Migrations
                     b.Property<string>("FinalReport")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<long?>("IntegritySessionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("InterviewBackendSessionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("InterviewTitle")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -606,6 +613,10 @@ namespace GP_Backend.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ApplicationId");
+
+                    b.HasIndex("IntegritySessionId");
+
+                    b.HasIndex("InterviewBackendSessionId");
 
                     b.ToTable("InterviewSessions");
                 });

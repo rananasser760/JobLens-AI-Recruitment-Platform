@@ -134,6 +134,76 @@ public class JobsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("recommendations/match-from-text")]
+    [Authorize(Roles = "Candidate,Recruiter,Admin")]
+    public async Task<IActionResult> MatchJobsFromText([FromBody] MatchJobsFromTextRequestDto request, [FromQuery] int limit = 5)
+    {
+        if (string.IsNullOrWhiteSpace(request.ResumeText))
+        {
+            return BadRequest("Resume text is required");
+        }
+
+        var result = await _jobService.MatchJobsFromTextAsync(request.ResumeText, limit);
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("scraping/jobs")]
+    [Authorize(Roles = "Recruiter,Admin")]
+    public async Task<IActionResult> GetScrapedJobs([FromQuery] string? keyword = null, [FromQuery] string? location = null, [FromQuery] int limit = 50)
+    {
+        var result = await _jobService.GetScrapedJobsFromAiAsync(keyword, location, limit);
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("scraping/status")]
+    [Authorize(Roles = "Recruiter,Admin")]
+    public async Task<IActionResult> GetScrapingStatus()
+    {
+        var result = await _jobService.GetScrapingStatusAsync();
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("scraping/trigger")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> TriggerScraping([FromQuery] int? maxCategories = null)
+    {
+        var result = await _jobService.TriggerScrapingAsync(maxCategories);
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, result);
+        }
+
+        return Accepted(result);
+    }
+
+    [HttpGet("recruitment/status")]
+    [Authorize(Roles = "Recruiter,Admin")]
+    public async Task<IActionResult> GetRecruitmentStatus()
+    {
+        var result = await _jobService.GetRecruitmentStatusAsync();
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("my-jobs")]
     [Authorize(Roles = "Recruiter")]
     public async Task<IActionResult> GetMyJobs([FromQuery] JobSearchParams searchParams)

@@ -63,6 +63,22 @@ public class ApplicationsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPut("bulk-status")]
+    [Authorize(Roles = "Recruiter")]
+    public async Task<IActionResult> BulkUpdateStatus([FromBody] BulkUpdateApplicationStatusDto dto)
+    {
+        var recruiterId = await GetRecruiterIdAsync();
+        if (recruiterId == null) return Unauthorized();
+
+        var result = await _applicationService.BulkUpdateStatusAsync(recruiterId.Value, dto);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpPost("{applicationId}/withdraw")]
     [Authorize(Roles = "Candidate")]
     public async Task<IActionResult> WithdrawApplication(long applicationId)

@@ -3,6 +3,7 @@ using GP_Backend.Models.DTOs.Common;
 using GP_Backend.Models.Entities;
 using GP_Backend.Models.Enums;
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
 using Microsoft.EntityFrameworkCore;
 
 namespace GP_Backend.Services.Implementations;

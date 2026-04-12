@@ -1,4 +1,5 @@
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
 
 namespace GP_Backend.Services.Implementations;
 

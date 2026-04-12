@@ -162,3 +162,9 @@ public class ScrapedJobDto
     public DateTime PostedAt { get; set; }
     public List<string>? Skills { get; set; }
 }
+
+public class MatchJobsFromTextRequestDto
+{
+    [Required]
+    public string ResumeText { get; set; } = string.Empty;
+}

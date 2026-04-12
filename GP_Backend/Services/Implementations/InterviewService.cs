@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using GP_Backend.Data;
 using GP_Backend.Models.DTOs.Common;
@@ -6,6 +7,7 @@ using GP_Backend.Models.DTOs.Interview;
 using GP_Backend.Models.Entities;
 using GP_Backend.Models.Enums;
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
 
 namespace GP_Backend.Services.Implementations;
 
@@ -13,7 +15,7 @@ public class InterviewService : IInterviewService
 {
     private readonly AppDbContext _context;
     private readonly IFileStorageService _fileStorage;
-    private readonly IAIBackendService _aiBackend;
+    private readonly IAiService _aiBackend;
     private readonly IEmailService _emailService;
     private readonly IAuditService _auditService;
     private readonly ILogger<InterviewService> _logger;
@@ -21,7 +23,7 @@ public class InterviewService : IInterviewService
     public InterviewService(
         AppDbContext context,
         IFileStorageService fileStorage,
-        IAIBackendService aiBackend,
+        IAiService aiBackend,
         IEmailService emailService,
         IAuditService auditService,
         ILogger<InterviewService> logger)
@@ -142,7 +144,9 @@ public class InterviewService : IInterviewService
         {
             var session = await _context.InterviewSessions
                 .Include(s => s.Application).ThenInclude(a => a.Candidate)
+                .Include(s => s.Application).ThenInclude(a => a.Candidate).ThenInclude(c => c.Skills)
                 .Include(s => s.Application).ThenInclude(a => a.Job)
+                .Include(s => s.Application).ThenInclude(a => a.Resume).ThenInclude(r => r!.ParsingResult)
                 .FirstOrDefaultAsync(s => s.Id == sessionId);
 
             if (session == null)
@@ -161,12 +165,62 @@ public class InterviewService : IInterviewService
                 return ApiResponse<InterviewSessionDto>.FailureResponse($"Interview cannot be started. Current status: {session.Status}");
             }
 
+            var integrityStart = await _aiBackend.StartIntegritySessionAsync(new IntegritySessionStartRequestDto
+            {
+                CandidateName = session.Application.Candidate.FullName,
+                CandidateId = candidateId.ToString()
+            });
+
+            if (!integrityStart.Success || integrityStart.Data == null)
+            {
+                var message = string.IsNullOrWhiteSpace(integrityStart.Message)
+                    ? "Failed to start integrity monitoring session"
+                    : integrityStart.Message;
+                return ApiResponse<InterviewSessionDto>.FailureResponse(message);
+            }
+
+            var interviewStartRequest = new InterviewSessionStartRequestDto
+            {
+                CvText = BuildCandidateCvText(session.Application),
+                JobDescription = BuildJobDescription(session.Application.Job),
+                EvaluationCriteria = BuildEvaluationCriteria(session.AgentType),
+                MaxQuestions = session.TotalQuestions > 0 ? session.TotalQuestions : 5,
+                CandidateName = session.Application.Candidate.FullName,
+                CandidateId = candidateId.ToString(),
+                IntegrityDbSessionId = integrityStart.Data.SessionId
+            };
+
+            var interviewStart = await _aiBackend.StartInterviewSessionAsync(interviewStartRequest);
+            if (!interviewStart.Success || interviewStart.Data == null)
+            {
+                if (integrityStart.Data.SessionId > 0)
+                {
+                    var stopIntegrity = await _aiBackend.EndIntegritySessionAsync(integrityStart.Data.SessionId);
+                    if (!stopIntegrity.Success)
+                    {
+                        _logger.LogWarning(
+                            "Failed to rollback integrity session {IntegritySessionId} after interview start failure: {Message}",
+                            integrityStart.Data.SessionId,
+                            stopIntegrity.Message);
+                    }
+                }
+
+                var message = string.IsNullOrWhiteSpace(interviewStart.Message)
+                    ? "Failed to start interview AI session"
+                    : interviewStart.Message;
+                return ApiResponse<InterviewSessionDto>.FailureResponse(message);
+            }
+
             session.Status = "InProgress";
             session.StartedAt = DateTime.UtcNow;
+            session.IntegritySessionId = integrityStart.Data.SessionId;
+            session.InterviewBackendSessionId = interviewStart.Data.InterviewSessionId;
+            session.TotalQuestions = interviewStart.Data.MaxQuestions > 0
+                ? interviewStart.Data.MaxQuestions
+                : session.TotalQuestions;
             await _context.SaveChangesAsync();
 
-            var candidate = await _context.Candidates.FindAsync(candidateId);
-            await _auditService.LogAsync(candidate?.UserId, "StartInterview", "InterviewSession", session.Id);
+            await _auditService.LogAsync(session.Application.Candidate.UserId, "StartInterview", "InterviewSession", session.Id);
 
             return ApiResponse<InterviewSessionDto>.SuccessResponse(MapToSessionDto(session), "Interview started");
         }
@@ -193,8 +247,13 @@ public class InterviewService : IInterviewService
                 return ApiResponse<InterviewSessionDto>.FailureResponse("Interview session not found");
             }
 
+            if (session.Status == "Completed")
+            {
+                return ApiResponse<InterviewSessionDto>.SuccessResponse(MapToSessionDto(session), "Interview already completed");
+            }
+
             session.Status = "Completed";
-            session.EndedAt = DateTime.UtcNow;
+            session.EndedAt ??= DateTime.UtcNow;
 
             // Calculate overall score
             var answeredQuestions = session.Questions.Where(q => q.Answer != null).ToList();
@@ -209,22 +268,87 @@ public class InterviewService : IInterviewService
             // Check for cheating
             session.CheatingDetected = session.CheatingEvents.Any();
 
-            // Generate AI feedback
-            // TODO: Call AI backend to generate interview report
-            // var qaList = answeredQuestions.Select(q => new QuestionAnswerPairDto { ... }).ToList();
-            // var reportResponse = await _aiBackend.GenerateInterviewReportAsync(sessionId, qaList, session.OverallScore ?? 0);
+            UnifiedSessionReportDto? unifiedReport = null;
+            string? feedbackFromSummary = null;
 
-            session.AiFeedback = "Interview completed. Overall performance was satisfactory.";
-            session.FinalReport = JsonSerializer.Serialize(new
+            if (!string.IsNullOrWhiteSpace(session.InterviewBackendSessionId))
             {
-                OverallScore = session.OverallScore,
-                TotalQuestions = session.TotalQuestions,
-                AnsweredQuestions = session.AnsweredQuestions,
-                CheatingDetected = session.CheatingDetected,
-                Duration = session.EndedAt.HasValue && session.StartedAt.HasValue
-                    ? (session.EndedAt.Value - session.StartedAt.Value).TotalMinutes
-                    : 0
-            });
+                var summaryResult = await _aiBackend.GetInterviewSessionSummaryAsync(session.InterviewBackendSessionId);
+                if (summaryResult.Success && summaryResult.Data != null)
+                {
+                    feedbackFromSummary = ExtractSummaryFeedback(summaryResult.Data.SummaryJson);
+                }
+                else if (!summaryResult.Success)
+                {
+                    _logger.LogWarning(
+                        "Failed to fetch interview summary for backend session {InterviewSessionId}: {Message}",
+                        session.InterviewBackendSessionId,
+                        summaryResult.Message);
+                }
+            }
+
+            if (session.IntegritySessionId.HasValue)
+            {
+                var endIntegrity = await _aiBackend.EndIntegritySessionAsync(session.IntegritySessionId.Value);
+                if (!endIntegrity.Success)
+                {
+                    _logger.LogWarning(
+                        "Failed to end integrity session {IntegritySessionId}: {Message}",
+                        session.IntegritySessionId.Value,
+                        endIntegrity.Message);
+                }
+
+                var unifiedResult = await _aiBackend.GetUnifiedSessionReportAsync(session.IntegritySessionId.Value);
+                if (unifiedResult.Success && unifiedResult.Data != null)
+                {
+                    unifiedReport = unifiedResult.Data;
+                }
+                else if (!unifiedResult.Success)
+                {
+                    _logger.LogWarning(
+                        "Failed to fetch unified report for integrity session {IntegritySessionId}: {Message}",
+                        session.IntegritySessionId.Value,
+                        unifiedResult.Message);
+                }
+            }
+
+            if (unifiedReport != null)
+            {
+                session.CheatingDetected = IsCheatingDetected(unifiedReport);
+
+                if (unifiedReport.InterviewScore.HasValue)
+                {
+                    var normalized = unifiedReport.InterviewScore.Value > 10f
+                        ? unifiedReport.InterviewScore.Value / 10f
+                        : unifiedReport.InterviewScore.Value;
+                    session.OverallScore = normalized;
+                }
+
+                session.FinalReport = !string.IsNullOrWhiteSpace(unifiedReport.RawJson)
+                    ? unifiedReport.RawJson
+                    : JsonSerializer.Serialize(unifiedReport);
+
+                if (string.IsNullOrWhiteSpace(feedbackFromSummary))
+                {
+                    feedbackFromSummary = ExtractSummaryFeedback(unifiedReport.InterviewSummaryJson);
+                }
+            }
+
+            session.AiFeedback = feedbackFromSummary ?? "Interview completed. Overall performance was satisfactory.";
+
+            if (string.IsNullOrWhiteSpace(session.FinalReport))
+            {
+                session.FinalReport = JsonSerializer.Serialize(new
+                {
+                    OverallScore = session.OverallScore,
+                    TotalQuestions = session.TotalQuestions,
+                    AnsweredQuestions = session.AnsweredQuestions,
+                    CheatingDetected = session.CheatingDetected,
+                    Duration = session.EndedAt.HasValue && session.StartedAt.HasValue
+                        ? (session.EndedAt.Value - session.StartedAt.Value).TotalMinutes
+                        : 0
+                });
+            }
 
             // Update application status
             session.Application.Status = ApplicationStatus.InterviewCompleted;
@@ -469,7 +593,10 @@ public class InterviewService : IInterviewService
         }
     }
 
-    public async Task<ApiResponse<InterviewReportDto>> GetInterviewReportAsync(long sessionId)
+    public async Task<ApiResponse<InterviewReportDto>> GetInterviewReportAsync(
+        long sessionId,
+        long? recruiterId = null,
+        long? candidateId = null)
     {
         try
         {
@@ -484,6 +611,21 @@ public class InterviewService : IInterviewService
             if (session == null)
             {
                 return ApiResponse<InterviewReportDto>.FailureResponse("Interview session not found");
+            }
+
+            if (candidateId.HasValue && session.Application.CandidateId != candidateId.Value)
+            {
+                return ApiResponse<InterviewReportDto>.FailureResponse("You don't have permission to view this interview report");
+            }
+
+            if (recruiterId.HasValue && session.Application.Job.RecruiterId != recruiterId.Value)
+            {
+                return ApiResponse<InterviewReportDto>.FailureResponse("You don't have permission to view this interview report");
+            }
+
+            if (!candidateId.HasValue && !recruiterId.HasValue)
+            {
+                return ApiResponse<InterviewReportDto>.FailureResponse("Report access context is missing");
             }
 
             var cheatingByType = session.CheatingEvents
@@ -524,6 +666,62 @@ public class InterviewService : IInterviewService
                     ? "Recommended for next round"
                     : "Needs further evaluation"
             };
+
+            if (session.IntegritySessionId.HasValue)
+            {
+                var unifiedResult = await _aiBackend.GetUnifiedSessionReportAsync(session.IntegritySessionId.Value);
+                if (unifiedResult.Success && unifiedResult.Data != null)
+                {
+                    var unified = unifiedResult.Data;
+
+                    var mergedBreakdown = MergeBreakdowns(unified.AlertBreakdown, unified.YoloAlertBreakdown);
+                    report.CheatingReport = new CheatingReportDto
+                    {
+                        CheatingDetected = IsCheatingDetected(unified),
+                        TotalEvents = unified.TotalAlerts + unified.TotalYoloAlerts,
+                        EventsByType = mergedBreakdown,
+                        TotalTabSwitches = totalTabSwitches,
+                        TotalFocusLosses = totalFocusLosses
+                    };
+
+                    if (unified.DurationSeconds.HasValue)
+                    {
+                        report.DurationMinutes = (int)Math.Round(unified.DurationSeconds.Value / 60f);
+                    }
+
+                    if (unified.InterviewScore.HasValue)
+                    {
+                        report.OverallScore = unified.InterviewScore.Value > 10f
+                            ? unified.InterviewScore.Value / 10f
+                            : unified.InterviewScore.Value;
+                    }
+
+                    var summaryFeedback = ExtractSummaryFeedback(unified.InterviewSummaryJson);
+                    if (!string.IsNullOrWhiteSpace(summaryFeedback))
+                    {
+                        report.AiFeedback = summaryFeedback;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(unified.CombinedVerdict))
+                    {
+                        report.Recommendation = string.IsNullOrWhiteSpace(unified.CombinedReason)
+                            ? unified.CombinedVerdict
+                            : $"{unified.CombinedVerdict}: {unified.CombinedReason}";
+                    }
+                    else if (!string.IsNullOrWhiteSpace(unified.Recommendation))
+                    {
+                        report.Recommendation = unified.Recommendation;
+                    }
+                }
+                else if (!unifiedResult.Success)
+                {
+                    _logger.LogWarning(
+                        "Failed to fetch unified report for session {SessionId} / integrity session {IntegritySessionId}: {Message}",
+                        sessionId,
+                        session.IntegritySessionId.Value,
+                        unifiedResult.Message);
+                }
+            }
 
             return ApiResponse<InterviewReportDto>.SuccessResponse(report);
         }
@@ -650,6 +848,8 @@ public class InterviewService : IInterviewService
                     InterviewTitle = s.InterviewTitle,
                     ScheduledAt = s.ScheduledAt,
                     Status = s.Status ?? "Unknown",
+                    IntegritySessionId = s.IntegritySessionId,
+                    InterviewBackendSessionId = s.InterviewBackendSessionId,
                     OverallScore = s.OverallScore,
                     CheatingDetected = s.CheatingDetected,
                     CandidateName = s.Application.Candidate.FullName ?? "Unknown",
@@ -698,6 +898,8 @@ public class InterviewService : IInterviewService
                     InterviewTitle = s.InterviewTitle,
                     ScheduledAt = s.ScheduledAt,
                     Status = s.Status ?? "Unknown",
+                    IntegritySessionId = s.IntegritySessionId,
+                    InterviewBackendSessionId = s.InterviewBackendSessionId,
                     OverallScore = s.OverallScore,
                     CheatingDetected = s.CheatingDetected,
                     CandidateName = s.Application.Candidate.FullName ?? "Unknown",
@@ -754,6 +956,186 @@ public class InterviewService : IInterviewService
 
     #region Helper Methods
 
+    private static string BuildCandidateCvText(Application application)
+    {
+        if (!string.IsNullOrWhiteSpace(application.Resume?.ResumeText))
+        {
+            return application.Resume.ResumeText;
+        }
+
+        if (!string.IsNullOrWhiteSpace(application.Resume?.ParsingResult?.ParsedJson))
+        {
+            return application.Resume.ParsingResult.ParsedJson;
+        }
+
+        var candidate = application.Candidate;
+        var builder = new StringBuilder();
+
+        if (!string.IsNullOrWhiteSpace(candidate.FullName))
+        {
+            builder.AppendLine($"Name: {candidate.FullName}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidate.CurrentTitle))
+        {
+            builder.AppendLine($"Current title: {candidate.CurrentTitle}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidate.Summary))
+        {
+            builder.AppendLine($"Summary: {candidate.Summary}");
+        }
+
+        var skills = candidate.Skills
+            .Select(s => s.SkillName)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (skills.Any())
+        {
+            builder.AppendLine($"Skills: {string.Join(", ", skills)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidate.Location))
+        {
+            builder.AppendLine($"Location: {candidate.Location}");
+        }
+
+        return builder.Length > 0 ? builder.ToString() : "Candidate profile available in JobLens.";
+    }
+
+    private static string BuildJobDescription(Job job)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"Title: {job.Title}");
+
+        if (!string.IsNullOrWhiteSpace(job.Description))
+        {
+            builder.AppendLine($"Description: {job.Description}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(job.Requirements))
+        {
+            builder.AppendLine($"Requirements: {job.Requirements}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(job.Responsibilities))
+        {
+            builder.AppendLine($"Responsibilities: {job.Responsibilities}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(job.ExperienceLevel))
+        {
+            builder.AppendLine($"Experience level: {job.ExperienceLevel}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(job.Location))
+        {
+            builder.AppendLine($"Location: {job.Location}");
+        }
+
+        return builder.ToString();
+    }
+
+    private static string BuildEvaluationCriteria(InterviewAgentType agentType)
+    {
+        return agentType switch
+        {
+            InterviewAgentType.Technical => "Assess technical depth, problem-solving, architecture reasoning, and code communication.",
+            InterviewAgentType.Behavioral => "Assess communication, collaboration, ownership, adaptability, and conflict management.",
+            _ => "Assess technical fit, behavioral strengths, communication clarity, and role alignment."
+        };
+    }
+
+    private static bool IsCheatingDetected(UnifiedSessionReportDto report)
+    {
+        if (report.Recommendation != null
+            && (report.Recommendation.Equals("REJECT", StringComparison.OrdinalIgnoreCase)
+                || report.Recommendation.Equals("ABANDONED", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return (report.FinalScore ?? 0f) >= 70f || report.TotalAlerts > 0 || report.TotalYoloAlerts > 0;
+    }
+
+    private static Dictionary<string, int> MergeBreakdowns(
+        Dictionary<string, int>? mediapipeBreakdown,
+        Dictionary<string, int>? yoloBreakdown)
+    {
+        var merged = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pair in mediapipeBreakdown ?? new Dictionary<string, int>())
+        {
+            merged[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in yoloBreakdown ?? new Dictionary<string, int>())
+        {
+            if (merged.ContainsKey(pair.Key))
+            {
+                merged[pair.Key] += pair.Value;
+            }
+            else
+            {
+                merged[pair.Key] = pair.Value;
+            }
+        }
+
+        return merged;
+    }
+
+    private static string? ExtractSummaryFeedback(string? summaryJson)
+    {
+        if (string.IsNullOrWhiteSpace(summaryJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(summaryJson);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.String)
+            {
+                return root.GetString();
+            }
+
+            if (root.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var key in new[] { "final_feedback", "feedback", "summary", "overall_feedback", "recommendation" })
+                {
+                    if (root.TryGetProperty(key, out var node))
+                    {
+                        if (node.ValueKind == JsonValueKind.String)
+                        {
+                            var text = node.GetString();
+                            if (!string.IsNullOrWhiteSpace(text))
+                            {
+                                return text;
+                            }
+                        }
+                        else
+                        {
+                            return node.ToString();
+                        }
+                    }
+                }
+
+                return root.ToString();
+            }
+        }
+        catch
+        {
+            // Keep original JSON content if parsing fails.
+            return summaryJson;
+        }
+
+        return summaryJson;
+    }
+
     private static InterviewSessionDto MapToSessionDto(InterviewSession session)
     {
         return new InterviewSessionDto
@@ -770,6 +1152,8 @@ public class InterviewService : IInterviewService
             TotalQuestions = session.TotalQuestions,
             AnsweredQuestions = session.AnsweredQuestions,
             Status = session.Status ?? "Unknown",
+            IntegritySessionId = session.IntegritySessionId,
+            InterviewBackendSessionId = session.InterviewBackendSessionId,
             FinalReport = session.FinalReport,
             AiFeedback = session.AiFeedback,
             CandidateName = session.Application.Candidate.FullName ?? "Unknown",

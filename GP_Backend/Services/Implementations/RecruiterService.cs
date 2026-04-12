@@ -5,6 +5,7 @@ using GP_Backend.Models.DTOs.Recruiter;
 using GP_Backend.Models.Entities;
 using GP_Backend.Models.Enums;
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
 
 namespace GP_Backend.Services.Implementations;
 

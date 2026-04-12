@@ -101,3 +101,37 @@ public class CandidateSearchParams : Models.DTOs.Common.PaginationParams
     public int? MinExperience { get; set; }
     public int? MaxExperience { get; set; }
 }
+
+public class CandidateDashboardDto
+{
+    public int TotalApplications { get; set; }
+    public int ActiveApplications { get; set; }
+    public int InterviewsScheduled { get; set; }
+    public int InterviewsCompleted { get; set; }
+    public int HighestAtsScore { get; set; }
+    public List<CandidateRecentApplicationDto> RecentApplications { get; set; } = new();
+    public List<CandidateUpcomingInterviewDto> UpcomingInterviews { get; set; } = new();
+}
+
+public class CandidateRecentApplicationDto
+{
+    public long ApplicationId { get; set; }
+    public long JobId { get; set; }
+    public string JobTitle { get; set; } = string.Empty;
+    public string? CompanyName { get; set; }
+    public DateTime AppliedAt { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public int? AtsScore { get; set; }
+}
+
+public class CandidateUpcomingInterviewDto
+{
+    public long SessionId { get; set; }
+    public long ApplicationId { get; set; }
+    public string JobTitle { get; set; } = string.Empty;
+    public string? InterviewTitle { get; set; }
+    public DateTime? ScheduledAt { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public bool CheatingDetected { get; set; }
+    public float? OverallScore { get; set; }
+}

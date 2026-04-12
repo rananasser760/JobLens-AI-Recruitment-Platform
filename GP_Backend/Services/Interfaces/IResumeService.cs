@@ -1,5 +1,6 @@
 using GP_Backend.Models.DTOs.Common;
 using GP_Backend.Models.DTOs.Resume;
+using System.Text.Json;
 
 namespace GP_Backend.Services.Interfaces;
 
@@ -16,6 +17,12 @@ public interface IResumeService
     
     // ATS Score (calls FastAPI)
     Task<ApiResponse<AtsScoreDto>> GetAtsScoreAsync(long resumeId, long? jobId = null);
+
+    // Text-based AI analysis (without uploaded resume entity)
+    Task<ApiResponse<ParsedCvResponseDto>> ParseResumeTextAsync(string resumeText);
+    Task<ApiResponse<AtsScoreDto>> GetAtsScoreFromTextAsync(string resumeText, string? jobDescription = null);
+    Task<ApiResponse<JsonElement>> GetResumeImprovementsAsync(string resumeText);
+    Task<ApiResponse<JsonElement>> GetFullResumeAnalysisAsync(string resumeText, bool includeImprovements = true, int jobMatchLimit = 5);
     
     // Download
     Task<(byte[] content, string contentType, string fileName)?> DownloadResumeAsync(long resumeId);

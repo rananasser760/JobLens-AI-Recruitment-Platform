@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace GP_Backend.Models.DTOs.Common;
 
 public class ApiResponse<T>
@@ -19,10 +21,18 @@ public class ApiResponse<T>
 
     public static ApiResponse<T> FailureResponse(string message, List<string>? errors = null)
     {
+        T? data = default;
+        if (typeof(T) == typeof(JsonElement))
+        {
+            using var doc = JsonDocument.Parse("{}");
+            data = (T)(object)doc.RootElement.Clone();
+        }
+
         return new ApiResponse<T>
         {
             Success = false,
             Message = message,
+            Data = data,
             Errors = errors
         };
     }

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using GP_Backend.Data;
@@ -5,6 +6,7 @@ using GP_Backend.Models.DTOs.Common;
 using GP_Backend.Models.DTOs.Resume;
 using GP_Backend.Models.Entities;
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
 
 namespace GP_Backend.Services.Implementations;
 
@@ -12,14 +14,14 @@ public class ResumeService : IResumeService
 {
     private readonly AppDbContext _context;
     private readonly IFileStorageService _fileStorage;
-    private readonly IAIBackendService _aiBackend;
+    private readonly IAiService _aiBackend;
     private readonly IAuditService _auditService;
     private readonly ILogger<ResumeService> _logger;
 
     public ResumeService(
         AppDbContext context,
         IFileStorageService fileStorage,
-        IAIBackendService aiBackend,
+        IAiService aiBackend,
         IAuditService auditService,
         ILogger<ResumeService> logger)
     {
@@ -256,31 +258,20 @@ public class ResumeService : IResumeService
         if (resume == null) return null;
 
         // Get file stream
-        var fileStream = await _fileStorage.GetFileAsync(resume.FilePath);
+        using var fileStream = await _fileStorage.GetFileAsync(resume.FilePath);
         if (fileStream == null) return null;
 
-        // TODO: Call FastAPI to parse CV
-        // var parseResult = await _aiBackend.ParseCvAsync(fileStream, resume.FileName);
-
-        // For now, create a placeholder parsing result
-        // This would be replaced with actual FastAPI call
-        var parsedResponse = new ParsedCvResponseDto
+        var parseResult = await _aiBackend.ParseCvAsync(fileStream, resume.FileName);
+        if (!parseResult.Success || parseResult.Data == null)
         {
-            FullName = "Parsed Name",
-            Email = "parsed@email.com",
-            Phone = "+1234567890",
-            Summary = "Professional summary extracted from CV",
-            Skills = new List<string> { "C#", ".NET", "SQL", "Azure" },
-            Experience = new List<ParsedExperienceDto>
-            {
-                new() { JobTitle = "Software Engineer", Company = "Tech Corp", StartDate = "2020", EndDate = "Present" }
-            },
-            Education = new List<ParsedEducationDto>
-            {
-                new() { Degree = "BSc Computer Science", Institution = "University", GraduationYear = "2020" }
-            },
-            Confidence = 0.85f
-        };
+            _logger.LogWarning(
+                "AI parse failed for resume {ResumeId}: {Message}",
+                resumeId,
+                parseResult.Message);
+            return null;
+        }
+
+        var parsedResponse = parseResult.Data;
 
         // Delete existing parsing result if any
         if (resume.ParsingResult != null)
@@ -307,12 +298,27 @@ public class ResumeService : IResumeService
         _context.ResumeParsingResults.Add(parsingResult);
 
         resume.IsParsed = true;
-        resume.ResumeText = "Extracted text from resume"; // TODO: Get from FastAPI
+        resume.ResumeText = BuildResumeText(parsedResponse);
 
         await _context.SaveChangesAsync();
 
-        // Update candidate embedding
-        // TODO: Call AI backend to update candidate embedding
+        var candidateEmbeddingPayload = JsonSerializer.Serialize(new
+        {
+            full_name = parsedResponse.FullName ?? resume.Candidate?.FullName,
+            summary = parsedResponse.Summary,
+            skills = parsedResponse.Skills ?? new List<string>(),
+            location = parsedResponse.Location ?? resume.Candidate?.Location,
+            resume_text = resume.ResumeText
+        });
+
+        var embeddingResult = await _aiBackend.UpdateCandidateEmbeddingAsync(resume.CandidateId, candidateEmbeddingPayload);
+        if (!embeddingResult.Success)
+        {
+            _logger.LogWarning(
+                "Candidate embedding update failed after resume parse for candidate {CandidateId}: {Message}",
+                resume.CandidateId,
+                embeddingResult.Message);
+        }
 
         return MapToParsingResultDto(parsingResult);
     }
@@ -321,7 +327,10 @@ public class ResumeService : IResumeService
     {
         try
         {
-            var resume = await _context.Resumes.FindAsync(resumeId);
+            var resume = await _context.Resumes
+                .Include(r => r.ParsingResult)
+                .FirstOrDefaultAsync(r => r.Id == resumeId);
+
             if (resume == null)
             {
                 return ApiResponse<AtsScoreDto>.FailureResponse("Resume not found");
@@ -334,20 +343,45 @@ public class ResumeService : IResumeService
                 jobDescription = job?.Description;
             }
 
-            // TODO: Call FastAPI to get ATS score
-            // var atsResult = await _aiBackend.GetAtsScoreAsync(resume.ResumeText ?? "", jobDescription);
-
-            // For now, calculate a simple score
-            var score = new Random().Next(60, 95);
-            var recommendations = new List<string>
+            var resumeText = resume.ResumeText;
+            if (string.IsNullOrWhiteSpace(resumeText)
+                && resume.ParsingResult != null
+                && !string.IsNullOrWhiteSpace(resume.ParsingResult.ParsedJson))
             {
-                "Add more quantifiable achievements",
-                "Include relevant keywords from job description",
-                "Improve formatting for ATS compatibility"
-            };
+                try
+                {
+                    var parsedCv = JsonSerializer.Deserialize<ParsedCvResponseDto>(resume.ParsingResult.ParsedJson);
+                    if (parsedCv != null)
+                    {
+                        resumeText = BuildResumeText(parsedCv);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to rebuild resume text from parsed JSON for resume {ResumeId}", resumeId);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(resumeText))
+            {
+                return ApiResponse<AtsScoreDto>.FailureResponse("Resume text is not available. Parse the resume first.");
+            }
+
+            var atsResult = await _aiBackend.GetAtsScoreAsync(resumeText, jobDescription);
+            if (!atsResult.Success || atsResult.Data == null)
+            {
+                var message = string.IsNullOrWhiteSpace(atsResult.Message)
+                    ? "Failed to get ATS score from AI backend"
+                    : atsResult.Message;
+                return ApiResponse<AtsScoreDto>.FailureResponse(message);
+            }
+
+            var atsData = atsResult.Data;
+            var score = atsData.OverallScore;
+            var recommendations = atsData.Recommendations ?? new List<string>();
 
             resume.AtsScore = score;
-            resume.AtsFriendly = score >= 70;
+            resume.AtsFriendly = atsData.IsFriendly;
             resume.AtsRecommendations = JsonSerializer.Serialize(recommendations);
             await _context.SaveChangesAsync();
 
@@ -355,15 +389,9 @@ public class ResumeService : IResumeService
             {
                 ResumeId = resumeId,
                 Score = score,
-                IsFriendly = score >= 70,
+                IsFriendly = atsData.IsFriendly,
                 Recommendations = recommendations,
-                CategoryScores = new Dictionary<string, int>
-                {
-                    { "Format", new Random().Next(60, 100) },
-                    { "Keywords", new Random().Next(60, 100) },
-                    { "Experience", new Random().Next(60, 100) },
-                    { "Education", new Random().Next(60, 100) }
-                }
+                CategoryScores = atsData.CategoryScores
             });
         }
         catch (Exception ex)
@@ -371,6 +399,62 @@ public class ResumeService : IResumeService
             _logger.LogError(ex, "Error getting ATS score");
             return ApiResponse<AtsScoreDto>.FailureResponse("An error occurred");
         }
+    }
+
+    public async Task<ApiResponse<ParsedCvResponseDto>> ParseResumeTextAsync(string resumeText)
+    {
+        if (string.IsNullOrWhiteSpace(resumeText))
+        {
+            return ApiResponse<ParsedCvResponseDto>.FailureResponse("Resume text is required");
+        }
+
+        return await _aiBackend.ParseCvFromTextAsync(resumeText);
+    }
+
+    public async Task<ApiResponse<AtsScoreDto>> GetAtsScoreFromTextAsync(string resumeText, string? jobDescription = null)
+    {
+        if (string.IsNullOrWhiteSpace(resumeText))
+        {
+            return ApiResponse<AtsScoreDto>.FailureResponse("Resume text is required");
+        }
+
+        var atsResult = await _aiBackend.GetAtsScoreAsync(resumeText, jobDescription);
+        if (!atsResult.Success || atsResult.Data == null)
+        {
+            var message = string.IsNullOrWhiteSpace(atsResult.Message)
+                ? "Failed to get ATS score from AI backend"
+                : atsResult.Message;
+            return ApiResponse<AtsScoreDto>.FailureResponse(message);
+        }
+
+        return ApiResponse<AtsScoreDto>.SuccessResponse(new AtsScoreDto
+        {
+            ResumeId = 0,
+            Score = atsResult.Data.OverallScore,
+            IsFriendly = atsResult.Data.IsFriendly,
+            Recommendations = atsResult.Data.Recommendations,
+            CategoryScores = atsResult.Data.CategoryScores
+        });
+    }
+
+    public async Task<ApiResponse<JsonElement>> GetResumeImprovementsAsync(string resumeText)
+    {
+        if (string.IsNullOrWhiteSpace(resumeText))
+        {
+            return ApiResponse<JsonElement>.FailureResponse("Resume text is required");
+        }
+
+        return await _aiBackend.GetCvImprovementsAsync(resumeText);
+    }
+
+    public async Task<ApiResponse<JsonElement>> GetFullResumeAnalysisAsync(string resumeText, bool includeImprovements = true, int jobMatchLimit = 5)
+    {
+        if (string.IsNullOrWhiteSpace(resumeText))
+        {
+            return ApiResponse<JsonElement>.FailureResponse("Resume text is required");
+        }
+
+        return await _aiBackend.GetFullCvAnalysisAsync(resumeText, includeImprovements, jobMatchLimit);
     }
 
     public async Task<(byte[] content, string contentType, string fileName)?> DownloadResumeAsync(long resumeId)
@@ -398,6 +482,82 @@ public class ResumeService : IResumeService
     }
 
     #region Helper Methods
+
+    private static string BuildResumeText(ParsedCvResponseDto parsed)
+    {
+        var builder = new StringBuilder();
+
+        if (!string.IsNullOrWhiteSpace(parsed.FullName))
+        {
+            builder.AppendLine(parsed.FullName);
+        }
+
+        if (!string.IsNullOrWhiteSpace(parsed.Email))
+        {
+            builder.AppendLine($"Email: {parsed.Email}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(parsed.Phone))
+        {
+            builder.AppendLine($"Phone: {parsed.Phone}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(parsed.Location))
+        {
+            builder.AppendLine($"Location: {parsed.Location}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(parsed.Summary))
+        {
+            builder.AppendLine();
+            builder.AppendLine(parsed.Summary);
+        }
+
+        if (parsed.Skills != null && parsed.Skills.Any())
+        {
+            builder.AppendLine();
+            builder.AppendLine("Skills:");
+            builder.AppendLine(string.Join(", ", parsed.Skills));
+        }
+
+        if (parsed.Experience != null && parsed.Experience.Any())
+        {
+            builder.AppendLine();
+            builder.AppendLine("Experience:");
+            foreach (var experience in parsed.Experience)
+            {
+                var title = experience.JobTitle ?? "";
+                var company = experience.Company ?? "";
+                var period = $"{experience.StartDate} - {experience.EndDate}".Trim();
+                builder.AppendLine($"- {title} {(!string.IsNullOrWhiteSpace(company) ? $"at {company}" : "")}".Trim());
+                if (!string.IsNullOrWhiteSpace(period) && period != "-")
+                {
+                    builder.AppendLine($"  {period}");
+                }
+                if (!string.IsNullOrWhiteSpace(experience.Description))
+                {
+                    builder.AppendLine($"  {experience.Description}");
+                }
+            }
+        }
+
+        if (parsed.Education != null && parsed.Education.Any())
+        {
+            builder.AppendLine();
+            builder.AppendLine("Education:");
+            foreach (var education in parsed.Education)
+            {
+                builder.AppendLine(
+                    $"- {education.Degree} {(!string.IsNullOrWhiteSpace(education.Institution) ? $"- {education.Institution}" : "")}".Trim());
+                if (!string.IsNullOrWhiteSpace(education.GraduationYear))
+                {
+                    builder.AppendLine($"  {education.GraduationYear}");
+                }
+            }
+        }
+
+        return builder.ToString().Trim();
+    }
 
     private static ResumeDto MapToResumeDto(Resume resume)
     {

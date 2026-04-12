@@ -23,7 +23,10 @@ public interface IInterviewService
     Task<ApiResponse<List<CheatingEventDto>>> GetCheatingEventsAsync(long sessionId);
     
     // Report & Ranking
-    Task<ApiResponse<InterviewReportDto>> GetInterviewReportAsync(long sessionId);
+    Task<ApiResponse<InterviewReportDto>> GetInterviewReportAsync(
+        long sessionId,
+        long? recruiterId = null,
+        long? candidateId = null);
     Task<ApiResponse<List<InterviewRankingDto>>> GetInterviewRankingsAsync(long jobId, long recruiterId);
     
     // List interviews

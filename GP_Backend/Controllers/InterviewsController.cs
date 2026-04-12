@@ -150,12 +150,36 @@ public class InterviewsController : ControllerBase
     }
 
     [HttpGet("{sessionId}/report")]
-    [Authorize(Roles = "Recruiter")]
+    [Authorize(Roles = "Recruiter,Candidate")]
     public async Task<IActionResult> GetInterviewReport(long sessionId)
     {
-        var result = await _interviewService.GetInterviewReportAsync(sessionId);
+        long? recruiterId = null;
+        long? candidateId = null;
+
+        if (User.IsInRole("Recruiter"))
+        {
+            recruiterId = await GetRecruiterIdAsync();
+            if (recruiterId == null) return Unauthorized();
+        }
+        else if (User.IsInRole("Candidate"))
+        {
+            candidateId = await GetCandidateIdAsync();
+            if (candidateId == null) return Unauthorized();
+        }
+        else
+        {
+            return Forbid();
+        }
+
+        var result = await _interviewService.GetInterviewReportAsync(sessionId, recruiterId, candidateId);
         if (!result.Success)
         {
+            if (!string.IsNullOrWhiteSpace(result.Message) &&
+                result.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+            {
+                return Forbid();
+            }
+
             return NotFound(result);
         }
         return Ok(result);

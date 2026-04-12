@@ -12,6 +12,9 @@ using Microsoft.OpenApi;
 using GP_Backend.Data;
 using GP_Backend.Services.Implementations;
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
+using Polly;
+using Polly.Extensions.Http;
 
 namespace GP_Backend;
 
@@ -71,12 +74,20 @@ public class Program
         builder.Services.AddScoped<IFileStorageService, FileStorageService>();
         builder.Services.AddScoped<IAuditService, AuditService>();
 
+        var timeoutStr = builder.Configuration["AIBackend:Timeout"];
+        int timeoutSeconds = int.TryParse(timeoutStr, out var parsedTimeout) ? parsedTimeout : 30;
+
         // Register HttpClient for AI Backend Service
-        builder.Services.AddHttpClient<IAIBackendService, AIBackendService>(client =>
+        builder.Services.AddHttpClient<IAiService, AiService>(client =>
         {
             client.BaseAddress = new Uri(builder.Configuration["AIBackend:BaseUrl"] ?? "http://localhost:8000");
-            client.Timeout = TimeSpan.FromMinutes(5);
-        });
+            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+        })
+        .AddPolicyHandler(HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.NotFound)
+            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))))
+        .AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(timeoutSeconds)));
 
         // Configure CORS
         builder.Services.AddCors(options =>
@@ -84,7 +95,7 @@ public class Program
             options.AddPolicy("AllowFrontend", policy =>
             {
                 policy.WithOrigins(
-                        builder.Configuration["FrontendUrl"] ?? "http://localhost:3000",
+                        builder.Configuration["FrontendUrl"] ?? "http://localhost:4200",
                         "http://localhost:3000",
                         "http://localhost:5173"
                     )
@@ -181,13 +192,21 @@ internal sealed class BearerSecuritySchemeTransformer(IAuthenticationSchemeProvi
             document.Components.SecuritySchemes = securitySchemes;
 
             // Apply it as a requirement for all operations
-            foreach (var operation in document.Paths.Values.SelectMany(path => path.Operations))
+            foreach (var path in document.Paths.Values)
             {
-                operation.Value.Security ??= [];
-                operation.Value.Security.Add(new OpenApiSecurityRequirement
+                if (path.Operations == null)
                 {
-                    [new OpenApiSecuritySchemeReference("Bearer", document)] = []
-                });
+                    continue;
+                }
+
+                foreach (var operation in path.Operations)
+                {
+                    operation.Value.Security ??= [];
+                    operation.Value.Security.Add(new OpenApiSecurityRequirement
+                    {
+                        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
+                    });
+                }
             }
         }
     }

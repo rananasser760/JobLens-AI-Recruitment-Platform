@@ -155,6 +155,9 @@ public class AppDbContext : DbContext
         // Interview Session
         modelBuilder.Entity<InterviewSession>(entity =>
         {
+                  entity.HasIndex(i => i.IntegritySessionId);
+                  entity.HasIndex(i => i.InterviewBackendSessionId);
+
             entity.HasOne(i => i.Application)
                   .WithMany(a => a.InterviewSessions)
                   .HasForeignKey(i => i.ApplicationId)

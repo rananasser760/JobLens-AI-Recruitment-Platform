@@ -5,6 +5,7 @@ using GP_Backend.Models.DTOs.Common;
 using GP_Backend.Models.Entities;
 using GP_Backend.Models.Enums;
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
 
 namespace GP_Backend.Services.Implementations;
 
@@ -189,6 +190,96 @@ public class ApplicationService : IApplicationService
         {
             _logger.LogError(ex, "Error updating application status");
             return ApiResponse<ApplicationDto>.FailureResponse("An error occurred");
+        }
+    }
+
+    public async Task<ApiResponse<BulkUpdateApplicationStatusResultDto>> BulkUpdateStatusAsync(
+        long recruiterId,
+        BulkUpdateApplicationStatusDto dto)
+    {
+        try
+        {
+            if (dto.ApplicationIds == null || dto.ApplicationIds.Count == 0)
+            {
+                return ApiResponse<BulkUpdateApplicationStatusResultDto>.FailureResponse("No application IDs were provided");
+            }
+
+            var requestedIds = dto.ApplicationIds
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+
+            if (requestedIds.Count == 0)
+            {
+                return ApiResponse<BulkUpdateApplicationStatusResultDto>.FailureResponse("No valid application IDs were provided");
+            }
+
+            var applications = await _context.Applications
+                .Include(a => a.Job)
+                .Where(a => requestedIds.Contains(a.Id))
+                .ToListAsync();
+
+            var foundIds = applications.Select(a => a.Id).ToHashSet();
+            var notFoundIds = requestedIds.Where(id => !foundIds.Contains(id)).ToList();
+
+            var unauthorizedIds = applications
+                .Where(a => a.Job == null || a.Job.RecruiterId != recruiterId)
+                .Select(a => a.Id)
+                .ToList();
+
+            var updatable = applications
+                .Where(a => a.Job != null && a.Job.RecruiterId == recruiterId)
+                .ToList();
+
+            var now = DateTime.UtcNow;
+            foreach (var application in updatable)
+            {
+                application.Status = dto.Status;
+                application.RecruiterNotes = dto.Notes ?? application.RecruiterNotes;
+                application.ReviewedAt = now;
+                application.ReviewedBy = recruiterId;
+            }
+
+            if (updatable.Count > 0)
+            {
+                await _context.SaveChangesAsync();
+            }
+
+            var recruiter = await _context.Recruiters
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == recruiterId);
+
+            foreach (var application in updatable)
+            {
+                await _emailService.SendApplicationStatusUpdateEmailAsync(application.Id);
+                await _auditService.LogAsync(
+                    recruiter?.UserId,
+                    "BulkUpdateApplicationStatus",
+                    "Application",
+                    application.Id,
+                    null,
+                    dto.Status.ToString());
+            }
+
+            var result = new BulkUpdateApplicationStatusResultDto
+            {
+                RequestedCount = requestedIds.Count,
+                UpdatedCount = updatable.Count,
+                SkippedCount = requestedIds.Count - updatable.Count,
+                NotFoundIds = notFoundIds,
+                UnauthorizedIds = unauthorizedIds
+            };
+
+            var message = updatable.Count == 0
+                ? "No applications were updated"
+                : $"Updated {updatable.Count} application(s) successfully";
+
+            return ApiResponse<BulkUpdateApplicationStatusResultDto>.SuccessResponse(result, message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error bulk-updating application statuses");
+            return ApiResponse<BulkUpdateApplicationStatusResultDto>.FailureResponse("An error occurred");
         }
     }
 

@@ -64,6 +64,25 @@ public class AtsScoreDto
     public Dictionary<string, int> CategoryScores { get; set; } = new();
 }
 
+public class ResumeTextRequestDto
+{
+    [Required]
+    public string ResumeText { get; set; } = string.Empty;
+}
+
+public class ResumeTextAtsRequestDto : ResumeTextRequestDto
+{
+    public string? JobDescription { get; set; }
+}
+
+public class ResumeFullAnalysisRequestDto : ResumeTextRequestDto
+{
+    public bool IncludeImprovements { get; set; } = true;
+
+    [Range(1, 50)]
+    public int JobMatchLimit { get; set; } = 5;
+}
+
 // Response from FastAPI for CV parsing
 public class ParsedCvResponseDto
 {

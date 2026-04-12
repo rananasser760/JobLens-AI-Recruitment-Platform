@@ -6,6 +6,7 @@ namespace GP_Backend.Services.Interfaces;
 public interface ICandidateService
 {
     Task<ApiResponse<CandidateProfileDto>> GetProfileAsync(long userId);
+    Task<ApiResponse<CandidateDashboardDto>> GetDashboardAsync(long userId);
     Task<ApiResponse<CandidateProfileDto>> GetProfileByIdAsync(long candidateId);
     Task<ApiResponse<CandidateProfileDto>> UpdateProfileAsync(long userId, UpdateCandidateProfileDto dto);
     Task<ApiResponse> UpdateProfileImageAsync(long userId, Stream imageStream, string fileName);

@@ -119,6 +119,82 @@ public class ResumesController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("parse-text")]
+    [Authorize(Roles = "Candidate,Recruiter,Admin")]
+    public async Task<IActionResult> ParseResumeText([FromBody] ResumeTextRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ResumeText))
+        {
+            return BadRequest("Resume text is required");
+        }
+
+        var result = await _resumeService.ParseResumeTextAsync(request.ResumeText);
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("ats-score-text")]
+    [Authorize(Roles = "Candidate,Recruiter,Admin")]
+    public async Task<IActionResult> GetAtsScoreFromText([FromBody] ResumeTextAtsRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ResumeText))
+        {
+            return BadRequest("Resume text is required");
+        }
+
+        var result = await _resumeService.GetAtsScoreFromTextAsync(request.ResumeText, request.JobDescription);
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("improvements")]
+    [Authorize(Roles = "Candidate,Recruiter,Admin")]
+    public async Task<IActionResult> GetResumeImprovements([FromBody] ResumeTextRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ResumeText))
+        {
+            return BadRequest("Resume text is required");
+        }
+
+        var result = await _resumeService.GetResumeImprovementsAsync(request.ResumeText);
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("full-analysis")]
+    [Authorize(Roles = "Candidate,Recruiter,Admin")]
+    public async Task<IActionResult> GetFullResumeAnalysis([FromBody] ResumeFullAnalysisRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ResumeText))
+        {
+            return BadRequest("Resume text is required");
+        }
+
+        var result = await _resumeService.GetFullResumeAnalysisAsync(
+            request.ResumeText,
+            request.IncludeImprovements,
+            request.JobMatchLimit);
+
+        if (!result.Success)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("{resumeId}/download")]
     public async Task<IActionResult> DownloadResume(long resumeId)
     {

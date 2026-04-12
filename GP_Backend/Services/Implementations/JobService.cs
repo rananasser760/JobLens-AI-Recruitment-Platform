@@ -1,23 +1,25 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using GP_Backend.Data;
 using GP_Backend.Models.DTOs.Common;
 using GP_Backend.Models.DTOs.Job;
 using GP_Backend.Models.Entities;
 using GP_Backend.Models.Enums;
 using GP_Backend.Services.Interfaces;
+using GP_Backend.Services.AI;
 
 namespace GP_Backend.Services.Implementations;
 
 public class JobService : IJobService
 {
     private readonly AppDbContext _context;
-    private readonly IAIBackendService _aiBackend;
+    private readonly IAiService _aiBackend;
     private readonly IAuditService _auditService;
     private readonly ILogger<JobService> _logger;
 
     public JobService(
         AppDbContext context,
-        IAIBackendService aiBackend,
+        IAiService aiBackend,
         IAuditService auditService,
         ILogger<JobService> logger)
     {
@@ -207,9 +209,24 @@ public class JobService : IJobService
             }
             await _context.SaveChangesAsync();
 
-            // Create job embedding in AI backend
-            // TODO: Call AI backend to create job embedding
-            // await _aiBackend.CreateJobEmbeddingAsync(job.Id, BuildJobData(job));
+            string? companyName = null;
+            if (job.CompanyId.HasValue)
+            {
+                companyName = await _context.Companies
+                    .Where(c => c.Id == job.CompanyId.Value)
+                    .Select(c => c.Name)
+                    .FirstOrDefaultAsync();
+            }
+
+            var embeddingPayload = BuildJobData(job, dto.RequiredSkills.Select(s => s.SkillName), companyName);
+            var embeddingResult = await _aiBackend.CreateJobEmbeddingAsync(job.Id, embeddingPayload);
+            if (!embeddingResult.Success)
+            {
+                _logger.LogWarning(
+                    "Job embedding creation failed for job {JobId}: {Message}",
+                    job.Id,
+                    embeddingResult.Message);
+            }
 
             await _auditService.LogAsync(recruiter.UserId, "CreateJob", "Job", job.Id);
 
@@ -263,8 +280,15 @@ public class JobService : IJobService
 
             await _context.SaveChangesAsync();
 
-            // Update job embedding in AI backend
-            // TODO: Call AI backend to update job embedding
+            var embeddingPayload = BuildJobData(job, job.RequiredSkills.Select(s => s.SkillName), job.Company?.Name);
+            var embeddingResult = await _aiBackend.UpdateJobEmbeddingAsync(job.Id, embeddingPayload);
+            if (!embeddingResult.Success)
+            {
+                _logger.LogWarning(
+                    "Job embedding update failed for job {JobId}: {Message}",
+                    job.Id,
+                    embeddingResult.Message);
+            }
 
             var recruiter = await _context.Recruiters.FindAsync(recruiterId);
             await _auditService.LogAsync(recruiter?.UserId, "UpdateJob", "Job", job.Id);
@@ -297,8 +321,14 @@ public class JobService : IJobService
             job.IsActive = false;
             await _context.SaveChangesAsync();
 
-            // Delete job embedding from AI backend
-            // TODO: Call AI backend to delete job embedding
+            var embeddingResult = await _aiBackend.DeleteJobEmbeddingAsync(job.Id);
+            if (!embeddingResult.Success)
+            {
+                _logger.LogWarning(
+                    "Job embedding deletion failed for job {JobId}: {Message}",
+                    job.Id,
+                    embeddingResult.Message);
+            }
 
             var recruiter = await _context.Recruiters.FindAsync(recruiterId);
             await _auditService.LogAsync(recruiter?.UserId, "DeleteJob", "Job", job.Id);
@@ -402,9 +432,21 @@ public class JobService : IJobService
     {
         try
         {
-            // TODO: Call AI backend to get job recommendations based on candidate embedding
-            // var recommendations = await _aiBackend.GetJobRecommendationsForCandidateAsync(candidateId, limit);
-            // return recommendations;
+            var aiRecommendations = await _aiBackend.GetJobRecommendationsForCandidateAsync(candidateId, limit);
+            if (aiRecommendations.Success
+                && aiRecommendations.Data != null
+                && aiRecommendations.Data.Any())
+            {
+                return aiRecommendations;
+            }
+
+            if (!aiRecommendations.Success)
+            {
+                _logger.LogWarning(
+                    "AI job recommendations failed for candidate {CandidateId}: {Message}. Falling back to skill matching.",
+                    candidateId,
+                    aiRecommendations.Message);
+            }
 
             // For now, return jobs matching candidate skills
             var candidate = await _context.Candidates
@@ -450,6 +492,16 @@ public class JobService : IJobService
             _logger.LogError(ex, "Error getting job recommendations");
             return ApiResponse<List<JobRecommendationDto>>.FailureResponse("An error occurred");
         }
+    }
+
+    public async Task<ApiResponse<List<JobRecommendationDto>>> MatchJobsFromTextAsync(string resumeText, int limit = 5)
+    {
+        if (string.IsNullOrWhiteSpace(resumeText))
+        {
+            return ApiResponse<List<JobRecommendationDto>>.FailureResponse("Resume text is required");
+        }
+
+        return await _aiBackend.MatchJobsFromTextAsync(resumeText, limit);
     }
 
     public async Task<ApiResponse<int>> ImportScrapedJobsAsync(List<ScrapedJobDto> jobs)
@@ -520,8 +572,15 @@ public class JobService : IJobService
                     await _context.SaveChangesAsync();
                 }
 
-                // Create job embedding in AI backend
-                // TODO: Call AI backend to create job embedding
+                var scrapedEmbeddingPayload = BuildJobData(job, jobDto.Skills, jobDto.CompanyName);
+                var embeddingResult = await _aiBackend.CreateJobEmbeddingAsync(job.Id, scrapedEmbeddingPayload);
+                if (!embeddingResult.Success)
+                {
+                    _logger.LogWarning(
+                        "Job embedding creation failed for imported scraped job {JobId}: {Message}",
+                        job.Id,
+                        embeddingResult.Message);
+                }
 
                 importedCount++;
             }
@@ -532,6 +591,58 @@ public class JobService : IJobService
         {
             _logger.LogError(ex, "Error importing scraped jobs");
             return ApiResponse<int>.FailureResponse("An error occurred during import");
+        }
+    }
+
+    public async Task<ApiResponse<List<ScrapedJobDto>>> GetScrapedJobsFromAiAsync(string? keyword = null, string? location = null, int limit = 50)
+    {
+        try
+        {
+            return await _aiBackend.GetScrapedJobsAsync(keyword, location, limit);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting scraped jobs from AI backend");
+            return ApiResponse<List<ScrapedJobDto>>.FailureResponse("Failed to get scraped jobs from AI backend");
+        }
+    }
+
+    public async Task<ApiResponse<JsonElement>> GetScrapingStatusAsync()
+    {
+        try
+        {
+            return await _aiBackend.GetScrapingStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting scraping status from AI backend");
+            return ApiResponse<JsonElement>.FailureResponse("Failed to get scraping status");
+        }
+    }
+
+    public async Task<ApiResponse<JsonElement>> GetRecruitmentStatusAsync()
+    {
+        try
+        {
+            return await _aiBackend.GetRecruitmentStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting recruitment status from AI backend");
+            return ApiResponse<JsonElement>.FailureResponse("Failed to get recruitment status");
+        }
+    }
+
+    public async Task<ApiResponse> TriggerScrapingAsync(int? maxCategories = null)
+    {
+        try
+        {
+            return await _aiBackend.TriggerScrapingAsync(maxCategories);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error triggering scraping in AI backend");
+            return ApiResponse.FailureResponse("Failed to trigger scraping");
         }
     }
 
@@ -547,8 +658,14 @@ public class JobService : IJobService
 
             foreach (var job in expiredJobs)
             {
-                // Delete job embedding from AI backend
-                // TODO: Call AI backend to delete job embedding
+                var embeddingResult = await _aiBackend.DeleteJobEmbeddingAsync(job.Id);
+                if (!embeddingResult.Success)
+                {
+                    _logger.LogWarning(
+                        "Job embedding deletion failed for expired scraped job {JobId}: {Message}",
+                        job.Id,
+                        embeddingResult.Message);
+                }
             }
 
             _context.Jobs.RemoveRange(expiredJobs);
@@ -620,6 +737,35 @@ public class JobService : IJobService
     }
 
     #region Helper Methods
+
+    private static string BuildJobData(Job job, IEnumerable<string>? skills, string? companyName)
+    {
+        var normalizedSkills = (skills ?? Enumerable.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["title"] = job.Title,
+            ["description"] = job.Description,
+            ["requirements"] = job.Requirements,
+            ["responsibilities"] = job.Responsibilities,
+            ["skills"] = normalizedSkills,
+            ["location"] = job.Location,
+            ["experience_level"] = job.ExperienceLevel,
+            ["employment_type"] = job.EmploymentType.ToString(),
+            ["salary_range"] = job.SalaryRange,
+            ["salary_min"] = job.SalaryMin,
+            ["salary_max"] = job.SalaryMax,
+            ["currency"] = job.Currency,
+            ["company"] = companyName,
+            ["external_source"] = job.ExternalSource,
+            ["external_url"] = job.ExternalUrl
+        };
+
+        return JsonSerializer.Serialize(payload);
+    }
 
     private static JobDto MapToJobDto(Job job)
     {

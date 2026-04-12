@@ -8,6 +8,7 @@ public interface IApplicationService
     Task<ApiResponse<ApplicationDto>> GetApplicationAsync(long applicationId);
     Task<ApiResponse<ApplicationDto>> ApplyToJobAsync(long candidateId, ApplyToJobDto dto);
     Task<ApiResponse<ApplicationDto>> UpdateStatusAsync(long applicationId, long recruiterId, UpdateApplicationStatusDto dto);
+    Task<ApiResponse<BulkUpdateApplicationStatusResultDto>> BulkUpdateStatusAsync(long recruiterId, BulkUpdateApplicationStatusDto dto);
     Task<ApiResponse> WithdrawApplicationAsync(long applicationId, long candidateId);
     
     // For candidates - get their applications

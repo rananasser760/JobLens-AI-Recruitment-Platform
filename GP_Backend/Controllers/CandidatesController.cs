@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using GP_Backend.Models.DTOs.Candidate;
-using GP_Backend.Models.Enums;
 using GP_Backend.Services.Interfaces;
 
 namespace GP_Backend.Controllers;
@@ -31,6 +30,22 @@ public class CandidatesController : ControllerBase
         {
             return NotFound(result);
         }
+        return Ok(result);
+    }
+
+    [HttpGet("dashboard")]
+    [Authorize(Roles = "Candidate")]
+    public async Task<IActionResult> GetDashboard()
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var result = await _candidateService.GetDashboardAsync(userId.Value);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
         return Ok(result);
     }
 
