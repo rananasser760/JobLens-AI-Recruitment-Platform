@@ -5,7 +5,7 @@ import json
 
 # --- CONFIGURATION ---
 # ⚠️ REPLACE THIS WITH YOUR REAL KEY ⚠️
-OPENROUTER_API_KEY = "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" 
+OPENROUTER_API_KEY = "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" 
 OPENROUTER_MODEL_NAME = "mistralai/mistral-small-3.2-24b-instruct" 
 
 # Configure the OpenAI client to use OpenRouter API

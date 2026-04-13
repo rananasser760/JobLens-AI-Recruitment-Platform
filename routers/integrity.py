@@ -13,7 +13,7 @@ import os
 import sys
 import threading
 import time
-import queue # Added for WebSocket frame routing
+import queue 
 from datetime import datetime
 from typing import Optional
 
@@ -370,18 +370,25 @@ except ImportError:
 
 
 class YOLODetector:
-    COOLDOWN=2; PERSON_CONF=0.70; PHONE_CONF=0.70; PHONE_MIN_AREA=0.002
-    VOTE_WINDOW={'MULTIPLE_PEOPLE':5,'CHEATING_ITEM_MOBILE':6}
-    VOTE_THRESH={'MULTIPLE_PEOPLE':3,'CHEATING_ITEM_MOBILE':2}
+    # --- FIX: Tuned parameters to prevent false negatives while still filtering hands
+    COOLDOWN=2; PERSON_CONF=0.70; PHONE_CONF=0.75; PHONE_MIN_AREA=0.008
+    VOTE_WINDOW={'MULTIPLE_PEOPLE':5,'CHEATING_ITEM_MOBILE':8}
+    VOTE_THRESH={'MULTIPLE_PEOPLE':3,'CHEATING_ITEM_MOBILE':4}
+    WARMUP_SECONDS = 5.0 
 
     def __init__(self, session_id=None):
         import collections
         self._ok=_YOLO_AVAILABLE; self._coco=None; self._custom=None
         if self._ok:
             try:
-                self._coco=_YOLO('yolov8n.pt'); self._custom=_YOLO('routers\phones.pt')
+                root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                phones_path = os.path.join(root_dir, 'phones.pt')
+                
+                self._coco=_YOLO('yolov8n.pt')
+                self._custom=_YOLO(phones_path)
             except Exception as e:
                 print(f"YOLO load error: {e}"); self._ok=False
+                
         self.session_id=session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
         self._last_type=None; self._last_logged=0.; self._start=time.time()
         self._votes={k:collections.deque(maxlen=self.VOTE_WINDOW[k]) for k in self.VOTE_WINDOW}
@@ -406,6 +413,10 @@ class YOLODetector:
 
     def detect(self, frame):
         if not self._ok: return None,"Secure",frame
+        
+        if time.time() - self._start < self.WARMUP_SECONDS:
+            return None, "Secure", frame
+
         h,w=frame.shape[:2]; area=h*w
         pb=[]; phb=[]
         for r in self._coco.predict(frame,conf=self.PERSON_CONF,iou=0.45,verbose=False, device='cpu'):
@@ -437,7 +448,7 @@ class YOLODetector:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  WebSessionProcessor (Updated to receive frames via WebSocket queue)
+#  WebSessionProcessor (Queue-based to receive frames via WebSocket)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class WebSessionProcessor:
@@ -467,8 +478,7 @@ class WebSessionProcessor:
             "abandoned":False,"no_face_countdown":None,
         }
 
-        # --- FIX: Removed cv2.VideoCapture() completely ---
-        # Instead of pulling frames from hardware, we queue them from the browser
+        # Uses queue instead of hardware camera
         self._frame_queue = queue.Queue(maxsize=5) 
         
         self._yolo           = YOLODetector(session_id=str(session_id))
@@ -542,7 +552,6 @@ class WebSessionProcessor:
     def _camera_loop(self, db_factory):
         pending=[]
         while self._running:
-            # --- FIX: Pull from Queue instead of cv2.VideoCapture ---
             try:
                 frame = self._frame_queue.get(timeout=0.1)
             except queue.Empty:
@@ -611,16 +620,21 @@ class WebSessionProcessor:
                 try:
                     for at,el in pending:
                         db.add(DBAlert(session_id=self.session_id,alert_type=at,elapsed_secs=el,metadata_json="{}"))
+                    pending.clear()
+                    
                     for entry in self.alerts.get_timeline_data()[-(len(pending)+2):]:
                         if entry['has_keyframe']:
                             kd=self.alerts._keyframes.get(entry['keyframe_idx'])
                             if kd:
-                                ex=db.query(DBKeyframe).filter(DBKeyframe.session_id==self.session_id,
-                                    DBKeyframe.elapsed_secs==round(entry['elapsed'],1)).first()
+                                ex=db.query(DBKeyframe).filter(
+                                    DBKeyframe.session_id==self.session_id,
+                                    DBKeyframe.elapsed_secs==round(entry['elapsed'],1),
+                                    DBKeyframe.alert_type==entry['type']
+                                ).first()
                                 if not ex:
                                     db.add(DBKeyframe(session_id=self.session_id,alert_type=entry['type'],
                                                       elapsed_secs=round(entry['elapsed'],1),image_data=kd))
-                    pending.clear()
+                                                      
                     db.add(DBScoreHistory(session_id=self.session_id,score=score)); db.commit()
                 except Exception as e: print(f"DB error: {e}"); db.rollback()
                 finally: db.close()
@@ -679,6 +693,8 @@ class WebSessionProcessor:
         rec,_=self.alerts.recommendation()
         if self.abandoned: rec="ABANDONED"
         duration=time.time()-self._session_start
+        
+        # Save any final keyframes
         for entry in self.alerts.get_timeline_data():
             if entry['has_keyframe']:
                 kd=self.alerts._keyframes.get(entry['keyframe_idx'])
@@ -688,8 +704,7 @@ class WebSessionProcessor:
                     if not ex:
                         db.add(DBKeyframe(session_id=self.session_id,alert_type=entry['type'],
                                           elapsed_secs=round(entry['elapsed'],1),image_data=kd))
-        for t,s in self.alerts._score_history:
-            db.add(DBScoreHistory(session_id=self.session_id,score=s))
+
         db.query(DBSession).filter(DBSession.id==self.session_id).update(
             {"ended_at":datetime.utcnow(),"final_score":score,"recommendation":rec,"duration_seconds":duration})
         db.commit()
@@ -784,10 +799,13 @@ def get_report(session_id: int):
                 timeline.append({"alert_type":a.alert_type,"elapsed_secs":a.elapsed_secs,
                                   "timestamp":a.timestamp.isoformat(),"keyframe_id":kf.id if kf else None,
                                   "has_keyframe":kf is not None,"source":"mediapipe"})
+                                  
         for ya in sorted(s.yolo_alerts,key=lambda x:x.elapsed_secs):
+            kf=next((k for k in s.keyframes if abs(k.elapsed_secs-ya.elapsed_secs)<1.5 and k.alert_type==ya.alert_type),None)
             timeline.append({"alert_type":ya.alert_type,"elapsed_secs":ya.elapsed_secs,
-                              "timestamp":ya.timestamp.isoformat(),"keyframe_id":None,
-                              "has_keyframe":False,"source":"yolo"})
+                              "timestamp":ya.timestamp.isoformat(),"keyframe_id":kf.id if kf else None,
+                              "has_keyframe":kf is not None,"source":"yolo"})
+                              
         timeline.sort(key=lambda x:x['elapsed_secs'])
 
         # interview summary if linked
@@ -863,7 +881,7 @@ def dashboard_stats():
     finally: db.close()
 
 
-# ── WebSocket: live camera state (Updated for Ping-Pong Routing) ──────────────
+# ── WebSocket: live camera state ──────────────
 @router.websocket("/ws/{session_id}")
 async def ws_state(websocket: WebSocket, session_id: int):
     await websocket.accept()
@@ -875,7 +893,6 @@ async def ws_state(websocket: WebSocket, session_id: int):
             return
             
         while True:
-            # 1. Wait for the browser to send a frame
             data = await websocket.receive_json()
             if data.get("type") == "frame" and data.get("frame_b64"):
                 try:
@@ -887,7 +904,6 @@ async def ws_state(websocket: WebSocket, session_id: int):
                 except Exception as e:
                     print(f"Error decoding frame: {e}")
 
-            # 2. Reply with the analyzed state and the processed face-mesh image
             state = proc.get_state()
             await websocket.send_json(state)
             
