@@ -1,0 +1,77 @@
+<section class="interviews-page">
+  <header class="page-header">
+    <div>
+      <h1>Interviews</h1>
+      <p>Review scheduled and completed interview sessions for your pipelines.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  <app-error-retry [visible]="!!error()" [message]="error() || ''" [busy]="loading()" (retry)="load()"></app-error-retry>
+
+  <section class="panel filters">
+    <label>
+      Status filter
+      <input #statusInput type="text" [value]="statusFilter()" (input)="onStatusFilterChanged(statusInput.value)" placeholder="Scheduled, InProgress, Completed" />
+    </label>
+
+    <label>
+      Page size
+      <select #pageSizeSelect [value]="pageSize()" (change)="onPageSizeChanged(pageSizeSelect.value)" [disabled]="loading()">
+        @for (size of pageSizeOptions(); track size) {
+          <option [value]="size">{{ size }} per page</option>
+        }
+      </select>
+    </label>
+
+    <div class="filter-actions">
+      <button type="button" (click)="applyFilter()" [disabled]="loading()">Apply</button>
+      <button type="button" class="secondary" (click)="clearFilter()" [disabled]="loading()">Clear</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-head">
+      <h2>Interview sessions</h2>
+      <span>{{ totalCount() }} records · Page {{ pageNumber() }} of {{ totalPages() }}</span>
+    </div>
+
+    @if (interviews().length === 0) {
+      <p class="empty">No interviews found for this filter.</p>
+    } @else {
+      <div class="list">
+        @for (session of interviews(); track session.id) {
+          <article class="session-card">
+            <div>
+              <h3>{{ session.interviewTitle || session.jobTitle }}</h3>
+              <small>{{ session.candidateName }}</small>
+            </div>
+            <span class="status">{{ formatStatus(session.status) }}</span>
+            <small>{{ session.scheduledAt ? (session.scheduledAt | date: 'medium') : 'Date pending' }}</small>
+            <span class="score">Score: {{ session.overallScore ?? '--' }}</span>
+            <div class="row-actions">
+              <a [routerLink]="['/recruiter/interviews', session.id]">Open</a>
+              @if (canViewReport(session.status, session.overallScore)) {
+                <a [routerLink]="['/recruiter/interviews', session.id, 'report']">Report</a>
+              }
+            </div>
+          </article>
+        }
+      </div>
+
+      @if (totalCount() > 0) {
+        <div class="pagination">
+          <button type="button" class="secondary" (click)="goToPreviousPage()" [disabled]="loading() || !hasPreviousPage()">
+            Previous
+          </button>
+          <span>Showing page {{ pageNumber() }} of {{ totalPages() }}</span>
+          <button type="button" class="secondary" (click)="goToNextPage()" [disabled]="loading() || !hasNextPage()">
+            Next
+          </button>
+        </div>
+      }
+    }
+  </section>
+</section>

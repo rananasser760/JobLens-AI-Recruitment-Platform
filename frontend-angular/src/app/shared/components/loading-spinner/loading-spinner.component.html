@@ -1,0 +1,6 @@
+@if (active) {
+  <div class="spinner-host" [class.overlay]="variant === 'overlay'" role="status" aria-live="polite" [attr.aria-label]="message">
+    <span class="spinner-dot" aria-hidden="true"></span>
+    <span class="spinner-text">{{ message }}</span>
+  </div>
+}

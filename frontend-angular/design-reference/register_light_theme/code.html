@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#f8f9fb",
+                        "outline": "#757682",
+                        "background": "#f8f9fb",
+                        "primary-container": "#1e3a8a",
+                        "secondary-fixed-dim": "#b9c7df",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-primary-container": "#90a8ff",
+                        "surface-container-highest": "#e1e2e4",
+                        "inverse-on-surface": "#f0f1f3",
+                        "surface-container-lowest": "#ffffff",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed-variant": "#264191",
+                        "error": "#ba1a1a",
+                        "on-tertiary-container": "#27c38a",
+                        "on-primary": "#ffffff",
+                        "inverse-surface": "#2e3132",
+                        "surface-variant": "#e1e2e4",
+                        "secondary-fixed": "#d5e3fc",
+                        "secondary": "#515f74",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#dce1ff",
+                        "on-surface-variant": "#444651",
+                        "surface-container-low": "#f3f4f6",
+                        "on-tertiary": "#ffffff",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "primary": "#00236f",
+                        "surface-dim": "#d9dadc",
+                        "surface-container-high": "#e7e8ea",
+                        "on-background": "#191c1e",
+                        "outline-variant": "#c5c5d3",
+                        "on-surface": "#191c1e",
+                        "tertiary-container": "#004a31",
+                        "primary-fixed-dim": "#b6c4ff",
+                        "on-secondary-fixed": "#0d1c2e",
+                        "secondary-container": "#d5e3fc",
+                        "surface-tint": "#4059aa",
+                        "tertiary": "#00311f",
+                        "on-secondary-fixed-variant": "#3a485b",
+                        "on-tertiary-fixed": "#002113",
+                        "on-primary-fixed": "#00164e",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "surface-container": "#edeef0",
+                        "on-secondary": "#ffffff",
+                        "inverse-primary": "#b6c4ff",
+                        "error-container": "#ffdad6",
+                        "on-secondary-container": "#57657a",
+                        "surface-bright": "#f8f9fb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9fb; color: #191c1e; }
+        .font-headline { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-effect { backdrop-filter: blur(20px); background: rgba(255, 255, 255, 0.8); }
+        .ambient-shadow { box-shadow: 0 12px 40px -10px rgba(0, 35, 111, 0.08); }
+    </style>
+</head>
+<body class="bg-surface selection:bg-primary-fixed">
+<main class="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+<!-- Abstract Background Ornaments -->
+<div class="absolute top-[-10%] right-[-5%] w-[40%] h-[60%] rounded-full bg-primary-fixed/20 blur-[120px] pointer-events-none"></div>
+<div class="absolute bottom-[-10%] left-[-5%] w-[30%] h-[50%] rounded-full bg-tertiary-fixed/10 blur-[100px] pointer-events-none"></div>
+<div class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
+<!-- Left Side: Editorial Content -->
+<div class="lg:col-span-6 space-y-10">
+<div class="flex items-center gap-2">
+<span class="text-primary font-headline font-extrabold text-2xl tracking-tight">JobLens AI</span>
+</div>
+<div class="space-y-6">
+<h1 class="font-headline text-5xl font-bold text-primary tracking-tight leading-[1.1]">
+                        The future of hiring is <span class="text-on-tertiary-container">intelligent.</span>
+</h1>
+<p class="text-secondary text-lg leading-relaxed max-w-md">
+                        Join 2,000+ enterprise recruiters and elite candidates using AI to bridge the talent gap with precision.
+                    </p>
+</div>
+<!-- Bento-style Feature Highlight -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-low p-6 rounded-xl space-y-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container-lowest flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+</div>
+<h3 class="font-headline font-bold text-on-surface">AI Matching</h3>
+<p class="text-on-surface-variant text-sm">Deep semantic analysis of roles and resumes.</p>
+</div>
+<div class="bg-primary text-on-primary p-6 rounded-xl space-y-3">
+<div class="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">insights</span>
+</div>
+<h3 class="font-headline font-bold">Predictive ROI</h3>
+<p class="text-primary-fixed-dim text-sm">Forecast candidate success with 94% accuracy.</p>
+</div>
+</div>
+<div class="flex items-center gap-4 py-4">
+<div class="flex -space-x-3">
+<img class="w-10 h-10 rounded-full border-2 border-surface object-cover" data-alt="professional woman portrait soft lighting studio" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJ56ImrMbMUFa8oJ2CA_eHBvHBePyZAvAYCyfLpelmJU4J1H6RF8KIzuglkm84y_L65MD85t77UMF7wGxUv-rVDtIah3qYEP5JM7UAy1LznoU3oB3JPMNJKx4JB61o5kSQDMxpe6HOT45AG7l6npCCdXrCg6PRuk48dIpL_-a-QslZa0Z3gdQjQ5eHUnh3NUCxx8Me-nyEgKM1ZSS_GrYXVXYrPnKol1kzzfRPhWphkYwWiqpL_rLzH306M7DPPtIhPROzFkmbj_k"/>
+<img class="w-10 h-10 rounded-full border-2 border-surface object-cover" data-alt="professional man smiling in corporate setting natural light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmLpWce6VgSZtkJFefOmLmFaLU7ufY8AJTy1UkSX51H2OpRyvwKj2JWcBNw67mT5jZkWxof2U7vFR2KaLN4K0MiEcKyKRbhPaZMm0im0bLgHP6KwNPudmnKWqAA9SH5N9kXKlxcRXc8Ov6zeU8xtAVXTSjU9zoBUvxUVr1EoMLQxnB5mmkRxcnX9xwtyZPCQmbsoq7CabK_jJbrO07bxl_WHZxRHKQ-tpwx3mUCK6lzt-1UNyFvFZAr6PTYQIDL2_z73V-OoZYXYg"/>
+<img class="w-10 h-10 rounded-full border-2 border-surface object-cover" data-alt="successful business professional with bright confident smile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC8nP2YoLytw8SBRmZhbW2pTeOOPDIUqLVor-WDQ_2IrmchDGw9JSybYCFL8Q9VleqMcfcCdvWoqNQfqq-tjwgUi8ar6tnRItlxExj750VdIsK3yMU9E8hS8InXJoDLebRa8mMG67l9OUX1bzOapCTbxn3sRY4OPg_ZDzL1hQBhRq4AuMp49rbDA-g-cVvY1MZJZbh09xCkjigfxbEzr1uhUiQjCXV12xwHhJU821MJAw41Z44SPTXOBQQMaRbhSWkwBh1NzIp6c3g"/>
+</div>
+<span class="text-secondary text-sm font-medium">Trusted by teams at Global 500 companies.</span>
+</div>
+</div>
+<!-- Right Side: Registration Card -->
+<div class="lg:col-span-6">
+<div class="bg-surface-container-lowest ambient-shadow rounded-[2rem] p-8 md:p-12 border border-outline-variant/10">
+<div class="mb-10 text-center lg:text-left">
+<h2 class="font-headline text-2xl font-bold text-on-surface">Create your account</h2>
+<p class="text-on-surface-variant mt-2">Start your journey with JobLens AI today.</p>
+</div>
+<form class="space-y-6">
+<!-- Role Selector -->
+<div class="space-y-3">
+<label class="text-[0.6875rem] font-bold uppercase tracking-wider text-outline">Select your role</label>
+<div class="grid grid-cols-2 gap-4">
+<label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-outline-variant hover:bg-surface-container-low transition-all cursor-pointer group has-[:checked]:border-primary-container has-[:checked]:bg-secondary-container/30">
+<input checked="" class="sr-only" name="role" type="radio" value="candidate"/>
+<span class="material-symbols-outlined text-secondary group-has-[:checked]:text-primary-container mb-2">person</span>
+<span class="font-headline text-sm font-bold text-on-surface">Candidate</span>
+</label>
+<label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-outline-variant hover:bg-surface-container-low transition-all cursor-pointer group has-[:checked]:border-primary-container has-[:checked]:bg-secondary-container/30">
+<input class="sr-only" name="role" type="radio" value="recruiter"/>
+<span class="material-symbols-outlined text-secondary group-has-[:checked]:text-primary-container mb-2">corporate_fare</span>
+<span class="font-headline text-sm font-bold text-on-surface">Recruiter</span>
+</label>
+</div>
+</div>
+<!-- Inputs -->
+<div class="space-y-4">
+<div class="space-y-1.5">
+<label class="text-[0.6875rem] font-bold uppercase tracking-wider text-outline ml-1" for="name">Full Name</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-xl">person_outline</span>
+<input class="w-full pl-12 pr-4 py-4 bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all text-on-surface placeholder:text-outline/60" id="name" placeholder="John Doe" type="text"/>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="text-[0.6875rem] font-bold uppercase tracking-wider text-outline ml-1" for="email">Work Email</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-xl">mail</span>
+<input class="w-full pl-12 pr-4 py-4 bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all text-on-surface placeholder:text-outline/60" id="email" placeholder="name@company.com" type="email"/>
+</div>
+</div>
+<div class="space-y-1.5">
+<label class="text-[0.6875rem] font-bold uppercase tracking-wider text-outline ml-1" for="password">Password</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-xl">lock</span>
+<input class="w-full pl-12 pr-12 py-4 bg-surface-container-low border-none rounded-xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all text-on-surface placeholder:text-outline/60" id="password" placeholder="••••••••" type="password"/>
+<button class="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-xl">visibility</span>
+</button>
+</div>
+</div>
+</div>
+<div class="flex items-start gap-3 py-2">
+<input class="mt-1 rounded-md text-primary focus:ring-primary border-outline-variant" id="terms" type="checkbox"/>
+<label class="text-xs text-on-surface-variant leading-tight" for="terms">
+                                By creating an account, I agree to the <a class="text-primary font-semibold hover:underline" href="#">Terms of Service</a> and <a class="text-primary font-semibold hover:underline" href="#">Privacy Policy</a>.
+                            </label>
+</div>
+<button class="w-full bg-primary-container text-white py-4 px-6 rounded-xl font-headline font-bold text-lg hover:bg-primary transition-all active:scale-[0.98] shadow-lg shadow-primary-container/20 flex items-center justify-center gap-2" type="submit">
+                            Create Account
+                            <span class="material-symbols-outlined text-xl">arrow_forward</span>
+</button>
+<div class="relative py-4 flex items-center justify-center">
+<div class="absolute inset-0 flex items-center"><div class="w-full border-t border-outline-variant/30"></div></div>
+<span class="relative px-4 bg-surface-container-lowest text-xs font-bold uppercase tracking-widest text-outline">or continue with</span>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<button class="flex items-center justify-center gap-3 py-3 px-4 rounded-xl border border-outline-variant hover:bg-surface-container-low transition-all font-medium text-on-surface text-sm" type="button">
+<img alt="Google Logo" class="w-5 h-5" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDVDSzPZjSv9mMCZeomY_O-Gt_l0ZIiqpQS8eK1AyiqHB2i2ixsnangEtLMAR71aXwtsSJeNio6oQybAeosSd-3Lz2eVWML5Czg6RaF013yUsbfD2tmcy9KRP3MuCpQnc25YTJxTd2hW3BMm0QKAo7vtkYa5-ax8nCLIHMQOliPEebPr0Pbd1-C9t8NvL5Bs0VeANvtFP7DPrh5Arrd2DLWdfCGvYR1BTg2FG7ZsCxuFthxtrh7ax6ftljh-wrP6slciulrs0hJTsE"/>
+                                Google
+                            </button>
+<button class="flex items-center justify-center gap-3 py-3 px-4 rounded-xl border border-outline-variant hover:bg-surface-container-low transition-all font-medium text-on-surface text-sm" type="button">
+<span class="material-symbols-outlined text-xl text-primary" style="font-variation-settings: 'FILL' 1;">work</span>
+                                SSO
+                            </button>
+</div>
+</form>
+<div class="mt-10 pt-8 border-t border-outline-variant/30 text-center">
+<p class="text-on-surface-variant text-sm">
+                            Already have an account? 
+                            <a class="text-primary font-bold hover:text-primary-container transition-colors ml-1" href="#">Sign in</a>
+</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer Decorative Element -->
+<footer class="fixed bottom-0 left-0 w-full p-8 flex justify-between items-center pointer-events-none opacity-50">
+<span class="text-[0.6875rem] font-bold uppercase tracking-[0.2em] text-outline">Enterprise Tier Security</span>
+<div class="flex gap-6">
+<span class="text-[0.6875rem] font-bold uppercase tracking-[0.2em] text-outline">SOC2 Compliant</span>
+<span class="text-[0.6875rem] font-bold uppercase tracking-[0.2em] text-outline">GDPR Ready</span>
+</div>
+</footer>
+</body></html>

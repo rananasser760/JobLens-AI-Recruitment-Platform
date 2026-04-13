@@ -1,0 +1,93 @@
+<section class="admin-shell">
+  <header>
+    <h2>Admin Operations</h2>
+    <p>Control scraping and cleanup workflows and inspect recent background activity.</p>
+  </header>
+
+  @if (error()) {
+    <p class="error-banner">{{ error() }}</p>
+  }
+  @if (success()) {
+    <p class="success-banner">{{ success() }}</p>
+  }
+
+  <div class="controls-grid">
+    <article class="panel">
+      <h3>Scraping Control Center</h3>
+      <p>Queue a manual scrape run with category limit.</p>
+
+      <form [formGroup]="scrapeForm" (ngSubmit)="triggerScrape()" novalidate>
+        <label>
+          Max categories
+          <input type="number" formControlName="maxCategories" min="1" max="50" />
+        </label>
+        <button type="submit" [disabled]="acting()">Queue scrape</button>
+      </form>
+    </article>
+
+    <article class="panel">
+      <h3>Cleanup Queue</h3>
+      <p>Queue stale job cleanup with a retention window in days.</p>
+
+      <form [formGroup]="cleanupForm" (ngSubmit)="cleanupStaleJobs()" novalidate>
+        <label>
+          Stale after days
+          <input type="number" formControlName="staleAfterDays" min="1" max="365" />
+        </label>
+        <button type="submit" [disabled]="acting()">Queue cleanup</button>
+      </form>
+    </article>
+
+    <article class="panel">
+      <h3>Recommendation Refresh</h3>
+      <p>Queue a full recommendation cache refresh for candidates and jobs.</p>
+      <button type="button" (click)="refreshRecommendations()" [disabled]="acting()">
+        Queue refresh
+      </button>
+    </article>
+  </div>
+
+  <article class="panel table-panel">
+    <div class="panel-head">
+      <h3>Background Jobs</h3>
+      <button type="button" class="ghost" (click)="refresh()" [disabled]="loading()">
+        {{ loading() ? 'Refreshing...' : 'Refresh' }}
+      </button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Attempts</th>
+            <th>Last Run</th>
+            <th>Next Run</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (job of jobs(); track trackByJobId($index, job)) {
+            <tr>
+              <td>{{ job.jobId }}</td>
+              <td>{{ job.jobType }}</td>
+              <td>
+                <span class="chip" [class.fail]="job.status === 'Failed'">{{ job.status }}</span>
+              </td>
+              <td>{{ job.attempts }}</td>
+              <td>{{ job.lastRunAtUtc || '-' }}</td>
+              <td>{{ job.nextRunAtUtc || '-' }}</td>
+              <td>{{ job.error || '-' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="empty">No background jobs tracked yet.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>

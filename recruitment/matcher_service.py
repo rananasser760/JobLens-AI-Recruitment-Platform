@@ -4,6 +4,7 @@ import json
 from functools import lru_cache
 from typing import Dict, List, Optional
 
+import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 
@@ -24,6 +25,22 @@ def _safe_json_load(value: str):
         return json.loads(value)
     except Exception:
         return value
+
+
+def _to_builtin_types(value):
+    if isinstance(value, dict):
+        return {key: _to_builtin_types(item) for key, item in value.items()}
+
+    if isinstance(value, list):
+        return [_to_builtin_types(item) for item in value]
+
+    if isinstance(value, tuple):
+        return tuple(_to_builtin_types(item) for item in value)
+
+    if isinstance(value, np.generic):
+        return value.item()
+
+    return value
 
 
 class JobMatcher:
@@ -199,21 +216,21 @@ Return EXACTLY this JSON (no markdown):
                 "location": job["location"],
                 "source": job["source"],
                 "apply_link": job["apply_link"],
-                "semantic_similarity": round(similarity, 2),
+                "semantic_similarity": float(round(similarity, 2)),
             }
 
             if llm_analysis:
-                entry.update(llm_analysis)
+                entry.update(_to_builtin_types(llm_analysis))
             else:
                 entry.update(
                     {
-                        "match_score": round(similarity, 2),
+                        "match_score": float(round(similarity, 2)),
                         "match_level": self._match_level(similarity),
                         "recommendation": "Based on semantic similarity only.",
                     }
                 )
 
-            result.append(entry)
+            result.append(_to_builtin_types(entry))
 
         result.sort(key=lambda item: item.get("match_score", 0), reverse=True)
         return result
@@ -242,7 +259,7 @@ def recommend_jobs_for_candidate(candidate_id: int, limit: int = 10) -> List[Dic
         matches.append(
             {
                 "job_id": result["ids"][0][index],
-                "match_score": round(max(0.0, 1.0 - result["distances"][0][index]), 2),
+                "match_score": float(round(max(0.0, 1.0 - result["distances"][0][index]), 2)),
                 "job_preview": _safe_json_load(raw_preview),
             }
         )
@@ -273,7 +290,7 @@ def recommend_candidates_for_job(job_id: str, limit: int = 50, min_score: float 
             matches.append(
                 {
                     "candidate_id": result["ids"][0][index],
-                    "score": round(score, 2),
+                    "score": float(round(score, 2)),
                     "candidate_preview": _safe_json_load(raw_preview),
                 }
             )

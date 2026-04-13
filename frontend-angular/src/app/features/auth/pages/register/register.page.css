@@ -1,0 +1,122 @@
+:host {
+  width: min(520px, 100%);
+}
+
+.auth-card {
+  border: 1px solid var(--jl-border);
+  border-radius: var(--jl-radius-xl);
+  background: var(--jl-surface);
+  padding: 1.4rem;
+  box-shadow: var(--jl-shadow);
+}
+
+header h2 {
+  margin: 0;
+  font-size: 1.65rem;
+  color: var(--jl-ink);
+}
+
+header p {
+  margin: 0.35rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+form {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+fieldset {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+legend {
+  color: var(--jl-muted-text);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.role-grid label {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: var(--jl-ink-soft);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='number'] {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  font: inherit;
+  color: var(--jl-ink);
+  background: #f9faff;
+  padding: 0.7rem 0.8rem;
+}
+
+button {
+  margin-top: 0.35rem;
+  border: 0;
+  border-radius: 10px;
+  background: var(--jl-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.error {
+  color: var(--jl-danger);
+  font-size: 0.8rem;
+}
+
+.error-banner {
+  margin: 0.9rem 0 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  background: #fff3f2;
+  color: var(--jl-danger);
+  font-size: 0.86rem;
+}
+
+footer {
+  margin-top: 0.9rem;
+  font-size: 0.9rem;
+  color: var(--jl-muted-text);
+}
+
+a {
+  color: var(--jl-primary);
+  text-decoration: none;
+  font-weight: 700;
+}

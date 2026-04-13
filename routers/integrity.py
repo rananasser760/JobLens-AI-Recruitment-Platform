@@ -85,6 +85,15 @@ def _ws_count(session_id: int) -> int:
         return _WS_CONNECTIONS.get(session_id, 0)
 
 
+def _is_ws_authorized(websocket: WebSocket) -> bool:
+    expected_key = os.getenv("JOBLENS_INTERNAL_API_KEY", "").strip()
+    if not expected_key:
+        return True
+
+    provided_key = (websocket.headers.get("x-api-key") or websocket.query_params.get("api_key") or "").strip()
+    return provided_key == expected_key
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  CONFIG
 # ══════════════════════════════════════════════════════════════════════════════
@@ -963,6 +972,11 @@ def _cleanup_orphan_processor(session_id: int, grace_seconds: float = 20.0):
 # ── WebSocket: live camera state (Updated for Ping-Pong Routing) ──────────────
 @router.websocket("/ws/{session_id}")
 async def ws_state(websocket: WebSocket, session_id: int):
+    if not _is_ws_authorized(websocket):
+        await websocket.accept()
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     _ws_inc(session_id)
     try:

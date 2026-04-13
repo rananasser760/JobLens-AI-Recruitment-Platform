@@ -1,0 +1,124 @@
+<section class="applications-page">
+  <header class="page-header">
+    <div>
+      <h1>My Applications</h1>
+      <p>Track your hiring pipeline, follow interview progress, and withdraw open applications.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  <section class="stats-grid">
+    <article class="stat-card">
+      <span>Total applications</span>
+      <strong>{{ totalApplications() }}</strong>
+    </article>
+
+    <article class="stat-card">
+      <span>Active pipeline</span>
+      <strong>{{ activeApplications() }}</strong>
+    </article>
+
+    <article class="stat-card">
+      <span>Interview stage</span>
+      <strong>{{ interviewReady() }}</strong>
+    </article>
+  </section>
+
+  <section class="panel filters">
+    <label>
+      Status filter
+      <select #statusSelect [value]="statusFilter()" (change)="onStatusFilterChanged(statusSelect.value)" [disabled]="loading()">
+        <option value="">All statuses</option>
+        @for (status of statusOptions(); track status) {
+          <option [value]="status">{{ formatStatus(status) }}</option>
+        }
+      </select>
+    </label>
+
+    <div class="filter-actions">
+      <button type="button" (click)="applyFilter()" [disabled]="loading()">Apply</button>
+      <button type="button" class="secondary" (click)="clearFilter()" [disabled]="loading()">Clear</button>
+    </div>
+  </section>
+
+  <section class="panel list-panel">
+    <div class="section-head">
+      <h2>Application timeline</h2>
+      <span>{{ applications().length }} records</span>
+    </div>
+
+    @if (applications().length === 0) {
+      <p class="empty">No applications found for your current filter.</p>
+    } @else {
+      <div class="list">
+        @for (application of applications(); track application.id) {
+          <article class="application-card">
+            <header>
+              <div>
+                <h3>{{ application.jobTitle }}</h3>
+                <p>{{ application.companyName || 'Company' }}</p>
+              </div>
+              <span [class]="getStatusClass(application.status)">{{ formatStatus(application.status) }}</span>
+            </header>
+
+            <div class="meta">
+              <small>Applied {{ application.appliedAt | date: 'mediumDate' }}</small>
+              <small>Via {{ application.appliedVia }}</small>
+              @if (application.hasInterview) {
+                <small>Interview linked</small>
+              }
+              @if (application.atsScore !== null && application.atsScore !== undefined) {
+                <small>ATS {{ application.atsScore }}</small>
+              }
+            </div>
+
+            @if (application.coverLetter) {
+              <p class="cover-letter">{{ application.coverLetter }}</p>
+            }
+
+            <footer class="actions">
+              <a [routerLink]="['/candidate/jobs', application.jobId]">View job</a>
+              <a [routerLink]="['/candidate/applications', application.id]">View details</a>
+              <button
+                type="button"
+                class="secondary-action"
+                (click)="requestWithdraw(application)"
+                [disabled]="!canWithdraw(application)"
+              >
+                @if (isWithdrawing(application.id)) {
+                  Withdrawing...
+                } @else if (application.status === 'Withdrawn') {
+                  Withdrawn
+                } @else {
+                  Withdraw
+                }
+              </button>
+            </footer>
+          </article>
+        }
+      </div>
+    }
+  </section>
+
+  <app-confirm-dialog
+    [open]="confirmWithdrawOpen()"
+    title="Withdraw application"
+    [message]="'Withdraw your application for ' + (pendingWithdrawApplication()?.jobTitle || 'this role') + '?'"
+    confirmLabel="Withdraw"
+    cancelLabel="Keep"
+    [busy]="pendingWithdrawBusy()"
+    [danger]="true"
+    (cancel)="cancelWithdraw()"
+    (confirm)="confirmWithdraw()"
+  ></app-confirm-dialog>
+</section>

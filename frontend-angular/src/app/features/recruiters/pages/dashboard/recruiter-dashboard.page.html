@@ -1,0 +1,110 @@
+<section class="dashboard">
+  <header class="heading-row">
+    <div>
+      <h1>Talent Overview</h1>
+      <p>Live pipeline snapshot across jobs, candidates, and interview execution.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="alert">{{ error() }}</p>
+  }
+
+  <app-loading-spinner [active]="loading()" message="Loading recruiter insights"></app-loading-spinner>
+
+  <div class="stats-grid">
+    <article class="stat-card">
+      <span class="label">Active jobs</span>
+      <strong>{{ dashboard()?.activeJobs ?? 0 }}</strong>
+      <p>Out of {{ dashboard()?.totalJobsPosted ?? 0 }} total posted roles.</p>
+    </article>
+
+    <article class="stat-card">
+      <span class="label">Total applicants</span>
+      <strong>{{ dashboard()?.totalApplications ?? 0 }}</strong>
+      <p>All candidate applications in your managed pipelines.</p>
+    </article>
+
+    <article class="stat-card">
+      <span class="label">Interviews today</span>
+      <strong>{{ dashboard()?.interviewsScheduled ?? 0 }}</strong>
+      <p>{{ dashboard()?.interviewsCompleted ?? 0 }} completed interviews recorded.</p>
+    </article>
+
+    <article class="stat-card accent">
+      <span class="label">Pipeline pressure</span>
+      <strong>{{ activeConversion() }}%</strong>
+      <p>Applicants currently pending review decisions.</p>
+    </article>
+  </div>
+
+  <div class="content-grid">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Latest posted jobs</h2>
+        <span>{{ jobs().length }} jobs</span>
+      </div>
+
+      @if (jobs().length === 0) {
+        <p class="empty">No recruiter jobs returned yet.</p>
+      }
+
+      <div class="list">
+        @for (job of jobs(); track job.id) {
+          <article class="list-row">
+            <div>
+              <h3>{{ job.title }}</h3>
+              <small>{{ job.companyName || 'Company' }} • {{ job.location || 'Location not set' }}</small>
+            </div>
+            <span>{{ job.source }}</span>
+          </article>
+        }
+      </div>
+    </section>
+
+    <aside class="panel side">
+      <h2>Upcoming interviews</h2>
+
+      @if (interviews().length === 0) {
+        <p class="empty">No upcoming interview sessions available.</p>
+      }
+
+      @for (interview of interviews(); track interview.id) {
+        <article class="timeline-card">
+          <h3>{{ interview.jobTitle }}</h3>
+          <p>{{ interview.candidateName }}</p>
+          <small>
+            {{ interview.scheduledAt ? (interview.scheduledAt | date: 'medium') : 'Date pending' }}
+          </small>
+        </article>
+      }
+    </aside>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Recent applications</h2>
+      <span>{{ dashboard()?.recentApplications?.length ?? 0 }} records</span>
+    </div>
+
+    @if (!dashboard()?.recentApplications?.length) {
+      <p class="empty">No recent applications available.</p>
+    }
+
+    <div class="list">
+      @for (item of dashboard()?.recentApplications || []; track item.applicationId) {
+        <article class="list-row wide">
+          <div>
+            <h3>{{ item.candidateName }}</h3>
+            <small>{{ item.jobTitle }}</small>
+          </div>
+          <span class="status">{{ item.status }}</span>
+          <small>{{ item.appliedAt | date: 'mediumDate' }}</small>
+        </article>
+      }
+    </div>
+  </section>
+</section>

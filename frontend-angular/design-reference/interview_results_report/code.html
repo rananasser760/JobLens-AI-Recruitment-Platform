@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Interview Results - JobLens</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+                  "inverse-surface": "#2e3132",
+                  "surface-container-highest": "#e1e2e4",
+                  "surface-container-high": "#e7e8ea",
+                  "secondary-fixed": "#d5e3fc",
+                  "tertiary-container": "#004a31",
+                  "tertiary-fixed": "#6ffbbe",
+                  "on-tertiary-fixed": "#002113",
+                  "tertiary-fixed-dim": "#4edea3",
+                  "surface-tint": "#4059aa",
+                  "inverse-primary": "#b6c4ff",
+                  "on-surface-variant": "#444651",
+                  "primary-fixed": "#dce1ff",
+                  "on-tertiary": "#ffffff",
+                  "on-error": "#ffffff",
+                  "primary-container": "#1e3a8a",
+                  "on-secondary-fixed": "#0d1c2e",
+                  "background": "#f8f9fb",
+                  "on-primary-fixed-variant": "#264191",
+                  "outline": "#757682",
+                  "on-error-container": "#93000a",
+                  "primary": "#00236f",
+                  "on-surface": "#191c1e",
+                  "error": "#ba1a1a",
+                  "on-tertiary-container": "#27c38a",
+                  "surface": "#f8f9fb",
+                  "error-container": "#ffdad6",
+                  "primary-fixed-dim": "#b6c4ff",
+                  "tertiary": "#00311f",
+                  "secondary-fixed-dim": "#b9c7df",
+                  "secondary-container": "#d5e3fc",
+                  "on-background": "#191c1e",
+                  "on-primary": "#ffffff",
+                  "surface-dim": "#d9dadc",
+                  "surface-container-lowest": "#ffffff",
+                  "surface-container-low": "#f3f4f6",
+                  "on-primary-container": "#90a8ff",
+                  "inverse-on-surface": "#f0f1f3",
+                  "surface-variant": "#e1e2e4",
+                  "surface-bright": "#f8f9fb",
+                  "outline-variant": "#c5c5d3",
+                  "on-tertiary-fixed-variant": "#005236",
+                  "surface-container": "#edeef0",
+                  "secondary": "#515f74",
+                  "on-primary-fixed": "#00164e",
+                  "on-secondary": "#ffffff",
+                  "on-secondary-fixed-variant": "#3a485b",
+                  "on-secondary-container": "#57657a"
+          },
+          "borderRadius": {
+                  "DEFAULT": "0.25rem",
+                  "lg": "0.5rem",
+                  "xl": "0.75rem",
+                  "full": "9999px"
+          },
+          "fontFamily": {
+                  "headline": ["Manrope"],
+                  "body": ["Inter"],
+                  "label": ["Inter"]
+          }
+        },
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body { font-family: 'Inter', sans-serif; }
+    h1, h2, h3, .display-num { font-family: 'Manrope', sans-serif; }
+    .glass-emerald {
+      background: rgba(16, 185, 129, 0.1);
+      backdrop-filter: blur(4px);
+    }
+    .custom-shadow {
+      box-shadow: 0 12px 40px -10px rgba(0, 35, 111, 0.08);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface">
+<!-- SideNavBar Anchor -->
+<aside class="bg-slate-50 dark:bg-slate-900 h-screen w-64 fixed left-0 top-0 flex flex-col py-6 no-border bg-slate-100 dark:bg-slate-800/50">
+<div class="px-6 mb-10">
+<div class="text-2xl font-bold tracking-tighter text-blue-900 dark:text-blue-100">JobLens</div>
+<div class="text-xs text-slate-500 font-manrope font-medium tracking-tight">Recruiter Portal</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="dashboard">dashboard</span>
+        Dashboard
+      </a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="work">work</span>
+        Jobs
+      </a>
+<a class="flex items-center px-6 py-3 text-blue-900 dark:text-blue-400 font-bold border-r-4 border-blue-900 dark:border-blue-400 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="group">group</span>
+        Candidates
+      </a>
+<a class="flex items-center px-6 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors font-manrope text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="description">description</span>
+        Applications
+      </a>
+</nav>
+<div class="mt-auto px-6 space-y-1">
+<a class="flex items-center py-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="settings">settings</span>
+        Settings
+      </a>
+<a class="flex items-center py-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined mr-3" data-icon="help">help</span>
+        Support
+      </a>
+<div class="mt-4 p-4 bg-primary text-on-primary rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm" data-icon="bolt">bolt</span>
+<span class="text-sm font-bold tracking-tight">AI Insight</span>
+</div>
+</div>
+</aside>
+<!-- TopNavBar Anchor -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md flex justify-between items-center px-8 h-16 shadow-sm dark:shadow-none">
+<div class="flex items-center bg-surface-container-low px-4 py-2 rounded-full w-96">
+<span class="material-symbols-outlined text-outline text-lg" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-full ml-2 text-on-surface" placeholder="Search candidates or data..." type="text"/>
+</div>
+<div class="flex items-center gap-6">
+<button class="text-slate-600 hover:text-blue-700 transition-colors relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-error rounded-full border-2 border-white"></span>
+</button>
+<button class="text-slate-600 hover:text-blue-700 transition-colors">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-outline-variant/30">
+<div class="text-right">
+<p class="text-xs font-bold text-on-surface">Sarah Jenkins</p>
+<p class="text-[10px] text-outline">Lead Recruiter</p>
+</div>
+<img alt="Sarah Jenkins" class="w-10 h-10 rounded-full object-cover border-2 border-primary/10" data-alt="professional portrait of a smiling woman with glasses in a modern office environment with soft lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyuBNLZvCc7tWCyV7bAV4uf8kI6SQG3bkdIUZE9SgwE3dK6wNcTqBid1VmCJVyVk1vs0cdkJTQhaI-go60HPTBnfELz5z8W8E3KB7sZ1kOmJQQd0li_ACY9MbvyhgQFAb10x7xbo_EixdyoKSLHQnI859WB4kho2ifIWaBz4UGBvNhGsktbv9fNtCi57lpRPtu6UIyJLGIOoIfS84SAAKHxLDm8MkL3yPJyUqQsxpw9PzZVdEjb6ZKwvPwu6z6nU1pTJWRQvPXUbA"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 pb-12 px-10 min-h-screen">
+<!-- Hero Header Section (Asymmetric) -->
+<div class="flex flex-col md:flex-row justify-between items-end mb-10 gap-8">
+<div class="max-w-2xl">
+<div class="flex items-center gap-3 mb-2">
+<span class="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase rounded-full">Report #8821</span>
+<span class="flex items-center gap-1 text-on-tertiary-container text-[10px] font-bold tracking-widest uppercase bg-tertiary-container/10 px-3 py-1 rounded-full">
+<span class="material-symbols-outlined text-xs" data-icon="verified_user">verified_user</span>
+            AI Validated
+          </span>
+</div>
+<h1 class="text-4xl font-extrabold tracking-tight text-on-surface mb-2">Alexandr Vostrikov</h1>
+<p class="text-secondary font-medium">Senior Full Stack Engineer — Technical Interview Phase 2</p>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-6 py-3 bg-surface-container-lowest text-primary font-bold rounded-lg custom-shadow hover:bg-surface-container-low transition-all">
+<span class="material-symbols-outlined" data-icon="share">share</span>
+          Share Report
+        </button>
+<button class="flex items-center gap-2 px-6 py-3 bg-primary text-on-primary font-bold rounded-lg custom-shadow transition-all active:scale-95">
+<span class="material-symbols-outlined" data-icon="person_add">person_add</span>
+          Move to Offer
+        </button>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-6">
+<!-- AI Summary Card (Large) -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-lowest rounded-xl p-8 custom-shadow flex flex-col justify-between">
+<div>
+<div class="flex items-center gap-2 mb-6">
+<div class="w-1.5 h-6 bg-tertiary-container rounded-full"></div>
+<h2 class="text-xl font-bold">AI Executive Summary</h2>
+</div>
+<p class="text-on-surface-variant leading-relaxed mb-6 text-lg">
+            Candidate demonstrated exceptional depth in <span class="text-primary font-semibold">distributed systems architecture</span>. They articulated complex concepts regarding eventual consistency and CAP theorem trade-offs with high clarity. While strong technically, there was a slight hesitation during the live coding session regarding <span class="text-error font-medium">concurrency edge cases</span>.
+          </p>
+<div class="grid grid-cols-3 gap-6">
+<div class="p-4 bg-surface-container-low rounded-lg">
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider mb-1">Architecture</p>
+<p class="text-primary font-extrabold text-xl font-manrope">9.4<span class="text-xs text-outline font-normal">/10</span></p>
+</div>
+<div class="p-4 bg-surface-container-low rounded-lg">
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider mb-1">Communication</p>
+<p class="text-primary font-extrabold text-xl font-manrope">8.8<span class="text-xs text-outline font-normal">/10</span></p>
+</div>
+<div class="p-4 bg-surface-container-low rounded-lg">
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider mb-1">Code Quality</p>
+<p class="text-primary font-extrabold text-xl font-manrope">7.9<span class="text-xs text-outline font-normal">/10</span></p>
+</div>
+</div>
+</div>
+</div>
+<!-- Total Score Gauge -->
+<div class="col-span-12 lg:col-span-4 bg-primary text-on-primary rounded-xl p-8 custom-shadow relative overflow-hidden flex flex-col items-center justify-center text-center">
+<div class="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-3xl"></div>
+<div class="absolute -bottom-12 -left-12 w-48 h-48 bg-tertiary-container/20 rounded-full blur-3xl"></div>
+<p class="text-xs font-bold uppercase tracking-[0.2em] mb-6 opacity-70">Overall Talent Score</p>
+<div class="relative flex items-center justify-center w-40 h-40">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-white/10" cx="80" cy="80" fill="transparent" r="70" stroke="currentColor" stroke-width="8"></circle>
+<circle class="text-on-tertiary-container" cx="80" cy="80" fill="transparent" r="70" stroke="currentColor" stroke-dasharray="440" stroke-dashoffset="66" stroke-linecap="round" stroke-width="10"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-5xl font-black font-manrope">86</span>
+<span class="text-[10px] font-bold opacity-60">PERCENTILE</span>
+</div>
+</div>
+<p class="mt-8 text-sm font-medium text-blue-200">Strong "A" Tier Match</p>
+</div>
+<!-- Integrity Monitor -->
+<div class="col-span-12 lg:col-span-4 bg-surface-container-lowest rounded-xl p-6 custom-shadow">
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-bold text-on-surface">Integrity Monitor</h3>
+<span class="material-symbols-outlined text-on-tertiary-container" data-icon="shield">shield</span>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between p-3 bg-tertiary-container/5 rounded-lg border border-tertiary-container/10">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-tertiary-container" data-icon="visibility">visibility</span>
+<span class="text-xs font-bold">Eye Tracking</span>
+</div>
+<span class="text-[10px] font-bold text-on-tertiary-container px-2 py-0.5 bg-tertiary-container/10 rounded">NORMAL</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-tertiary-container/5 rounded-lg border border-tertiary-container/10">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-on-tertiary-container" data-icon="tab">tab</span>
+<span class="text-xs font-bold">Tab Switching</span>
+</div>
+<span class="text-[10px] font-bold text-on-tertiary-container px-2 py-0.5 bg-tertiary-container/10 rounded">0 EVENTS</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-error-container/5 rounded-lg border border-error/10">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-error" data-icon="face">face</span>
+<span class="text-xs font-bold">Multiple Faces</span>
+</div>
+<span class="text-[10px] font-bold text-error px-2 py-0.5 bg-error/10 rounded">NONE</span>
+</div>
+</div>
+</div>
+<!-- Comparison Leaderboard -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-lowest rounded-xl p-8 custom-shadow">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-6 bg-primary rounded-full"></div>
+<h2 class="text-xl font-bold">Role Ranking Board</h2>
+</div>
+<span class="text-xs text-outline font-medium">32 Candidates Evaluated</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full">
+<thead>
+<tr class="text-left text-[10px] font-bold text-outline uppercase tracking-widest">
+<th class="pb-4">Rank</th>
+<th class="pb-4">Candidate</th>
+<th class="pb-4">Score</th>
+<th class="pb-4">Match Strength</th>
+<th class="pb-4 text-right">Status</th>
+</tr>
+</thead>
+<tbody class="text-sm font-medium">
+<tr class="group hover:bg-surface-container-low transition-colors">
+<td class="py-4 text-primary">01</td>
+<td class="py-4 flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-200"></div>
+                            Sarah Miller
+                        </td>
+<td class="py-4 font-manrope">92</td>
+<td class="py-4">
+<div class="w-24 h-1 bg-surface-container-high rounded-full overflow-hidden">
+<div class="w-[92%] h-full bg-on-tertiary-container"></div>
+</div>
+</td>
+<td class="py-4 text-right"><span class="px-2 py-1 bg-surface-container-high rounded-full text-[10px]">Shortlisted</span></td>
+</tr>
+<tr class="bg-primary/5 border-l-4 border-primary">
+<td class="py-4 pl-4 text-primary font-bold">02</td>
+<td class="py-4 flex items-center gap-3">
+<img alt="Current Candidate" class="w-8 h-8 rounded-full object-cover" data-alt="close up headshot of a professional man with a friendly expression in a neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqSc16bT1wqN1HvWfgQoep5Bvdm3_9RJiH7SgPX43cyWyTk6hav8MWgjdJFF0nelovuYor71k2J1d4Ulel_A4g08g3GXcHxiaMRN_T71mXv4PtRNEiXCtX4opfbNgv4LZ1j2V4OglYNAKMQPEphfaORXM_K0545H1eR4HyktzG411KRAmqI7E6XE5CF5jbO6hK0kxNVWkNHb9cNa6e5veWp_D1YQ8NmTbxUWUEHnN1vEP3P02VICSn2_8E3KmmbJaK8ZIfvBbT6cI"/>
+                            Alexandr V.
+                            <span class="text-[8px] bg-primary text-white px-1.5 py-0.5 rounded font-bold uppercase">YOU ARE HERE</span>
+</td>
+<td class="py-4 font-manrope font-bold">86</td>
+<td class="py-4">
+<div class="w-24 h-1 bg-surface-container-high rounded-full overflow-hidden">
+<div class="w-[86%] h-full bg-primary"></div>
+</div>
+</td>
+<td class="py-4 text-right"><span class="px-2 py-1 bg-primary text-white rounded-full text-[10px]">Analyzing</span></td>
+</tr>
+<tr class="group hover:bg-surface-container-low transition-colors">
+<td class="py-4 text-primary">03</td>
+<td class="py-4 flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-200"></div>
+                            Marcus Chen
+                        </td>
+<td class="py-4 font-manrope">84</td>
+<td class="py-4">
+<div class="w-24 h-1 bg-surface-container-high rounded-full overflow-hidden">
+<div class="w-[84%] h-full bg-on-tertiary-container"></div>
+</div>
+</td>
+<td class="py-4 text-right"><span class="px-2 py-1 bg-surface-container-high rounded-full text-[10px]">Interviewed</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Transcription Section (Wide) -->
+<div class="col-span-12 bg-surface-container-lowest rounded-xl p-8 custom-shadow">
+<div class="flex items-center justify-between mb-8 border-b border-outline-variant/20 pb-6">
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-6 bg-secondary rounded-full"></div>
+<h2 class="text-xl font-bold">Smart Transcription</h2>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-2 text-xs font-bold bg-surface-container-low rounded-lg hover:bg-surface-container-high transition-colors">Export .PDF</button>
+<button class="px-4 py-2 text-xs font-bold bg-surface-container-low rounded-lg hover:bg-surface-container-high transition-colors">Jump to Highlights</button>
+</div>
+</div>
+<div class="space-y-8 max-w-4xl mx-auto">
+<!-- Transcript Entry -->
+<div class="flex gap-6">
+<div class="w-24 shrink-0 text-right pt-1">
+<p class="text-[10px] font-bold text-outline">00:04:12</p>
+<p class="text-xs font-bold text-primary">Interviewer</p>
+</div>
+<div class="flex-1">
+<p class="text-sm text-on-surface-variant leading-relaxed">
+                        Can you walk me through your experience with scaling databases for high-concurrency environments? What specific challenges did you face?
+                    </p>
+</div>
+</div>
+<!-- Transcript Entry with Sentiment Chip -->
+<div class="flex gap-6 relative">
+<div class="w-24 shrink-0 text-right pt-1">
+<p class="text-[10px] font-bold text-outline">00:04:45</p>
+<p class="text-xs font-bold text-secondary">Candidate</p>
+</div>
+<div class="flex-1 p-4 bg-tertiary-container/5 rounded-xl border-l-4 border-on-tertiary-container">
+<div class="flex items-center gap-2 mb-2">
+<span class="text-[10px] font-bold text-on-tertiary-container uppercase tracking-widest flex items-center gap-1">
+<span class="material-symbols-outlined text-xs" data-icon="auto_awesome">auto_awesome</span>
+                            High Sentiment Match
+                        </span>
+</div>
+<p class="text-sm text-on-surface leading-relaxed italic">
+                        "At my previous firm, we transitioned from a monolithic Postgres instance to a sharded Citus cluster. The primary challenge wasn't the sharding itself, but managing global transactions and ensuring our partition keys were optimized for 95% of our query patterns to avoid cross-node joins..."
+                    </p>
+</div>
+</div>
+<!-- Transcript Entry -->
+<div class="flex gap-6">
+<div class="w-24 shrink-0 text-right pt-1">
+<p class="text-[10px] font-bold text-outline">00:06:22</p>
+<p class="text-xs font-bold text-primary">Interviewer</p>
+</div>
+<div class="flex-1">
+<p class="text-sm text-on-surface-variant leading-relaxed">
+                        Interesting approach. How did you handle the data migration with zero downtime?
+                    </p>
+</div>
+</div>
+</div>
+<div class="mt-12 flex justify-center">
+<button class="text-primary font-bold text-sm flex items-center gap-2 hover:underline">
+                View Full 45-Minute Transcription
+                <span class="material-symbols-outlined" data-icon="expand_more">expand_more</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Sticky Feedback Floating Card -->
+<div class="fixed bottom-8 right-8 z-50">
+<div class="bg-surface-container-lowest p-4 rounded-2xl custom-shadow border border-outline-variant/30 flex items-center gap-4 max-w-sm">
+<div class="w-12 h-12 rounded-xl bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-white" data-icon="psychology">psychology</span>
+</div>
+<div>
+<p class="text-xs font-bold text-on-surface">Candidate is a 'Fast Follow'</p>
+<p class="text-[10px] text-outline">System suggests a final coffee chat with CTO.</p>
+</div>
+<button class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+</button>
+</div>
+</div>
+</body></html>

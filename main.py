@@ -10,28 +10,44 @@
 import asyncio
 import json
 import os
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
 
 load_dotenv()
 
+RUNTIME_ENV = os.getenv("JOBLENS_ENV", "development").strip().lower()
+INTERNAL_API_KEY = os.getenv("JOBLENS_INTERNAL_API_KEY", "").strip()
+
+_public_routes_flag = os.getenv("JOBLENS_ENABLE_PUBLIC_ROUTES")
+if _public_routes_flag is None:
+    ALLOW_PUBLIC_ROUTES = RUNTIME_ENV in {"development", "dev", "local", "test"}
+else:
+    ALLOW_PUBLIC_ROUTES = _public_routes_flag.strip().lower() == "true"
+
 from routers.integrity import router as integrity_router
 from routers.interview  import router as interview_router
+from routers.internal_api import router as internal_router
 from routers.recruitment import router as recruitment_router
 from models             import DBSession, DBSessionLocal
 from session_store      import LOG_BUFFERS, LOG_SUBSCRIBERS
-from recruitment.scheduler import start_scheduler, stop_scheduler
+from recruitment.config import get_recruitment_settings
+from recruitment.scheduler import scheduler_status, start_scheduler, stop_scheduler
+from recruitment.vector_store import store
+from request_context import set_request_id
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _validate_internal_key_configuration()
+
     try:
         app.state.recruitment_scheduler = start_scheduler()
     except Exception as exc:
@@ -49,18 +65,39 @@ async def lifespan(app: FastAPI):
         pass
 
 
+def _docs_enabled() -> bool:
+    return os.getenv("JOBLENS_ENABLE_DOCS", "true").strip().lower() == "true"
+
+
+def _validate_internal_key_configuration() -> None:
+    is_non_production = RUNTIME_ENV in {"development", "dev", "local", "test"}
+    if not is_non_production and not INTERNAL_API_KEY:
+        raise RuntimeError("JOBLENS_INTERNAL_API_KEY must be configured outside development environments")
+
+
+def _is_websocket_authorized(websocket: WebSocket) -> bool:
+    if not INTERNAL_API_KEY:
+        return True
+
+    provided = (websocket.headers.get("x-api-key") or websocket.query_params.get("api_key") or "").strip()
+    return provided == INTERNAL_API_KEY
+
+
 app = FastAPI(
     title="JobLens AI",
     description="Unified interview, integrity, CV parsing, scraping, and matching platform",
     version="2.0.0",
+    docs_url="/docs" if _docs_enabled() else None,
+    redoc_url="/redoc" if _docs_enabled() else None,
+    openapi_url="/openapi.json" if _docs_enabled() else None,
     lifespan=lifespan,
 )
 
 cors_origins = [
     origin.strip()
-    for origin in os.getenv("JOBLENS_CORS_ORIGINS", "*").split(",")
+    for origin in os.getenv("JOBLENS_CORS_ORIGINS", "http://localhost:4200,http://localhost:5245").split(",")
     if origin.strip()
-] or ["*"]
+] or ["http://localhost:4200", "http://localhost:5245"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,10 +106,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    correlation_id = request.headers.get("X-Correlation-Id", "").strip() or uuid.uuid4().hex
+    request.state.correlation_id = correlation_id
+    set_request_id(correlation_id)
+
+    response = await call_next(request)
+    response.headers["X-Correlation-Id"] = correlation_id
+    return response
+
+
+@app.middleware("http")
+async def internal_api_key_guard(request: Request, call_next):
+    if INTERNAL_API_KEY:
+        path = request.url.path
+        protected = path.startswith("/internal/v1/")
+        if ALLOW_PUBLIC_ROUTES:
+            protected = protected or path.startswith("/api/") or path.startswith("/interview/")
+
+        if protected:
+            provided_key = request.headers.get("X-API-Key", "")
+            if provided_key != INTERNAL_API_KEY:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid or missing X-API-Key"},
+                )
+
+    return await call_next(request)
+
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(integrity_router)   # /api/sessions/…  /api/ws/…  /api/dashboard/…
-app.include_router(interview_router)   # /interview/start  /interview/ws/…
-app.include_router(recruitment_router) # /api/cv/… /api/scraping/… /api/recommendations/…
+if ALLOW_PUBLIC_ROUTES:
+    app.include_router(integrity_router)   # /api/sessions/…  /api/ws/…  /api/dashboard/…
+    app.include_router(interview_router)   # /interview/start  /interview/ws/…
+    app.include_router(recruitment_router) # /api/cv/… /api/scraping/… /api/recommendations/…
+
+app.include_router(internal_router)        # /internal/v1/*
+
+
+def _ensure_public_routes_enabled() -> None:
+    if not ALLOW_PUBLIC_ROUTES:
+        raise HTTPException(status_code=404, detail="Not found")
 
 # ── Static files (templates served by the UI layer) ──────────────────────────
 if os.path.isdir("static"):
@@ -86,6 +161,15 @@ if os.path.isdir("static"):
 
 @app.websocket("/ws/logs/{session_id}")
 async def ws_logs(websocket: WebSocket, session_id: int):
+    if not ALLOW_PUBLIC_ROUTES:
+        await websocket.close(code=1008)
+        return
+
+    if not _is_websocket_authorized(websocket):
+        await websocket.accept()
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     sid = str(session_id)
     q: asyncio.Queue = asyncio.Queue()
@@ -112,6 +196,7 @@ async def ws_logs(websocket: WebSocket, session_id: int):
 
 @app.get("/api/logs/{session_id}")
 def get_logs(session_id: int):
+    _ensure_public_routes_enabled()
     return list(LOG_BUFFERS.get(str(session_id), []))
 
 
@@ -131,8 +216,9 @@ def unified_report(session_id: int):
         interview        — AI-generated summary, score, conversation history
         recommendation   — combined verdict
     """
-    from fastapi import HTTPException
     from session_store import INTERVIEW_SESSIONS
+
+    _ensure_public_routes_enabled()
 
     db = DBSessionLocal()
     try:
@@ -286,6 +372,40 @@ def _combined_recommendation(
 
     return {"verdict": "REVIEW",
             "reason": f"Interview {interview_score:.0f}% / Cheating {cheating_score:.0f}% — manual review"}
+
+
+@app.get("/health")
+def health():
+    settings = get_recruitment_settings()
+    provider = settings.provider.lower().strip()
+
+    if provider == "groq":
+        llm_ok = bool(settings.groq_api_key)
+    else:
+        llm_ok = bool(settings.openrouter_api_key)
+
+    services = {
+        "llm": "configured" if llm_ok else "missing_api_key",
+        "scheduler": scheduler_status(),
+    }
+
+    status = "healthy"
+    try:
+        vector_stats = store.stats()
+        services["chromadb"] = "connected"
+        services["vector_store"] = vector_stats
+    except Exception as exc:
+        services["chromadb"] = "error"
+        services["chromadb_error"] = str(exc)
+        status = "degraded"
+
+    return {
+        "status": status,
+        "version": app.version,
+        "environment": RUNTIME_ENV,
+        "publicRoutesEnabled": ALLOW_PUBLIC_ROUTES,
+        "services": services,
+    }
 
 
 @app.get("/")

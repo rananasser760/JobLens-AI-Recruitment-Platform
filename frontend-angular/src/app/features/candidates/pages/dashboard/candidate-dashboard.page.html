@@ -1,0 +1,146 @@
+<section class="dashboard">
+  <header class="heading-row">
+    <div>
+      <h1>Your Morning Brief</h1>
+      <p>AI-curated opportunities and interview preparation updates.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading() || recommendationsLoading()">
+      {{ loading() || recommendationsLoading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="alert">{{ error() }}</p>
+  }
+
+  <app-loading-spinner [active]="loading()" message="Loading dashboard insights"></app-loading-spinner>
+
+  @if (!onboardingComplete()) {
+    <section class="panel onboarding-panel" aria-live="polite">
+      <div class="onboarding-head">
+        <div>
+          <h2>Finish your candidate setup</h2>
+          <p>{{ onboardingCompletedCount() }}/{{ onboardingTotalCount() }} readiness steps complete.</p>
+        </div>
+        <a routerLink="/candidate/profile">Go to profile</a>
+      </div>
+
+      <div class="onboarding-list">
+        @for (item of onboardingChecklist(); track item.key) {
+          <article class="onboarding-item" [class.done]="item.done">
+            <div>
+              <h3>{{ item.label }}</h3>
+              <p>{{ item.description }}</p>
+            </div>
+            <span>{{ item.done ? 'Completed' : 'Pending' }}</span>
+          </article>
+        }
+      </div>
+    </section>
+  }
+
+  <div class="stats-grid">
+    <article class="stat-card">
+      <span class="label">ATS optimization</span>
+      <strong>{{ atsScore() }}<small>/100</small></strong>
+      <p>Highest resume ATS score detected in your profile.</p>
+    </article>
+
+    <article class="stat-card">
+      <span class="label">Applications</span>
+      <strong>{{ stats().totalApplications }}</strong>
+      <p>{{ stats().pendingReview }} currently active in your pipeline.</p>
+    </article>
+
+    <article class="stat-card">
+      <span class="label">Interviews</span>
+      <strong>{{ stats().interviewsUpcoming }}</strong>
+      <p>Upcoming or in-progress interview sessions.</p>
+    </article>
+
+    <article class="stat-card accent">
+      <span class="label">Best AI match</span>
+      <strong>
+        @if (stats().strongestMatch !== null) {
+          {{ stats().strongestMatch }}%
+        } @else {
+          --
+        }
+      </strong>
+      <p>Top recommendation from your current skill profile.</p>
+    </article>
+  </div>
+
+  <div class="content-grid">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Curated opportunities</h2>
+        <a routerLink="/candidate/recommendations">View all</a>
+      </div>
+
+      @if (recommendationsLoading()) {
+        <p class="panel-note">Refreshing recommendations in the background...</p>
+      }
+
+      @if (!recommendationsLoading() && recommendedJobs().length === 0) {
+        <p class="empty">No recommendations available yet. Upload or parse a stronger resume to improve matching.</p>
+      }
+
+      <div class="jobs-grid">
+        @for (job of recommendedJobs(); track job.jobId) {
+          <article class="job-card">
+            <div class="job-head">
+              <h3>{{ job.title }}</h3>
+              <span>{{ job.matchScore }}% fit</span>
+            </div>
+            <p>{{ job.companyName || 'Company not provided' }} • {{ job.location || 'Remote' }}</p>
+            <small>{{ job.matchReason || 'AI match generated from your profile and recent activity.' }}</small>
+            <a [routerLink]="['/candidate/jobs', job.jobId]">View details</a>
+          </article>
+        }
+      </div>
+    </section>
+
+    <aside class="panel side">
+      <h2>Upcoming interviews</h2>
+
+      @if (interviews().length === 0) {
+        <p class="empty">No scheduled interviews found.</p>
+      }
+
+      @for (interview of interviews(); track interview.sessionId) {
+        <article class="timeline-card">
+          <h3>{{ interview.interviewTitle || interview.jobTitle }}</h3>
+          <p>{{ interview.status }}</p>
+          <small>
+            {{ interview.scheduledAt ? (interview.scheduledAt | date: 'medium') : 'Date not set' }}
+          </small>
+        </article>
+      }
+    </aside>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Recent applications</h2>
+      <span>{{ applications().length }} records</span>
+    </div>
+
+    @if (applications().length === 0) {
+      <p class="empty">Applications will appear once you apply to roles.</p>
+    }
+
+    <div class="table">
+      @for (application of applications(); track application.applicationId) {
+        <article class="row">
+          <div>
+            <h3>{{ application.jobTitle }}</h3>
+            <small>{{ application.companyName || 'Company' }}</small>
+          </div>
+          <span class="status">{{ application.status }}</span>
+          <small>{{ application.appliedAt | date: 'mediumDate' }}</small>
+        </article>
+      }
+    </div>
+  </section>
+</section>

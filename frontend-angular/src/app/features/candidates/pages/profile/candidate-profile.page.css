@@ -1,0 +1,395 @@
+.candidate-profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+h1 {
+  margin: 0;
+  color: var(--jl-primary);
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+.page-header p {
+  margin: 0.35rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+.refresh,
+button {
+  border: 0;
+  border-radius: 10px;
+  background: var(--jl-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+}
+
+.refresh {
+  min-width: 120px;
+}
+
+.refresh:disabled,
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.banner {
+  margin: 0;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.banner.error {
+  background: #fff3f2;
+  color: var(--jl-danger);
+}
+
+.banner.success {
+  background: #ebfff4;
+  color: #0e7549;
+}
+
+.layout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.panel {
+  border: 1px solid var(--jl-border);
+  border-radius: var(--jl-radius-lg);
+  background: var(--jl-surface);
+  padding: 1rem;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.profile-form,
+.skill-form {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: var(--jl-ink-soft);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+input,
+textarea {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #f9fbff;
+  color: var(--jl-ink);
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.profile-image {
+  margin-top: 0.75rem;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--jl-border);
+}
+
+.inline-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.section-head span {
+  color: var(--jl-muted-text);
+}
+
+.skill-list {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skill-card {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 0.65rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.skill-card strong {
+  display: block;
+  font-size: 0.94rem;
+}
+
+.skill-card small {
+  color: var(--jl-muted-text);
+}
+
+.resume-panel {
+  grid-column: 1 / -1;
+}
+
+.resume-upload {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.checkbox input {
+  margin: 0;
+}
+
+.resume-list {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.resume-card {
+  border: 1px solid var(--jl-border);
+  border-radius: 12px;
+  background: #fbfcff;
+  padding: 0.8rem;
+}
+
+.resume-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.resume-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.resume-card small {
+  color: var(--jl-muted-text);
+}
+
+.resume-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.chip {
+  border-radius: 999px;
+  background: #edf3ff;
+  color: var(--jl-primary);
+  font-size: 0.74rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.chip.default {
+  background: #ddfaed;
+  color: #0c6d44;
+}
+
+.resume-actions {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.resume-insights {
+  margin-top: 0.8rem;
+  border: 1px solid var(--jl-border);
+  border-radius: 12px;
+  background: #f8faff;
+  padding: 0.85rem;
+}
+
+.resume-insights h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.insight-grid {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.insight-block {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0.75rem;
+}
+
+.insight-block h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.insight-block p {
+  margin: 0.55rem 0 0;
+  color: var(--jl-ink-soft);
+}
+
+.insight-block ul {
+  margin: 0.6rem 0 0;
+  padding-left: 1rem;
+  color: var(--jl-ink-soft);
+}
+
+.skills-inline {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.skills-inline span {
+  border-radius: 999px;
+  background: #edf3ff;
+  color: var(--jl-ink-soft);
+  font-size: 0.74rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.ats-score {
+  margin-top: 0.6rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.ats-score strong {
+  color: var(--jl-primary);
+  font-size: 1.45rem;
+}
+
+.ats-score span {
+  color: var(--jl-muted-text);
+}
+
+.ats-score small {
+  margin-left: auto;
+  color: var(--jl-muted-text);
+}
+
+.ats-grid {
+  margin-top: 0.65rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.ats-grid article {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 0.55rem;
+}
+
+.ats-grid span {
+  display: block;
+  color: var(--jl-muted-text);
+  font-size: 0.78rem;
+}
+
+.ats-grid strong {
+  margin-top: 0.3rem;
+  display: block;
+  color: var(--jl-primary);
+}
+
+.secondary {
+  background: #fff;
+  color: var(--jl-ink-soft);
+  border: 1px solid var(--jl-border);
+}
+
+.danger {
+  background: #fff3f2;
+  color: var(--jl-danger);
+  border: 1px solid #ffd7d2;
+}
+
+.empty {
+  margin: 0.75rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+@media (max-width: 1100px) {
+  .layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .resume-panel {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .page-header,
+  .resume-card header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .insight-grid,
+  .ats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ats-score {
+    flex-wrap: wrap;
+  }
+}

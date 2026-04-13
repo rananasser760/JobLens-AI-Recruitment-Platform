@@ -1,0 +1,54 @@
+<section class="recommendations-shell">
+  <header class="page-header">
+    <div>
+      <h1>Recommended Jobs</h1>
+      <p>Personalized opportunities ranked by your profile, ATS performance, and recent activity.</p>
+      @if (lastUpdated(); as updatedAt) {
+        <small>Last updated: {{ updatedAt | date: 'medium' }}</small>
+      }
+    </div>
+
+    <div class="header-actions">
+      <button type="button" class="secondary" routerLink="/candidate/jobs">Browse all jobs</button>
+      <button type="button" (click)="refreshFromAi()" [disabled]="loading() || refreshing()">
+        {{ refreshing() ? 'Refreshing from AI...' : 'Refresh AI ranking' }}
+      </button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (recommendations().length === 0 && !loading()) {
+    <article class="panel empty-state">
+      <h2>No recommendations yet</h2>
+      <p>Upload or parse a stronger resume, then refresh AI ranking.</p>
+      <a routerLink="/candidate/profile">Open profile</a>
+    </article>
+  }
+
+  <div class="cards-grid">
+    @for (job of recommendations(); track trackByJobId($index, job)) {
+      <article class="panel recommendation-card">
+        <div class="card-head">
+          <h2>{{ job.title }}</h2>
+          <span>{{ job.matchScore }}% fit</span>
+        </div>
+
+        <p class="meta">{{ job.companyName || 'Company not provided' }} · {{ job.location || 'Remote/Unspecified' }}</p>
+        <p class="reason">{{ job.matchReason || 'Matched based on profile and prior application behavior.' }}</p>
+
+        @if (job.matchingSkills.length > 0) {
+          <div class="skills">
+            @for (skill of job.matchingSkills; track skill) {
+              <span>{{ skill }}</span>
+            }
+          </div>
+        }
+
+        <a class="details-link" [routerLink]="['/candidate/jobs', job.jobId]">View details</a>
+      </article>
+    }
+  </div>
+</section>

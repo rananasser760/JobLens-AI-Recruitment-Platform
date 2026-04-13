@@ -1,0 +1,251 @@
+.interview-report-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.back-link {
+  display: inline-block;
+  color: var(--jl-primary);
+  text-decoration: none;
+  font-weight: 700;
+  margin-right: 0.7rem;
+  margin-bottom: 0.5rem;
+}
+
+h1 {
+  margin: 0;
+  color: var(--jl-primary);
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+.page-header p {
+  margin: 0.35rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+.refresh {
+  border: 0;
+  border-radius: 10px;
+  background: var(--jl-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+  min-width: 120px;
+}
+
+.refresh:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.banner {
+  margin: 0;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.banner.error {
+  background: #fff3f2;
+  color: var(--jl-danger);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.stat-card {
+  border: 1px solid var(--jl-border);
+  border-radius: var(--jl-radius-lg);
+  background: var(--jl-surface);
+  padding: 0.85rem;
+}
+
+.stat-card span {
+  display: block;
+  color: var(--jl-muted-text);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.stat-card strong {
+  margin-top: 0.45rem;
+  display: block;
+  color: var(--jl-primary);
+  font-size: 1.45rem;
+}
+
+.stat-card.accent {
+  background: linear-gradient(135deg, #072f75, #1f4ca9);
+  border-color: transparent;
+}
+
+.stat-card.accent span,
+.stat-card.accent strong {
+  color: #f2f7ff;
+}
+
+.panel {
+  border: 1px solid var(--jl-border);
+  border-radius: var(--jl-radius-lg);
+  background: var(--jl-surface);
+  padding: 1rem;
+}
+
+.summary h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.summary p {
+  margin: 0.45rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+.note {
+  margin-top: 0.8rem;
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 0.75rem;
+}
+
+.note h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.note p {
+  margin: 0.45rem 0 0;
+  color: var(--jl-ink-soft);
+}
+
+.layout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+ul {
+  margin: 0.75rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--jl-ink-soft);
+}
+
+li + li {
+  margin-top: 0.35rem;
+}
+
+.event-grid {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.event-grid article {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 0.6rem;
+}
+
+.event-grid span {
+  display: block;
+  color: var(--jl-muted-text);
+  font-size: 0.8rem;
+}
+
+.event-grid strong {
+  margin-top: 0.35rem;
+  display: block;
+  color: var(--jl-primary);
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.section-head h3 {
+  margin: 0;
+}
+
+.section-head span {
+  color: var(--jl-muted-text);
+}
+
+.question-list {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.question-card {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 0.7rem;
+}
+
+.question-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.question-card p {
+  margin: 0.45rem 0 0;
+  color: var(--jl-ink-soft);
+}
+
+.question-card small {
+  margin-top: 0.45rem;
+  display: block;
+  color: var(--jl-muted-text);
+}
+
+.empty {
+  margin: 0.75rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+@media (max-width: 1050px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .layout-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .stats-grid,
+  .event-grid {
+    grid-template-columns: 1fr;
+  }
+}

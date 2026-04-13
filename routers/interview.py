@@ -97,6 +97,15 @@ def _is_integrity_abandoned(integrity_id: Optional[int]) -> bool:
         db.close()
 
 
+def _is_ws_authorized(websocket: WebSocket) -> bool:
+    expected_key = os.getenv("JOBLENS_INTERNAL_API_KEY", "").strip()
+    if not expected_key:
+        return True
+
+    provided_key = (websocket.headers.get("x-api-key") or websocket.query_params.get("api_key") or "").strip()
+    return provided_key == expected_key
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -160,6 +169,11 @@ async def ws_interview(websocket: WebSocket, session_id: str):
     """
     Bidirectional WebSocket for the live interview.
     """
+    if not _is_ws_authorized(websocket):
+        await websocket.accept()
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
 
     if session_id not in INTERVIEW_SESSIONS:

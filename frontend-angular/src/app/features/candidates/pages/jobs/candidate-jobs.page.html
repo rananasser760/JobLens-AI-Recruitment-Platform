@@ -1,0 +1,129 @@
+<section class="candidate-jobs-page">
+  <header class="page-header">
+    <div>
+      <h1>Discover Careers</h1>
+      <p>Browse active opportunities tailored to your profile.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  <section class="panel filters">
+    <label>
+      Keyword
+      <input #keywordInput type="text" [value]="keyword()" (input)="onKeywordChanged(keywordInput.value)" placeholder="Role, skill, or company" />
+    </label>
+
+    <label>
+      Location
+      <input #locationInput type="text" [value]="location()" (input)="onLocationChanged(locationInput.value)" placeholder="Remote, Cairo, Dubai..." />
+    </label>
+
+    <label>
+      Employment type
+      <select #employmentTypeSelect [value]="employmentType()" (change)="onEmploymentTypeChanged(employmentTypeSelect.value)">
+        <option value="">All types</option>
+        @for (type of employmentTypes(); track type) {
+          <option [value]="type">{{ type }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Source
+      <select #sourceSelect [value]="source()" (change)="onSourceChanged(sourceSelect.value)">
+        <option value="">All sources</option>
+        @for (option of sources(); track option) {
+          <option [value]="option">{{ option }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Page size
+      <select #pageSizeSelect [value]="pageSize()" (change)="onPageSizeChanged(pageSizeSelect.value)">
+        @for (size of pageSizeOptions(); track size) {
+          <option [value]="size">{{ size }} per page</option>
+        }
+      </select>
+    </label>
+
+    <div class="filter-actions">
+      <button type="button" (click)="applyFilters()" [disabled]="loading()">Apply filters</button>
+      <button type="button" class="secondary" (click)="clearFilters()" [disabled]="loading()">Clear</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-head">
+      <h2>Open positions</h2>
+      <span>{{ totalCount() }} records · Page {{ pageNumber() }} of {{ totalPages() }}</span>
+    </div>
+
+    @if (loading() && jobs().length === 0) {
+      <app-loading-spinner [active]="true" message="Loading opportunities"></app-loading-spinner>
+    } @else if (jobs().length === 0) {
+      <p class="empty">No active jobs matched your current filters.</p>
+    } @else {
+      <div class="jobs-grid">
+        @for (job of jobs(); track job.id) {
+          <article class="job-card">
+            <header>
+              <div>
+                <h3>{{ job.title }}</h3>
+                <p>{{ job.companyName || 'Company' }} · {{ job.location || 'Location not set' }}</p>
+              </div>
+              <span class="source-chip">{{ job.source }}</span>
+            </header>
+
+            <div class="meta-chips">
+              <span>{{ job.employmentType }}</span>
+              @if (job.salaryRange) {
+                <span>{{ job.salaryRange }}</span>
+              }
+              <span>Posted {{ job.postedAt | date: 'mediumDate' }}</span>
+            </div>
+
+            <div class="skills">
+              @if (job.topSkills.length === 0) {
+                <span class="empty-skill">No skills tagged</span>
+              } @else {
+                @for (skill of job.topSkills; track skill) {
+                  <span>{{ skill }}</span>
+                }
+              }
+            </div>
+
+            <footer>
+              <button type="button" (click)="applyToJob(job.id)" [disabled]="shouldDisableApply(job)">
+                {{ getApplyLabel(job) }}
+              </button>
+              <a [routerLink]="['/candidate/jobs', job.id]">View details</a>
+            </footer>
+          </article>
+        }
+      </div>
+
+      @if (totalCount() > 0) {
+        <div class="pagination">
+          <button type="button" class="secondary" (click)="goToPreviousPage()" [disabled]="loading() || !hasPreviousPage()">
+            Previous
+          </button>
+          <span>Showing page {{ pageNumber() }} of {{ totalPages() }}</span>
+          <button type="button" class="secondary" (click)="goToNextPage()" [disabled]="loading() || !hasNextPage()">
+            Next
+          </button>
+        </div>
+      }
+    }
+  </section>
+</section>

@@ -1,0 +1,5 @@
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\_verify\Debug\net10.0\JobLens.Domain.GeneratedMSBuildEditorConfig.editorconfig
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\_verify\Debug\net10.0\JobLens.Domain.AssemblyInfoInputs.cache
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\_verify\Debug\net10.0\JobLens.Domain.AssemblyInfo.cs
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\_verify\Debug\net10.0\JobLens.Domain.csproj.CoreCompileInputs.cache
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\_verify\Debug\net10.0\JobLens.Domain.sourcelink.json

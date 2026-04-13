@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "JobLens.Domain/1.0.0": {
+        "runtime": {
+          "JobLens.Domain.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "JobLens.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

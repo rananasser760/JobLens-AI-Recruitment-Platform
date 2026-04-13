@@ -1,0 +1,153 @@
+<section class="job-detail">
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/recruiter/jobs">← Back to jobs</a>
+      <h1>Job Details</h1>
+      <p>Review and edit posting details, status, and required skills.</p>
+    </div>
+    <div class="header-actions">
+      @if (jobId(); as id) {
+        <a class="top-candidates-link" [routerLink]="['/recruiter/jobs', id, 'top-candidates']">Top candidates</a>
+      }
+      <button type="button" class="refresh" (click)="load()" [disabled]="loading() || saving() || addingSkill() || toggling()">
+        {{ loading() ? 'Refreshing...' : 'Refresh' }}
+      </button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  @if (job(); as currentJob) {
+    <section class="panel hero">
+      <div>
+        <h2>{{ currentJob.title }}</h2>
+        <p>{{ currentJob.companyName || 'Company' }} · {{ currentJob.location || 'Location not set' }}</p>
+      </div>
+      <div class="hero-meta">
+        <span>{{ currentJob.source }}</span>
+        <span>{{ currentJob.isActive ? 'Active' : 'Inactive' }}</span>
+      </div>
+    </section>
+
+    <div class="layout-grid">
+      <form class="panel form" [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <h3>Edit posting</h3>
+
+        <label>
+          Title
+          <input type="text" formControlName="title" />
+        </label>
+
+        <label>
+          Description
+          <textarea rows="4" formControlName="description"></textarea>
+        </label>
+
+        <label>
+          Requirements
+          <textarea rows="3" formControlName="requirements"></textarea>
+        </label>
+
+        <label>
+          Responsibilities
+          <textarea rows="3" formControlName="responsibilities"></textarea>
+        </label>
+
+        <div class="two-col">
+          <label>
+            Location
+            <input type="text" formControlName="location" />
+          </label>
+
+          <label>
+            Employment type
+            <select formControlName="employmentType">
+              @for (type of employmentTypes(); track type) {
+                <option [value]="type">{{ type }}</option>
+              }
+            </select>
+          </label>
+        </div>
+
+        <div class="two-col">
+          <label>
+            Salary range
+            <input type="text" formControlName="salaryRange" placeholder="e.g. 5k - 8k USD" />
+          </label>
+
+          <label>
+            Experience level
+            <input type="text" formControlName="experienceLevel" placeholder="Mid, Senior..." />
+          </label>
+        </div>
+
+        <div class="two-col">
+          <label>
+            Salary min
+            <input type="number" formControlName="salaryMin" min="0" />
+          </label>
+
+          <label>
+            Salary max
+            <input type="number" formControlName="salaryMax" min="0" />
+          </label>
+        </div>
+
+        <div class="two-col">
+          <label>
+            Expires at
+            <input type="datetime-local" formControlName="expiresAt" />
+          </label>
+
+          <label class="toggle-label">
+            <input type="checkbox" formControlName="isActive" />
+            Active listing
+          </label>
+        </div>
+
+        <div class="actions">
+          <button type="submit" [disabled]="saving() || form.invalid">{{ saving() ? 'Saving...' : 'Save changes' }}</button>
+          <button type="button" class="secondary" (click)="toggleStatus()" [disabled]="toggling()">{{ toggling() ? 'Updating...' : 'Toggle status' }}</button>
+        </div>
+      </form>
+
+      <section class="panel skills-panel">
+        <h3>Required skills</h3>
+
+        @if (currentJob.requiredSkills.length === 0) {
+          <p class="empty">No required skills configured yet.</p>
+        } @else {
+          <div class="skill-chips">
+            @for (skill of currentJob.requiredSkills; track skill) {
+              <span>{{ skill }}</span>
+            }
+          </div>
+        }
+
+        <div class="add-skill">
+          <label>
+            Skill name
+            <input #skillInput type="text" [value]="newSkill()" (input)="onNewSkillChanged(skillInput.value)" placeholder="TypeScript" [disabled]="addingSkill()" />
+          </label>
+
+          <label>
+            Importance (1-100)
+            <input #importanceInput type="number" min="1" max="100" [value]="newSkillImportance()" (input)="onNewSkillImportanceChanged(importanceInput.value)" [disabled]="addingSkill()" />
+          </label>
+
+          <button type="button" (click)="addSkill()" [disabled]="addingSkill() || !newSkill().trim()">
+            {{ addingSkill() ? 'Adding...' : 'Add skill' }}
+          </button>
+        </div>
+
+        <p class="hint">Skill removal requires skill IDs from backend job detail contract; currently only skill names are returned.</p>
+      </section>
+    </div>
+  }
+</section>

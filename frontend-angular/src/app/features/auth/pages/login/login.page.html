@@ -1,0 +1,42 @@
+<section class="auth-card">
+  <header>
+    <h2>Welcome back</h2>
+    <p>Sign in to continue to your hiring workspace.</p>
+  </header>
+
+  @if (error()) {
+    <p class="error-banner">{{ error() }}</p>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    <label>
+      Work email
+      <input type="email" formControlName="email" placeholder="name@company.com" autocomplete="email" />
+    </label>
+    @if (form.controls.email.touched && form.controls.email.invalid) {
+      <small class="error">Enter a valid work email.</small>
+    }
+
+    <label>
+      Password
+      <input
+        type="password"
+        formControlName="password"
+        placeholder="Enter your password"
+        autocomplete="current-password"
+      />
+    </label>
+    @if (form.controls.password.touched && form.controls.password.invalid) {
+      <small class="error">Password must be at least 8 characters.</small>
+    }
+
+    <button type="submit" [disabled]="submitting()">
+      {{ submitting() ? 'Signing in...' : 'Sign in' }}
+    </button>
+  </form>
+
+  <footer>
+    <a routerLink="/auth/forgot-password">Forgot password?</a>
+    <span>Need an account? <a routerLink="/auth/register">Create one</a></span>
+  </footer>
+</section>

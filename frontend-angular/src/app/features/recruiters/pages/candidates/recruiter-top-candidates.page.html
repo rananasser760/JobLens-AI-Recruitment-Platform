@@ -1,0 +1,62 @@
+<section class="top-candidates-shell">
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/recruiter/jobs">← Back to jobs</a>
+      <h1>Top Candidates</h1>
+      <p>Ranked applicants for this job based on ATS and interview performance.</p>
+    </div>
+    <button type="button" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (job(); as selectedJob) {
+    <article class="panel hero">
+      <h2>{{ selectedJob.title }}</h2>
+      <p>{{ selectedJob.companyName || 'Company' }} · {{ selectedJob.location || 'Location not set' }}</p>
+    </article>
+  }
+
+  <article class="panel table-panel">
+    <table>
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Candidate</th>
+          <th>Status</th>
+          <th>ATS</th>
+          <th>Interview</th>
+          <th>Combined</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (candidate of candidates(); track trackByApplicationId($index, candidate)) {
+          <tr>
+            <td>{{ candidate.rank ?? '-' }}</td>
+            <td>
+              <div class="candidate-name">{{ candidate.candidateName }}</div>
+              <div class="candidate-meta">{{ candidate.currentTitle || 'No title provided' }}</div>
+            </td>
+            <td>{{ candidate.status }}</td>
+            <td>{{ candidate.atsScore ?? '-' }}</td>
+            <td>{{ candidate.interviewScore ?? '-' }}</td>
+            <td>{{ candidate.rankingScore ?? '-' }}</td>
+            <td class="actions">
+              <a [routerLink]="['/recruiter/candidates', candidate.candidateId]">Profile</a>
+              <a [routerLink]="['/recruiter/applications', candidate.applicationId]">Application</a>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="7" class="empty">No ranked candidates found for this job yet.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </article>
+</section>

@@ -1,0 +1,155 @@
+<section class="interview-detail-page">
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/recruiter/interviews">← Back to interviews</a>
+      @if (sessionId()) {
+        <a class="back-link" [routerLink]="['/recruiter/interviews', sessionId(), 'report']">← Open report</a>
+      }
+      <h1>Interview Session Detail</h1>
+      <p>Session-level timeline, question responses, and integrity alerts.</p>
+    </div>
+    <div class="header-actions">
+      @if (canManageSchedule()) {
+        <button type="button" class="secondary-action" (click)="rescheduleInterview()" [disabled]="rescheduling() || cancelling() || loading()">
+          {{ rescheduling() ? 'Rescheduling...' : 'Reschedule' }}
+        </button>
+        <button type="button" class="danger-action" (click)="cancelInterview()" [disabled]="cancelling() || rescheduling() || loading()">
+          {{ cancelling() ? 'Cancelling...' : 'Cancel Interview' }}
+        </button>
+      }
+      <button type="button" class="refresh" (click)="load()" [disabled]="loading() || cancelling() || rescheduling()">
+        {{ loading() ? 'Refreshing...' : 'Refresh' }}
+      </button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  @if (session(); as currentSession) {
+    <section class="stats-grid">
+      <article class="stat-card">
+        <span>Status</span>
+        <strong>{{ formatStatus(currentSession.status) }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>Overall score</span>
+        <strong>{{ currentSession.overallScore ?? '--' }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>Answered</span>
+        <strong>{{ answeredCount() }} / {{ totalCount() }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>Integrity events</span>
+        <strong>{{ sortedEvents().length }}</strong>
+      </article>
+    </section>
+
+    <div class="layout-grid">
+      <section class="panel">
+        <h2>{{ currentSession.interviewTitle || currentSession.jobTitle }}</h2>
+        <ul>
+          <li><strong>Candidate:</strong> {{ currentSession.candidateName }}</li>
+          <li><strong>Job title:</strong> {{ currentSession.jobTitle }}</li>
+          <li><strong>Agent type:</strong> {{ currentSession.agentType }}</li>
+          <li><strong>Scheduled:</strong> {{ currentSession.scheduledAt ? (currentSession.scheduledAt | date: 'medium') : 'Not set' }}</li>
+          <li><strong>Started:</strong> {{ currentSession.startedAt ? (currentSession.startedAt | date: 'medium') : 'Not started' }}</li>
+          <li><strong>Ended:</strong> {{ currentSession.endedAt ? (currentSession.endedAt | date: 'medium') : 'Not ended' }}</li>
+          <li><strong>Session ID:</strong> {{ currentSession.id }}</li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h3>Integrity timeline</h3>
+          <span>{{ sortedEvents().length }} events</span>
+        </div>
+
+        @if (sortedEvents().length === 0) {
+          <p class="empty">No integrity events have been reported.</p>
+        } @else {
+          <div class="event-list">
+            @for (event of sortedEvents(); track event.id) {
+              <article class="event-card">
+                <header>
+                  <strong>{{ event.eventType }}</strong>
+                  <span>{{ event.detectedAt | date: 'mediumTime' }}</span>
+                </header>
+                <p>
+                  Confidence: {{ event.confidence ?? '--' }}
+                  @if (event.timestampSeconds !== null && event.timestampSeconds !== undefined) {
+                    · Timeline {{ event.timestampSeconds }}s
+                  }
+                </p>
+                @if (event.details) {
+                  <small>{{ event.details }}</small>
+                }
+              </article>
+            }
+          </div>
+        }
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="section-head">
+        <h3>Questions and answers</h3>
+        <span>{{ questions().length }} questions</span>
+      </div>
+
+      @if (questions().length === 0) {
+        <p class="empty">No interview questions are available for this session.</p>
+      } @else {
+        <div class="question-list">
+          @for (question of questions(); track question.id) {
+            <article class="question-card">
+              <header>
+                <strong>Q{{ question.orderIndex + 1 }}</strong>
+                <span>{{ question.isAnswered ? 'Answered' : 'Pending' }}</span>
+              </header>
+              <p>{{ question.questionText }}</p>
+              @if (question.answer?.answerText) {
+                <small>{{ question.answer?.answerText }}</small>
+              }
+            </article>
+          }
+        </div>
+      }
+    </section>
+  }
+
+  @if (showRescheduleModal()) {
+    <div class="modal-layer" (click)="closeRescheduleModal()">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reschedule-title" (click)="$event.stopPropagation()">
+        <h2 id="reschedule-title">Reschedule interview</h2>
+        <p>Choose a new interview date and time.</p>
+
+        <label>
+          Date & time
+          <input
+            #rescheduleDateInput
+            type="datetime-local"
+            [value]="rescheduleDateTime()"
+            (input)="onRescheduleDateTimeChanged(rescheduleDateInput.value)"
+            [disabled]="rescheduling()"
+          />
+        </label>
+
+        <div class="modal-actions">
+          <button type="button" class="secondary-action" (click)="closeRescheduleModal()" [disabled]="rescheduling()">
+            Cancel
+          </button>
+          <button type="button" class="refresh" (click)="submitRescheduleInterview()" [disabled]="rescheduling()">
+            {{ rescheduling() ? 'Rescheduling...' : 'Confirm reschedule' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</section>

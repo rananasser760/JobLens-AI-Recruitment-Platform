@@ -1,0 +1,118 @@
+<section class="interview-report-page">
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/recruiter/interviews">← Back to interviews</a>
+      @if (sessionId()) {
+        <a class="back-link" [routerLink]="['/recruiter/interviews', sessionId()]">← Session details</a>
+      }
+      <h1>Interview Report</h1>
+      <p>Recruiter drill-down for scoring, recommendation, and integrity outcomes.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (report(); as currentReport) {
+    <section class="stats-grid">
+      <article class="stat-card accent">
+        <span>Overall score</span>
+        <strong>{{ currentReport.overallScore ?? '--' }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>Duration</span>
+        <strong>{{ currentReport.durationMinutes }} min</strong>
+      </article>
+      <article class="stat-card">
+        <span>Cheating events</span>
+        <strong>{{ currentReport.cheatingReport.totalEvents }}</strong>
+      </article>
+      <article class="stat-card">
+        <span>Question scores</span>
+        <strong>{{ currentReport.questionScores.length }}</strong>
+      </article>
+    </section>
+
+    <section class="panel summary">
+      <h2>{{ currentReport.jobTitle }}</h2>
+      <p>{{ currentReport.candidateName }}</p>
+
+      @if (currentReport.aiFeedback) {
+        <article class="note">
+          <h3>AI feedback</h3>
+          <p>{{ currentReport.aiFeedback }}</p>
+        </article>
+      }
+
+      @if (currentReport.recommendation) {
+        <article class="note">
+          <h3>Recommendation</h3>
+          <p>{{ currentReport.recommendation }}</p>
+        </article>
+      }
+    </section>
+
+    <div class="layout-grid">
+      <section class="panel">
+        <h3>Integrity summary</h3>
+        <ul>
+          <li><strong>Cheating detected:</strong> {{ currentReport.cheatingReport.cheatingDetected ? 'Yes' : 'No' }}</li>
+          <li><strong>Total tab switches:</strong> {{ currentReport.cheatingReport.totalTabSwitches }}</li>
+          <li><strong>Total focus losses:</strong> {{ currentReport.cheatingReport.totalFocusLosses }}</li>
+        </ul>
+
+        @if (eventRows().length > 0) {
+          <div class="event-grid">
+            @for (row of eventRows(); track row[0]) {
+              <article>
+                <span>{{ row[0] }}</span>
+                <strong>{{ row[1] }}</strong>
+              </article>
+            }
+          </div>
+        } @else {
+          <p class="empty">No categorized integrity events were recorded.</p>
+        }
+      </section>
+
+      <section class="panel">
+        <h3>Timing</h3>
+        <ul>
+          <li><strong>Started:</strong> {{ currentReport.startedAt ? (currentReport.startedAt | date: 'medium') : 'Not captured' }}</li>
+          <li><strong>Ended:</strong> {{ currentReport.endedAt ? (currentReport.endedAt | date: 'medium') : 'Not captured' }}</li>
+          <li><strong>Duration:</strong> {{ currentReport.durationMinutes }} minutes</li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="section-head">
+        <h3>Question-by-question scoring</h3>
+        <span>{{ currentReport.questionScores.length }} items</span>
+      </div>
+
+      @if (currentReport.questionScores.length === 0) {
+        <p class="empty">No question-level scoring was returned for this report.</p>
+      } @else {
+        <div class="question-list">
+          @for (row of currentReport.questionScores; track row.questionText) {
+            <article class="question-card">
+              <header>
+                <strong>{{ row.category || 'General' }}</strong>
+                <span>Score: {{ row.score ?? '--' }}</span>
+              </header>
+              <p>{{ row.questionText }}</p>
+              @if (row.feedback) {
+                <small>{{ row.feedback }}</small>
+              }
+            </article>
+          }
+        </div>
+      }
+    </section>
+  }
+</section>

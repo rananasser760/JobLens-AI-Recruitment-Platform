@@ -1,0 +1,98 @@
+<section class="candidate-detail">
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/recruiter/candidates">← Back to candidate search</a>
+      <h1>Candidate Profile</h1>
+      <p>Deep recruiter view of profile, skills, and resume readiness.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (profile(); as candidate) {
+    <section class="panel hero">
+      <div>
+        <h2>{{ candidate.fullName || 'Candidate' }}</h2>
+        <p>{{ candidate.currentTitle || 'Current title not set' }}</p>
+      </div>
+      <div class="hero-meta">
+        <span>{{ candidate.yearsOfExperience ?? 0 }} years experience</span>
+        <span>{{ candidate.location || 'Location not set' }}</span>
+      </div>
+    </section>
+
+    <div class="layout-grid">
+      <section class="panel">
+        <h3>Contact</h3>
+        <ul>
+          <li><strong>Email:</strong> {{ candidate.email }}</li>
+          <li><strong>Phone:</strong> {{ candidate.phone || 'Not provided' }}</li>
+          <li><strong>LinkedIn:</strong> {{ candidate.linkedInUrl || 'Not provided' }}</li>
+          <li><strong>Portfolio:</strong> {{ candidate.portfolioUrl || 'Not provided' }}</li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h3>Summary</h3>
+        <p>{{ candidate.summary || 'No summary provided.' }}</p>
+      </section>
+
+      <section class="panel wide">
+        <h3>Skills</h3>
+
+        @if (candidate.skills.length === 0) {
+          <p class="empty">No skill records found.</p>
+        } @else {
+          <div class="skills-grid">
+            @for (skill of candidate.skills; track skill.id) {
+              <article class="skill-card">
+                <strong>{{ skill.skillName }}</strong>
+                <small>
+                  {{ skill.experienceYears ?? 0 }} year(s)
+                  @if (skill.proficiencyLevel) {
+                    · {{ skill.proficiencyLevel }}
+                  }
+                </small>
+              </article>
+            }
+          </div>
+        }
+      </section>
+
+      <section class="panel wide">
+        <h3>Resumes</h3>
+
+        @if (candidate.resumes.length === 0) {
+          <p class="empty">No resumes uploaded yet.</p>
+        } @else {
+          <div class="resume-list">
+            @for (resume of candidate.resumes; track resume.id) {
+              <article class="resume-card">
+                <div>
+                  <strong>{{ resume.fileName }}</strong>
+                  <small>
+                    Uploaded {{ resume.uploadedAt | date: 'mediumDate' }}
+                    @if (resume.fileType) {
+                      · {{ resume.fileType }}
+                    }
+                  </small>
+                </div>
+                <div class="resume-meta">
+                  <span>ATS: {{ resume.atsScore ?? '--' }}</span>
+                  @if (resume.isDefault) {
+                    <span class="default">Default</span>
+                  }
+                </div>
+              </article>
+            }
+          </div>
+        }
+      </section>
+    </div>
+  }
+</section>

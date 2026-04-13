@@ -1,0 +1,25 @@
+@if (open) {
+  <div class="dialog-backdrop" (click)="onBackdropClick($event)">
+    <section class="dialog-panel" role="dialog" aria-modal="true" [attr.aria-label]="title">
+      <header>
+        <h3>{{ title }}</h3>
+      </header>
+
+      <p>{{ message }}</p>
+
+      <footer>
+        <button type="button" class="secondary" (click)="onCancel()" [disabled]="busy">
+          {{ cancelLabel }}
+        </button>
+        <button
+          type="button"
+          [class]="danger ? 'danger' : ''"
+          (click)="onConfirm()"
+          [disabled]="busy"
+        >
+          {{ confirmLabel }}
+        </button>
+      </footer>
+    </section>
+  </div>
+}

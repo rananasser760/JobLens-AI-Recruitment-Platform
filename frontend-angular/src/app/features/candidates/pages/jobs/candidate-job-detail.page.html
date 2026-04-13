@@ -1,0 +1,89 @@
+<section class="candidate-job-detail">
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/candidate/jobs">← Back to jobs</a>
+      <h1>Job Details</h1>
+      <p>Review role details and apply directly from JobLens.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading() || applying()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  @if (job(); as currentJob) {
+    <section class="panel hero">
+      <div>
+        <h2>{{ currentJob.title }}</h2>
+        <p>{{ currentJob.companyName || 'Company' }} · {{ currentJob.location || 'Location not set' }}</p>
+      </div>
+      <div class="hero-meta">
+        <span>{{ currentJob.employmentType }}</span>
+        @if (currentJob.salaryRange) {
+          <span>{{ currentJob.salaryRange }}</span>
+        }
+      </div>
+    </section>
+
+    <div class="layout-grid">
+      <section class="panel">
+        <h3>Job description</h3>
+        <p class="multiline">{{ currentJob.description }}</p>
+
+        @if (currentJob.responsibilities) {
+          <h3>Responsibilities</h3>
+          <p class="multiline">{{ currentJob.responsibilities }}</p>
+        }
+
+        @if (currentJob.requirements) {
+          <h3>Requirements</h3>
+          <p class="multiline">{{ currentJob.requirements }}</p>
+        }
+      </section>
+
+      <aside class="panel side-panel">
+        <h3>Role snapshot</h3>
+
+        <ul>
+          <li><strong>Source:</strong> {{ currentJob.source }}</li>
+          <li><strong>Posted:</strong> {{ currentJob.postedAt | date: 'mediumDate' }}</li>
+          <li><strong>Applications:</strong> {{ currentJob.applicationCount }}</li>
+          @if (currentJob.expiresAt) {
+            <li><strong>Expires:</strong> {{ currentJob.expiresAt | date: 'mediumDate' }}</li>
+          }
+        </ul>
+
+        <h3>Skills</h3>
+        @if (currentJob.requiredSkills.length === 0) {
+          <p class="empty">No required skills listed.</p>
+        } @else {
+          <div class="skills">
+            @for (skill of currentJob.requiredSkills; track skill) {
+              <span>{{ skill }}</span>
+            }
+          </div>
+        }
+
+        @if (currentJob.source === 'Scraped' && currentJob.externalUrl) {
+          <a class="external-link" [href]="currentJob.externalUrl" target="_blank" rel="noopener">Apply on source website</a>
+        } @else {
+          <label>
+            Optional cover letter
+            <textarea #coverInput rows="4" [value]="coverLetter()" (input)="onCoverLetterChanged(coverInput.value)" [disabled]="applying() || hasApplied()" placeholder="Add a short note to support your application"></textarea>
+          </label>
+
+          <button type="button" (click)="applyNow()" [disabled]="hasApplied() || applying()">
+            {{ hasApplied() ? 'Already applied' : (applying() ? 'Applying...' : 'Apply now') }}
+          </button>
+        }
+      </aside>
+    </div>
+  }
+</section>

@@ -1,0 +1,249 @@
+<section class="applications-page">
+  <header class="page-header">
+    <div>
+      <h1>Applications Pipeline</h1>
+      <p>Manage candidate progression with metadata-driven statuses and bulk updates.</p>
+    </div>
+    <button type="button" class="refresh" (click)="loadContext()" [disabled]="loading() || submitting()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  <app-error-retry [visible]="!!error()" [message]="error() || ''" [busy]="loading() || submitting() || scheduling()" (retry)="loadContext()"></app-error-retry>
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  <app-loading-spinner [active]="loading()" message="Loading applications pipeline"></app-loading-spinner>
+
+  <section class="controls panel">
+    <label>
+      Job
+      <select #jobSelect [value]="selectedJobId() || ''" (change)="onJobChanged(jobSelect.value)" [disabled]="loading() || jobs().length === 0">
+        @for (job of jobs(); track job.id) {
+          <option [value]="job.id">{{ job.title }} · {{ job.companyName || 'Company' }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Filter status
+      <select #statusFilter [value]="filterStatus()" (change)="onFilterStatusChanged(statusFilter.value)" [disabled]="loading() || jobs().length === 0">
+        <option value="">All statuses</option>
+        @for (status of statusOptions(); track status) {
+          <option [value]="status">{{ status }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Page size
+      <select #pageSizeSelect [value]="pageSize()" (change)="onPageSizeChanged(pageSizeSelect.value)" [disabled]="loading() || jobs().length === 0">
+        @for (size of pageSizeOptions(); track size) {
+          <option [value]="size">{{ size }} per page</option>
+        }
+      </select>
+    </label>
+  </section>
+
+  <section class="panel list-panel">
+    <div class="table-head">
+      <h2>Candidates</h2>
+      <span>{{ totalCount() }} records · Page {{ pageNumber() }} of {{ totalPages() }}</span>
+    </div>
+
+    @if (loading() && jobs().length > 0) {
+      <app-loading-spinner [active]="true" message="Loading job applications"></app-loading-spinner>
+    } @else if (jobs().length === 0) {
+      <p class="empty">Create at least one job to review incoming applications.</p>
+    } @else if (applications().length === 0) {
+      <p class="empty">No applications found for the selected job/filter.</p>
+    } @else {
+      <div class="table">
+        <div class="row header-row">
+          <label class="checkbox">
+            <input type="checkbox" [checked]="allSelected()" (change)="onSelectAllChange($any($event.target).checked)" />
+            Select all
+          </label>
+          <span>Candidate</span>
+          <span>Status</span>
+          <span>Applied</span>
+          <span>ATS</span>
+          <span>Rank</span>
+          <span>Interview</span>
+          <span>Quick action</span>
+        </div>
+
+        @for (item of applications(); track item.applicationId) {
+          <div class="row">
+            <label class="checkbox">
+              <input type="checkbox" [checked]="isSelected(item.applicationId)" (change)="onSelectionChange(item.applicationId, $any($event.target).checked)" />
+            </label>
+            <div>
+              <strong>{{ item.candidateName }}</strong>
+              <small>{{ item.candidateEmail }}</small>
+              <button type="button" class="details-link" (click)="openDetails(item.applicationId)">
+                View details
+              </button>
+            </div>
+            <span class="status">{{ item.status }}</span>
+            <span>{{ item.appliedAt | date: 'mediumDate' }}</span>
+            <span>{{ item.atsScore ?? '--' }}</span>
+            <span>{{ item.rank ?? '--' }}</span>
+            <span>{{ item.hasInterview ? 'Yes' : 'No' }}</span>
+            <div class="quick-action">
+              <select #rowStatus [value]="getRowStatus(item.applicationId)" (change)="onRowStatusChanged(item.applicationId, rowStatus.value)" [disabled]="isRowSubmitting(item.applicationId) || submitting()">
+                <option value="">Select status</option>
+                @for (status of statusOptions(); track status) {
+                  <option [value]="status">{{ status }}</option>
+                }
+              </select>
+
+              <input #rowNote type="text" [value]="getRowNotes(item.applicationId)" (input)="onRowNotesChanged(item.applicationId, rowNote.value)" [disabled]="isRowSubmitting(item.applicationId) || submitting()" placeholder="Optional note" />
+
+              <button type="button" (click)="applySingleStatusUpdate(item.applicationId)" [disabled]="!getRowStatus(item.applicationId) || isRowSubmitting(item.applicationId) || submitting()">
+                {{ isRowSubmitting(item.applicationId) ? 'Updating...' : 'Update' }}
+              </button>
+
+              <button type="button" class="secondary-action" (click)="openScheduleModal(item)" [disabled]="!canScheduleInterview(item) || scheduling() || submitting()">
+                {{ item.hasInterview ? 'Interview exists' : (scheduling() ? 'Scheduling...' : 'Schedule interview') }}
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (totalCount() > 0) {
+        <div class="pagination">
+          <button type="button" class="secondary" (click)="goToPreviousPage()" [disabled]="loading() || !hasPreviousPage()">
+            Previous
+          </button>
+          <span>Showing page {{ pageNumber() }} of {{ totalPages() }}</span>
+          <button type="button" class="secondary" (click)="goToNextPage()" [disabled]="loading() || !hasNextPage()">
+            Next
+          </button>
+        </div>
+      }
+    }
+  </section>
+
+  <section class="panel bulk-panel">
+    <div>
+      <h2>Bulk Update</h2>
+      <p>{{ selectedCount() }} application(s) selected.</p>
+    </div>
+
+    <div class="bulk-controls">
+      <label>
+        New status
+        <select #bulkStatusSelect [value]="bulkStatus()" (change)="onBulkStatusChanged(bulkStatusSelect.value)" [disabled]="!hasSelection() || submitting()">
+          <option value="">Select status</option>
+          @for (status of statusOptions(); track status) {
+            <option [value]="status">{{ status }}</option>
+          }
+        </select>
+      </label>
+
+      <label>
+        Notes (optional)
+        <textarea #bulkNotesInput rows="3" [value]="bulkNotes()" (input)="onBulkNotesChanged(bulkNotesInput.value)" [disabled]="!hasSelection() || submitting()" placeholder="Add context for candidate communication or internal tracking"></textarea>
+      </label>
+
+      <button type="button" (click)="openBulkConfirmation()" [disabled]="!hasSelection() || !bulkStatus() || submitting()">
+        {{ submitting() ? 'Applying...' : 'Apply to selected' }}
+      </button>
+    </div>
+  </section>
+
+  @if (bulkResult(); as result) {
+    <section class="panel result-panel" [class.has-issues]="bulkResultHasIssues()">
+      <h2>Last bulk update summary</h2>
+
+      @if (bulkResultHasIssues()) {
+        <p class="result-alert">Some records were skipped or could not be updated. Review details below.</p>
+      }
+
+      <div class="result-grid">
+        <article>
+          <span>Requested</span>
+          <strong>{{ result.requestedCount }}</strong>
+        </article>
+        <article>
+          <span>Updated</span>
+          <strong>{{ result.updatedCount }}</strong>
+        </article>
+        <article>
+          <span>Skipped</span>
+          <strong>{{ result.skippedCount }}</strong>
+        </article>
+      </div>
+
+      @if (result.notFoundIds.length > 0) {
+        <p class="result-note">Not found IDs: {{ result.notFoundIds.join(', ') }}</p>
+      }
+
+      @if (result.unauthorizedIds.length > 0) {
+        <p class="result-note">Unauthorized IDs: {{ result.unauthorizedIds.join(', ') }}</p>
+      }
+    </section>
+  }
+
+  @if (showConfirmModal()) {
+    <div class="modal-layer" (click)="closeBulkConfirmation()">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bulk-confirm-title" (click)="$event.stopPropagation()">
+        <h2 id="bulk-confirm-title">Confirm bulk update</h2>
+        <p>
+          Apply status <strong>{{ bulkStatus() }}</strong> to
+          <strong>{{ selectedCount() }}</strong> selected application(s)?
+        </p>
+
+        @if (bulkNotes().trim()) {
+          <p class="modal-note">Notes: {{ bulkNotes().trim() }}</p>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary" (click)="closeBulkConfirmation()" [disabled]="submitting()">Cancel</button>
+          <button type="button" (click)="confirmBulkStatusUpdate()" [disabled]="submitting()">
+            {{ submitting() ? 'Applying...' : 'Confirm update' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (showScheduleModal()) {
+    <div class="modal-layer" (click)="closeScheduleModal()">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="schedule-title" (click)="$event.stopPropagation()">
+        <h2 id="schedule-title">Schedule interview</h2>
+        <p><strong>{{ scheduleCandidateName() }}</strong> · {{ scheduleJobTitle() }}</p>
+
+        <label>
+          Interview title
+          <input #scheduleTitleInput type="text" [value]="scheduleTitle()" (input)="onScheduleTitleChanged(scheduleTitleInput.value)" [disabled]="scheduling()" />
+        </label>
+
+        <label>
+          Scheduled date & time
+          <input #scheduleDateInput type="datetime-local" [value]="scheduleDateTime()" (input)="onScheduleDateTimeChanged(scheduleDateInput.value)" [disabled]="scheduling()" />
+        </label>
+
+        <label>
+          Interview agent
+          <select #agentTypeSelect [value]="scheduleAgentType()" (change)="onScheduleAgentTypeChanged(agentTypeSelect.value)" [disabled]="scheduling()">
+            @for (agentType of scheduleAgentTypes(); track agentType) {
+              <option [value]="agentType">{{ agentType }}</option>
+            }
+          </select>
+        </label>
+
+        <div class="modal-actions">
+          <button type="button" class="secondary" (click)="closeScheduleModal()" [disabled]="scheduling()">Cancel</button>
+          <button type="button" (click)="submitScheduleInterview()" [disabled]="scheduling()">
+            {{ scheduling() ? 'Scheduling...' : 'Confirm schedule' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</section>

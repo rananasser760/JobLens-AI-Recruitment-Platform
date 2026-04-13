@@ -1,0 +1,37 @@
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" routerLink="/recruiter/dashboard">JobLens</a>
+
+    <nav class="nav-links">
+      <a routerLink="/recruiter/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+        Dashboard
+      </a>
+      <a routerLink="/recruiter/profile" routerLinkActive="active">Profile</a>
+      <a routerLink="/recruiter/jobs" routerLinkActive="active">Jobs</a>
+      <a routerLink="/recruiter/candidates" routerLinkActive="active">Candidates</a>
+      <a routerLink="/recruiter/applications" routerLinkActive="active">Applications</a>
+      <a routerLink="/recruiter/interviews" routerLinkActive="active">Interviews</a>
+      @if (isAdmin()) {
+        <a routerLink="/recruiter/admin" routerLinkActive="active">Admin Operations</a>
+      }
+    </nav>
+
+    <button class="ghost-btn" type="button" (click)="logout()" [disabled]="signingOut()">
+      {{ signingOut() ? 'Signing out...' : 'Sign out' }}
+    </button>
+  </aside>
+
+  <section class="workspace">
+    <header class="topbar">
+      <input class="search" type="search" placeholder="Search candidates, jobs, or reports..." />
+      <div class="identity">
+        <span class="role-chip">{{ roleLabel() }}</span>
+        <strong>{{ displayName() }}</strong>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <router-outlet></router-outlet>
+    </main>
+  </section>
+</div>

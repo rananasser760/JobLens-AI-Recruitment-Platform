@@ -8,6 +8,7 @@ python-dotenv
 
 # Database and ORM
 sqlalchemy
+pyodbc
 
 # LLM providers
 openai

@@ -1,0 +1,79 @@
+<section class="application-detail-page">
+  <header class="page-header">
+    <div>
+      <a class="back-link" [routerLink]="[backLink]">← Back to applications</a>
+      <h1>Application Details</h1>
+      <p>Track your application progress and interview readiness in one place.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  <app-loading-spinner [active]="loading()" message="Loading application details"></app-loading-spinner>
+
+  @if (application(); as item) {
+    <section class="panel hero">
+      <div>
+        <h2>{{ item.candidateName }}</h2>
+        <p>{{ item.jobTitle }} · {{ item.companyName || 'Company' }}</p>
+      </div>
+      <span class="status-chip">{{ formatStatus(item.status) }}</span>
+    </section>
+
+    <div class="detail-grid">
+      <section class="panel">
+        <h3>Application summary</h3>
+        <ul>
+          <li><strong>Application ID:</strong> {{ item.id }}</li>
+          <li><strong>Candidate email:</strong> {{ item.candidateEmail }}</li>
+          <li><strong>Candidate phone:</strong> {{ item.candidatePhone || 'Not provided' }}</li>
+          <li><strong>Applied at:</strong> {{ item.appliedAt | date: 'medium' }}</li>
+          <li><strong>Applied via:</strong> {{ item.appliedVia }}</li>
+          <li><strong>ATS score:</strong> {{ item.atsScore ?? '--' }}</li>
+          <li><strong>Interview linked:</strong> {{ item.hasInterview ? 'Yes' : 'No' }}</li>
+          <li><strong>Interview score:</strong> {{ item.interviewScore ?? '--' }}</li>
+        </ul>
+
+        @if (item.coverLetter) {
+          <div class="note-block">
+            <h4>Cover letter</h4>
+            <p>{{ item.coverLetter }}</p>
+          </div>
+        }
+      </section>
+
+      <section class="panel actions-panel">
+        <h3>Actions</h3>
+
+        <div class="action-links">
+          <a [routerLink]="['/candidate/jobs', item.jobId]">View job details</a>
+        </div>
+
+        <button type="button" class="secondary" (click)="withdraw()" [disabled]="!canWithdraw() || withdrawing()">
+          {{ withdrawing() ? 'Withdrawing...' : 'Withdraw application' }}
+        </button>
+      </section>
+    </div>
+  }
+
+  <app-confirm-dialog
+    [open]="confirmWithdrawOpen()"
+    title="Withdraw application"
+    [message]="'Withdraw your application for ' + (application()?.jobTitle || 'this role') + '?'"
+    confirmLabel="Withdraw"
+    cancelLabel="Keep"
+    [danger]="true"
+    [busy]="withdrawing()"
+    (cancel)="cancelWithdrawConfirmation()"
+    (confirm)="confirmWithdraw()"
+  ></app-confirm-dialog>
+</section>
