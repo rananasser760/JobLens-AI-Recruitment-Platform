@@ -340,7 +340,7 @@ class JobLensScraper:
     """Scrapes Wuzzuf and LinkedIn, then stores results in the jobs collection."""
 
     def __init__(self) -> None:
-        self.collection = store.scraped_jobs_col
+        self.collection = store.jobs_col
         self.model = get_scraper_embedding_model()
         self.settings = get_recruitment_settings()
         self._llm_client = None
@@ -778,7 +778,7 @@ async def run_scraper(
         return {
             "processed_categories": 0,
             "upserted_jobs": 0,
-            "total_jobs": store.scraped_jobs_col.count(),
+            "total_jobs": store.jobs_col.count(),
             "warning": "Playwright is unavailable on the active Windows asyncio event loop (subprocess unsupported).",
         }
 
@@ -1021,6 +1021,6 @@ async def run_scraper(
     return {
         "processed_categories": len(target_categories),
         "upserted_jobs": total_upserted,
-        "total_jobs": store.scraped_jobs_col.count(),
+        "total_jobs": store.jobs_col.count(),
         "stats": stats,
     }

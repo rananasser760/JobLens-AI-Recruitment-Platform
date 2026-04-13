@@ -867,25 +867,23 @@ async def analyze_video(request: VideoAnalysisRequest):
                 "CHEATING_ITEM_MOBILE": ("Mobile phone detected in frame (YOLO)", "high"),
             }
             
-            if alert and alert in alert_map:
-                desc, sev = alert_map[alert]
-                events.append({
-                    "eventType": alert,
-                    "severity": sev,
-                    "source": "vision",
-                    "description": desc,
-                    "mediaReference": None,
-                })
-                
-            if yolo_alert and yolo_alert in alert_map and yolo_alert != alert:
-                desc, sev = alert_map[yolo_alert]
-                events.append({
-                    "eventType": yolo_alert,
-                    "severity": sev,
-                    "source": "yolo",
-                    "description": desc,
-                    "mediaReference": None,
-                })
+            consumed = proc.consume_alerts() if hasattr(proc, "consume_alerts") else []
+            if not consumed:
+                # Fallback for robustness
+                if alert: consumed.append(alert)
+                if yolo_alert and yolo_alert != alert: consumed.append(yolo_alert)
+            
+            for a in consumed:
+                if a in alert_map:
+                    desc, sev = alert_map[a]
+                    source = "yolo" if "YOLO" in desc else "vision"
+                    events.append({
+                        "eventType": a,
+                        "severity": sev,
+                        "source": source,
+                        "description": desc,
+                        "mediaReference": None,
+                    })
 
             # Append the state to reason for debugging if needed, but return events clearly
             reason_str = None

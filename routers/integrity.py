@@ -520,6 +520,7 @@ class WebSessionProcessor:
             "abandoned":False,"no_face_countdown":None,
             "dropped_frames":0,
         }
+        self._unpolled_alerts = set()
 
         # --- FIX: Removed cv2.VideoCapture() completely ---
         # Instead of pulling frames from hardware, we queue them from the browser
@@ -595,6 +596,8 @@ class WebSessionProcessor:
             if alert:
                 elapsed=time.time()-self._session_start
                 self.alerts.add(alert,frame)
+                with self._lock:
+                    self._unpolled_alerts.add(alert)
                 db=db_factory()
                 try:
                     last=db.query(DBYoloAlert).filter(
@@ -674,7 +677,10 @@ class WebSessionProcessor:
                             alert=a_type; push_log(f"[DETECT] {a_type}",a_meta,self.session_id); break
 
             score=self.alerts.suspicion_score(); self.alerts.update_score_history(score)
-            if alert: pending.append((alert,time.time()-self._session_start))
+            if alert: 
+                pending.append((alert,time.time()-self._session_start))
+                with self._lock:
+                    self._unpolled_alerts.add(alert)
 
             self._frame_count+=1
             if self._frame_count%30==0:
@@ -741,6 +747,12 @@ class WebSessionProcessor:
 
     def get_state(self) -> dict:
         with self._lock: return dict(self._latest_state)
+
+    def consume_alerts(self) -> list:
+        with self._lock:
+            lst = list(self._unpolled_alerts)
+            self._unpolled_alerts.clear()
+            return lst
 
     def finalize(self, db):
         self._running=False

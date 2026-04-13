@@ -103,7 +103,11 @@ builder.Services.AddHangfire(config =>
         });
 });
 builder.Services.AddHangfireServer();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true;
+    options.MaximumReceiveMessageSize = 5 * 1024 * 1024; // 5 MB to allow large base64 video and audio frames
+});
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddTransient<CorrelationIdHandler>();
