@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -22,7 +22,7 @@ const STATUS_OPTIONS: ApplicationStatus[] = [
 
 @Component({
   selector: 'app-candidate-applications-page',
-  imports: [CommonModule, RouterLink, ConfirmDialogComponent],
+  imports: [CommonModule, RouterLink, DatePipe, ConfirmDialogComponent],
   templateUrl: './candidate-applications.page.html',
   styleUrls: ['./candidate-applications.page.css']
 })

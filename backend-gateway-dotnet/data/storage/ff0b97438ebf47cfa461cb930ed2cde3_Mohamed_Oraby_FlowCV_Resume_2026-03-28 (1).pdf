@@ -1,0 +1,122 @@
+<!DOCTYPE html><html lang="en"><head>
+  <script type="module" src="/@vite/client"></script>
+
+  <meta charset="utf-8">
+  <title>JobLens – AI Recruitment Platform</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="JobLens – The AI-powered recruitment platform connecting top talent with great opportunities.">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet">
+  <!-- Font Awesome 6 Free -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+<link rel="stylesheet" href="styles.css"><style ng-app-id="ng">
+[_nghost-ng-c2031223913] {
+  display: block;
+  min-height: 100vh;
+}
+/*# sourceMappingURL=/app.css.map */</style><style ng-app-id="ng">
+.spinner-host[_ngcontent-ng-c575926449] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--jl-muted-text);
+  font-size: 0.9rem;
+}
+.spinner-dot[_ngcontent-ng-c575926449] {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 2px solid #c8d7fb;
+  border-top-color: var(--jl-primary);
+  animation: _ngcontent-ng-c575926449_spin 0.75s linear infinite;
+}
+.spinner-host.overlay[_ngcontent-ng-c575926449] {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 1rem 1.25rem;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.65),
+      rgba(255, 255, 255, 0));
+}
+.spinner-host.overlay[_ngcontent-ng-c575926449]   .spinner-text[_ngcontent-ng-c575926449], 
+.spinner-host.overlay[_ngcontent-ng-c575926449]   .spinner-dot[_ngcontent-ng-c575926449] {
+  background: #fff;
+}
+.spinner-host.overlay[_ngcontent-ng-c575926449]   .spinner-text[_ngcontent-ng-c575926449] {
+  border: 1px solid var(--jl-border);
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+  padding: 0.25rem 0.7rem 0.28rem 0.1rem;
+  box-shadow: 0 6px 22px rgba(10, 22, 48, 0.12);
+}
+.spinner-host.overlay[_ngcontent-ng-c575926449]   .spinner-dot[_ngcontent-ng-c575926449] {
+  border-width: 2px;
+  border-color: #d8e3fb;
+  border-top-color: var(--jl-primary);
+  border-right-color: var(--jl-primary);
+  border-radius: 999px;
+  padding: 0.08rem;
+  margin-right: -0.35rem;
+  box-shadow: 0 6px 22px rgba(10, 22, 48, 0.12);
+}
+@keyframes _ngcontent-ng-c575926449_spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/*# sourceMappingURL=/loading-spinner.component.css.map */</style><style ng-app-id="ng">
+[_nghost-ng-c3563464409] {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--jl-page-bg);
+}
+.state-card[_ngcontent-ng-c3563464409] {
+  border: 1px solid var(--jl-border);
+  border-radius: var(--jl-radius-xl);
+  padding: 2rem;
+  background: #fff;
+  width: min(520px, 92vw);
+  text-align: center;
+}
+h1[_ngcontent-ng-c3563464409] {
+  margin: 0;
+  color: var(--jl-primary);
+  font-size: 3rem;
+}
+h2[_ngcontent-ng-c3563464409] {
+  margin: 0.5rem 0 0;
+  color: var(--jl-ink);
+}
+p[_ngcontent-ng-c3563464409] {
+  margin: 0.75rem 0 1.25rem;
+  color: var(--jl-muted-text);
+}
+a[_ngcontent-ng-c3563464409] {
+  text-decoration: none;
+  color: #fff;
+  background: var(--jl-primary);
+  padding: 0.6rem 1rem;
+  border-radius: 10px;
+  display: inline-block;
+  font-weight: 700;
+}
+/*# sourceMappingURL=/not-found.page.css.map */</style></head>
+<body><!--nghm--><script type="text/javascript" id="ng-event-dispatch-contract">(()=>{function p(t,n,r,o,e,i,f,m){return{eventType:t,event:n,targetElement:r,eic:o,timeStamp:e,eia:i,eirp:f,eiack:m}}function u(t){let n=[],r=e=>{n.push(e)};return{c:t,q:n,et:[],etc:[],d:r,h:e=>{r(p(e.type,e,e.target,t,Date.now()))}}}function s(t,n,r){for(let o=0;o<n.length;o++){let e=n[o];(r?t.etc:t.et).push(e),t.c.addEventListener(e,t.h,r)}}function c(t,n,r,o,e=window){let i=u(t);e._ejsas||(e._ejsas={}),e._ejsas[n]=i,s(i,r),s(i,o,!0)}window.__jsaction_bootstrap=c;})();
+</script><script>window.__jsaction_bootstrap(document.body,"ng",["click"],[]);</script>
+  <app-root ng-version="21.2.8" _nghost-ng-c2031223913="" ngh="2" ng-server-context="ssr"><router-outlet _ngcontent-ng-c2031223913=""></router-outlet><app-not-found-page _nghost-ng-c3563464409="" ngh="0"><section _ngcontent-ng-c3563464409="" class="state-card"><h1 _ngcontent-ng-c3563464409="">404</h1><h2 _ngcontent-ng-c3563464409="">Page not found</h2><p _ngcontent-ng-c3563464409="">The page you requested does not exist in the current release scope.</p><a _ngcontent-ng-c3563464409="" routerlink="/auth/login" href="/auth/login" jsaction="click:;">Go to login</a></section></app-not-found-page><!--container--><app-loading-spinner _ngcontent-ng-c2031223913="" variant="overlay" message="Loading data" _nghost-ng-c575926449="" ngh="1"><!--container--></app-loading-spinner></app-root>
+<script src="main.js" type="module"></script>
+<link rel="modulepreload" href="chunk-6LSYER7L.js">
+
+
+<script id="ng-state" type="application/json">{"__nghData__":[{},{"t":{"0":"t34"},"c":{"0":[]}},{"c":{"0":[{"i":"c3563464409","r":1}]}}]}</script></body></html>

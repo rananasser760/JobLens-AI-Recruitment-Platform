@@ -92,6 +92,51 @@
         <input type="datetime-local" formControlName="expiresAt" />
       </label>
 
+      <h2>Interview defaults</h2>
+      <div class="two-col">
+        <label>
+          Interview agent type
+          <select formControlName="interviewAgentType">
+            <option value="Mixed">Mixed</option>
+            <option value="Technical">Technical</option>
+            <option value="Behavioral">Behavioral</option>
+          </select>
+        </label>
+        <label>
+          Max questions
+          <input type="number" min="1" max="20" formControlName="interviewMaxQuestions" />
+        </label>
+      </div>
+
+      <label>
+        Evaluation criteria
+        <textarea rows="3" formControlName="interviewEvaluationCriteria" placeholder="Technical depth, communication, architecture decisions"></textarea>
+      </label>
+
+      <label>
+        Focus skills/topics (comma separated)
+        <input type="text" formControlName="interviewFocusSkills" placeholder="Angular, RxJS, ASP.NET Core" />
+      </label>
+
+      <div class="three-col">
+        <label>
+          Question time limit (seconds)
+          <input type="number" min="30" formControlName="interviewQuestionTimeLimitSeconds" />
+        </label>
+        <label>
+          Total duration (minutes)
+          <input type="number" min="10" formControlName="interviewTotalDurationMinutes" />
+        </label>
+        <label>
+          Proctoring strictness
+          <select formControlName="interviewProctoringStrictness">
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+          </select>
+        </label>
+      </div>
+
       <div class="actions">
         <button type="submit" [disabled]="saving() || form.invalid">{{ saving() ? 'Creating...' : 'Create job' }}</button>
         <a class="secondary-link" routerLink="/recruiter/jobs">Cancel</a>

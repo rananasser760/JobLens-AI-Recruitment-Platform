@@ -22,6 +22,7 @@ public sealed class JobPosting : BaseEntity
     public string Currency { get; set; } = "USD";
     public string ExperienceLevel { get; set; } = string.Empty;
     public string SkillsJson { get; set; } = "[]";
+    public string InterviewDefaultsJson { get; set; } = "{}";
     public string MetadataJson { get; set; } = "{}";
     public string ContentHash { get; set; } = string.Empty;
     public DateTime? PostedAtUtc { get; set; }

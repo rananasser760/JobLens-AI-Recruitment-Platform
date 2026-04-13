@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, map, of } from 'rxjs';
@@ -11,7 +11,7 @@ import { ResumeDto } from '../../../../core/models/resume.model';
 
 @Component({
   selector: 'app-candidate-job-detail-page',
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, DatePipe],
   templateUrl: './candidate-job-detail.page.html',
   styleUrl: './candidate-job-detail.page.css'
 })

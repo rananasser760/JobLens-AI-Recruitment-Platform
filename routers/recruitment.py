@@ -68,11 +68,11 @@ async def get_scraped_jobs(
         where = {"location": location} if location else None
         if keyword:
             query_vector = get_scraper_embedding_model().encode(keyword).tolist()
-            result = store.jobs_col.query(query_embeddings=[query_vector], n_results=limit, where=where)
+            result = store.scraped_jobs_col.query(query_embeddings=[query_vector], n_results=limit, where=where)
             ids = result["ids"][0]
             metadatas = result["metadatas"][0]
         else:
-            result = store.jobs_col.get(limit=limit, where=where)
+            result = store.scraped_jobs_col.get(limit=limit, where=where)
             ids = result.get("ids", [])
             metadatas = result.get("metadatas", [])
 
@@ -84,12 +84,23 @@ async def get_scraped_jobs(
             except Exception:
                 pass
 
+            source_url = str(metadata.get("job_page_link", "") or detail.get("job_page_link", "") or "")
+            apply_link = str(metadata.get("apply_link", "") or detail.get("apply_link", "") or source_url)
+            location = str(detail.get("location", "") or metadata.get("location", "") or "")
+            city = str(detail.get("city", "") or metadata.get("city", "") or "")
+            country = str(detail.get("country", "") or metadata.get("country", "") or "")
+
             data.append(
                 {
                     "db_id": ids[index],
                     "company": metadata.get("company"),
                     "title": metadata.get("title"),
-                    "location": metadata.get("location"),
+                    "location": location,
+                    "city": city,
+                    "country": country,
+                    "source": metadata.get("source"),
+                    "job_page_link": source_url,
+                    "apply_link": apply_link,
                     **detail,
                 }
             )
@@ -253,7 +264,7 @@ async def delete_candidate_embedding(candidate_id: str):
 async def create_job_embedding(req: JobEmbeddingRequest):
     try:
         job_id = _normalize_job_embedding_id(str(req.job_id))
-        store.jobs_col.upsert(
+        store.internal_jobs_col.upsert(
             documents=[json.dumps(req.job_data)],
             metadatas=[
                 {
@@ -276,7 +287,7 @@ async def create_job_embedding(req: JobEmbeddingRequest):
 async def update_job_embedding(job_id: str, req: JobEmbeddingRequest):
     try:
         normalized_job_id = _normalize_job_embedding_id(job_id)
-        store.jobs_col.update(
+        store.internal_jobs_col.update(
             ids=[normalized_job_id],
             documents=[json.dumps(req.job_data)],
             metadatas=[{"job_id": req.job_id, "json_detailed": json.dumps(req.job_data)}],
@@ -289,7 +300,7 @@ async def update_job_embedding(job_id: str, req: JobEmbeddingRequest):
 @router.delete("/embeddings/job/{job_id}", response_model=StandardResponse)
 async def delete_job_embedding(job_id: str):
     try:
-        store.jobs_col.delete(ids=[_normalize_job_embedding_id(job_id)])
+        store.internal_jobs_col.delete(ids=[_normalize_job_embedding_id(job_id)])
         return StandardResponse(success=True, message="Job embedding deleted.")
     except Exception as exc:
         return StandardResponse(success=False, message=str(exc))

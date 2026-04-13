@@ -1,4 +1,5 @@
 import os
+import threading
 import wave
 from typing import Any
 
@@ -25,6 +26,13 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 TTS_MODEL_NAME = os.getenv("TTS_MODEL_NAME", "tts_models/en/ljspeech/vits")
 _tts = None
 _tts_error = None
+_tts_lock = threading.Lock()
+ALLOW_SILENT_TTS_FALLBACK = (
+    str(os.getenv("JOBLENS_ALLOW_SILENT_TTS_FALLBACK", "false") or "")
+    .strip()
+    .lower()
+    in {"1", "true", "yes", "on"}
+)
 
 
 def _get_tts_model() -> Any:
@@ -36,21 +44,27 @@ def _get_tts_model() -> Any:
     if _tts_error is not None:
         return None
 
-    try:
-        from TTS.api import TTS
+    with _tts_lock:
+        if _tts is not None:
+            return _tts
+        if _tts_error is not None:
+            return None
 
-        print(f"Loading TTS model on {device}...")
-        _tts = TTS(TTS_MODEL_NAME).to(device)
-        print("TTS Model loaded.")
-        return _tts
-    except Exception as exc:
-        _tts_error = (
-            "TTS initialization failed. Ensure espeak-ng is installed or set "
-            "PHONEMIZER_ESPEAK_LIBRARY to libespeak-ng.dll. "
-            f"Original error: {exc}"
-        )
-        print(f"[tts] {_tts_error}")
-        return None
+        try:
+            from TTS.api import TTS
+
+            print(f"Loading TTS model on {device}...")
+            _tts = TTS(TTS_MODEL_NAME).to(device)
+            print("TTS Model loaded.")
+            return _tts
+        except Exception as exc:
+            _tts_error = (
+                "TTS initialization failed. Ensure espeak-ng is installed or set "
+                "PHONEMIZER_ESPEAK_LIBRARY to libespeak-ng.dll. "
+                f"Original error: {exc}"
+            )
+            print(f"[tts] {_tts_error}")
+            return None
 
 
 def _synthesize_with_gtts(text: str, output_path: str) -> bool:
@@ -100,6 +114,13 @@ def text_to_speech_file(text: str) -> str:
     if _synthesize_with_gtts(text, gtts_path):
         return gtts_path
 
-    # 3) Final fallback: short silent wav to avoid WS crash
-    silent_path = os.path.join("temp_audio", f"response_{uid}_silent.wav")
-    return _write_silent_wav(silent_path)
+    # 3) Optional final fallback: short silent wav (disabled by default)
+    if ALLOW_SILENT_TTS_FALLBACK:
+        print("[tts] Falling back to silent audio because JOBLENS_ALLOW_SILENT_TTS_FALLBACK is enabled.")
+        silent_path = os.path.join("temp_audio", f"response_{uid}_silent.wav")
+        return _write_silent_wav(silent_path)
+
+    raise RuntimeError(
+        "TTS synthesis unavailable: Coqui and gTTS generation both failed. "
+        "Set JOBLENS_ALLOW_SILENT_TTS_FALLBACK=true to allow silent fallback output."
+    )

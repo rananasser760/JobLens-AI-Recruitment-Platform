@@ -11,6 +11,13 @@ OPENROUTER_MODEL_NAME = os.getenv(
     "mistralai/mistral-small-3.2-24b-instruct",
 )
 
+
+class InterviewProviderError(RuntimeError):
+    def __init__(self, code: str, message: str, retryable: bool) -> None:
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+
 # Configure the OpenAI client to use OpenRouter API
 openrouter_client = (
     openai.OpenAI(
@@ -20,6 +27,51 @@ openrouter_client = (
     if OPENROUTER_API_KEY
     else None
 )
+
+
+def _raise_provider_error(exc: Exception, operation: str) -> None:
+    status_code = getattr(exc, "status_code", None)
+    message = str(exc)
+    normalized = message.lower()
+
+    if status_code == 429 or "error code: 429" in normalized or "rate limit" in normalized:
+        raise InterviewProviderError(
+            "ProviderRateLimited",
+            "AI provider rate limit reached. Please retry shortly.",
+            True,
+        )
+
+    if (
+        status_code == 402
+        or "error code: 402" in normalized
+        or "spend limit" in normalized
+        or "payment" in normalized
+    ):
+        raise InterviewProviderError(
+            "ProviderPaymentRequired",
+            "AI provider spending or payment limit reached.",
+            False,
+        )
+
+    if "timeout" in normalized:
+        raise InterviewProviderError(
+            "ProviderTimeout",
+            f"AI provider timed out while trying to {operation}.",
+            True,
+        )
+
+    if "connection" in normalized or "temporarily" in normalized or "upstream" in normalized:
+        raise InterviewProviderError(
+            "ProviderUnavailable",
+            f"AI provider is temporarily unavailable while trying to {operation}.",
+            True,
+        )
+
+    raise InterviewProviderError(
+        "ProviderUnexpectedError",
+        f"Unexpected AI provider error while trying to {operation}.",
+        False,
+    )
 
 def generate_interview_response(
     current_transcript: str,
@@ -56,7 +108,11 @@ def generate_interview_response(
     messages.append({"role": "user", "content": current_transcript})
 
     if openrouter_client is None:
-        return "Interview model is not configured. Please set OPENROUTER_API_KEY."
+        raise InterviewProviderError(
+            "ProviderNotConfigured",
+            "Interview model is not configured. Please set OPENROUTER_API_KEY.",
+            False,
+        )
 
     try:
         response = openrouter_client.chat.completions.create(
@@ -74,7 +130,7 @@ def generate_interview_response(
 
     except Exception as e:
         print(f"Error generating response with OpenRouter: {e}")
-        return "I'm sorry, I'm having trouble connecting to my brain right now. Could you repeat that?"
+        _raise_provider_error(e, "generate interview response")
 
 def generate_interview_summary(
     chat_history: List[Dict[str, str]],
@@ -125,13 +181,11 @@ def generate_interview_summary(
     messages = [{"role": "user", "content": user_prompt}]
 
     if openrouter_client is None:
-        return {
-            "review": "Interview model is not configured.",
-            "strengths": [],
-            "weaknesses": [],
-            "score": 0,
-            "recommendation": "Set OPENROUTER_API_KEY to enable summary generation.",
-        }
+        raise InterviewProviderError(
+            "ProviderNotConfigured",
+            "Interview model is not configured. Please set OPENROUTER_API_KEY.",
+            False,
+        )
 
     try:
         response = openrouter_client.chat.completions.create(
@@ -153,13 +207,11 @@ def generate_interview_summary(
 
     except json.JSONDecodeError as e:
         print(f"Failed to parse JSON from LLM: {raw_content}")
-        return {
-            "review": "Error parsing the AI's response.", 
-            "strengths": [], 
-            "weaknesses": [], 
-            "score": 0, 
-            "recommendation": "N/A"
-        }
+        raise InterviewProviderError(
+            "ProviderInvalidResponse",
+            "AI provider returned malformed summary JSON.",
+            False,
+        ) from e
     except Exception as e:
         print(f"Error generating summary: {e}")
-        return {"error": "Error generating interview summary."}
+        _raise_provider_error(e, "generate interview summary")

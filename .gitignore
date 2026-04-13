@@ -34,3 +34,15 @@ joblens_db/
 # 7. Frontend build artifacts (future integration)
 dist/
 build/
+
+# 8. Local IDE and tooling state
+.vs/
+.cursor/
+
+# 9. Local build/artifact output
+.artifacts/
+backend-gateway-dotnet/.artifacts/
+
+# 10. Local .NET build output
+backend-gateway-dotnet/src/**/bin/
+backend-gateway-dotnet/src/**/obj/

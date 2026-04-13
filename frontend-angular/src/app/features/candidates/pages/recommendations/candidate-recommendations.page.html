@@ -1,54 +1,109 @@
-<section class="recommendations-shell">
+<section class="recommendations-page">
   <header class="page-header">
     <div>
-      <h1>Recommended Jobs</h1>
-      <p>Personalized opportunities ranked by your profile, ATS performance, and recent activity.</p>
-      @if (lastUpdated(); as updatedAt) {
-        <small>Last updated: {{ updatedAt | date: 'medium' }}</small>
+      <h1>
+        <i class="fa-solid fa-wand-magic-sparkles" style="color:#4059aa;margin-right:.5rem"></i>
+        AI Job Recommendations
+      </h1>
+      <p>Personalized opportunities ranked by your profile, ATS performance, and activity.</p>
+      @if (lastUpdated()) {
+        <small class="last-updated">
+          <i class="fa-regular fa-clock"></i>
+          Last updated: {{ lastUpdated() | date: 'MMM d, h:mm a' }}
+        </small>
       }
     </div>
-
     <div class="header-actions">
-      <button type="button" class="secondary" routerLink="/candidate/jobs">Browse all jobs</button>
-      <button type="button" (click)="refreshFromAi()" [disabled]="loading() || refreshing()">
-        {{ refreshing() ? 'Refreshing from AI...' : 'Refresh AI ranking' }}
+      <a class="btn-browse" routerLink="/candidate/jobs">
+        <i class="fa-solid fa-magnifying-glass"></i> Browse All Jobs
+      </a>
+      <button type="button" class="btn-refresh-ai" (click)="refreshFromAi()" [disabled]="loading() || refreshing()">
+        @if (refreshing()) {
+          <span class="btn-spinner"></span> Refreshing AI…
+        } @else {
+          <i class="fa-solid fa-rotate"></i> Refresh AI Ranking
+        }
       </button>
     </div>
   </header>
 
   @if (error()) {
-    <p class="banner error">{{ error() }}</p>
+    <div class="alert-error">
+      <i class="fa-solid fa-triangle-exclamation"></i> {{ error() }}
+    </div>
   }
 
-  @if (recommendations().length === 0 && !loading()) {
-    <article class="panel empty-state">
-      <h2>No recommendations yet</h2>
-      <p>Upload or parse a stronger resume, then refresh AI ranking.</p>
-      <a routerLink="/candidate/profile">Open profile</a>
-    </article>
-  }
-
-  <div class="cards-grid">
-    @for (job of recommendations(); track trackByJobId($index, job)) {
-      <article class="panel recommendation-card">
-        <div class="card-head">
-          <h2>{{ job.title }}</h2>
-          <span>{{ job.matchScore }}% fit</span>
+  @if (loading()) {
+    <div class="cards-grid">
+      @for (i of [1,2,3,4,5,6]; track i) {
+        <div class="sk-rec-card">
+          <div class="sk-badge"></div>
+          <div class="sk-line wide"></div>
+          <div class="sk-line med"></div>
+          <div class="sk-line short"></div>
         </div>
+      }
+    </div>
+  } @else if (recommendations().length === 0) {
+    <div class="empty-panel">
+      <span class="empty-icon">
+        <i class="fa-solid fa-magnifying-glass-chart"></i>
+      </span>
+      <h2>No recommendations yet</h2>
+      <p>Upload and parse your resume to unlock AI job matching.</p>
+      <div class="empty-actions">
+        <a class="btn-primary" routerLink="/candidate/profile">
+          <i class="fa-solid fa-upload"></i> Update Profile &amp; Resume
+        </a>
+        <a class="btn-secondary" routerLink="/candidate/jobs">
+          <i class="fa-solid fa-list"></i> Browse Jobs Manually
+        </a>
+      </div>
+    </div>
+  } @else {
+    <div class="cards-grid">
+      @for (rec of recommendations(); track trackByJobId($index, rec); let i = $index) {
+        <article class="rec-card" [class.rec-card--top]="i < 3">
+          @if (i < 3) {
+            <div class="rank-badge rank-{{ i + 1 }}">#{{ i + 1 }}</div>
+          }
 
-        <p class="meta">{{ job.companyName || 'Company not provided' }} · {{ job.location || 'Remote/Unspecified' }}</p>
-        <p class="reason">{{ job.matchReason || 'Matched based on profile and prior application behavior.' }}</p>
-
-        @if (job.matchingSkills.length > 0) {
-          <div class="skills">
-            @for (skill of job.matchingSkills; track skill) {
-              <span>{{ skill }}</span>
-            }
+          <div class="card-top">
+            <div class="card-score" [attr.data-tier]="getScoreTier(rec.matchScore)">
+              <span class="score-num">{{ rec.matchScore }}</span>
+              <span class="score-pct">%</span>
+            </div>
+            <div class="card-info">
+              <h2 class="card-title">{{ rec.title }}</h2>
+              <p class="card-company">
+                <i class="fa-solid fa-building" style="opacity:.5;margin-right:.2rem"></i>
+                {{ rec.companyName || 'Company' }} &nbsp;·&nbsp; {{ rec.location || 'Remote' }}
+              </p>
+            </div>
           </div>
-        }
 
-        <a class="details-link" [routerLink]="['/candidate/jobs', job.jobId]">View details</a>
-      </article>
-    }
-  </div>
+          @if (rec.matchReason) {
+            <p class="match-reason">"{{ rec.matchReason }}"</p>
+          }
+
+          @if (rec.matchingSkills.length > 0) {
+            <div class="skills-row">
+              @for (skill of rec.matchingSkills.slice(0, 5); track skill) {
+                <span class="skill-tag">
+                  <i class="fa-solid fa-check"></i> {{ skill }}
+                </span>
+              }
+              @if (rec.matchingSkills.length > 5) {
+                <span class="skill-more">+{{ rec.matchingSkills.length - 5 }} more</span>
+              }
+            </div>
+          }
+
+          <a class="btn-details" [routerLink]="['/candidate/jobs', rec.jobId]">
+            View Details <i class="fa-solid fa-arrow-right"></i>
+          </a>
+        </article>
+      }
+    </div>
+  }
 </section>

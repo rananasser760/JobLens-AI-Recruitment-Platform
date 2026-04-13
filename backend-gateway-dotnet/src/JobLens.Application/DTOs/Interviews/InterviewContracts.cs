@@ -25,7 +25,9 @@ public sealed record InterviewRealtimeResultDto(
     string Reply,
     bool IsComplete,
     double? Score,
-    IReadOnlyList<VideoFlagDto> ProctoringEvents);
+    IReadOnlyList<VideoFlagDto> ProctoringEvents,
+    string? ReplyAudioBase64,
+    string? ReplyAudioMimeType);
 
 public sealed record InterviewReportDto(
     long InterviewSessionId,

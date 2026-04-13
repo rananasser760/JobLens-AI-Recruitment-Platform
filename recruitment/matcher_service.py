@@ -44,7 +44,7 @@ def _to_builtin_types(value):
 
 
 class JobMatcher:
-    """Matches parsed CV data against scraped jobs stored in ChromaDB."""
+    """Matches parsed CV data against internal jobs stored in ChromaDB."""
 
     WEIGHTS = {
         "job_title": 0.25,
@@ -162,7 +162,7 @@ Return EXACTLY this JSON (no markdown):
             return None
 
     def match_jobs_from_db(self, parsed_cv: Dict, n_results: int = 5) -> List[Dict]:
-        total_jobs = store.jobs_col.count()
+        total_jobs = store.internal_jobs_col.count()
         if total_jobs == 0:
             return []
 
@@ -179,7 +179,7 @@ Return EXACTLY this JSON (no markdown):
         )
 
         n_fetch = min(n_results * 3, total_jobs)
-        db_results = store.jobs_col.query(query_texts=[query_text], n_results=n_fetch)
+        db_results = store.internal_jobs_col.query(query_texts=[query_text], n_results=n_fetch)
 
         candidates = []
         for index in range(len(db_results["ids"][0])):
@@ -251,7 +251,7 @@ def recommend_jobs_for_candidate(candidate_id: int, limit: int = 10) -> List[Dic
     if not candidate.get("documents"):
         return []
 
-    result = store.jobs_col.query(query_texts=[candidate["documents"][0]], n_results=limit)
+    result = store.internal_jobs_col.query(query_texts=[candidate["documents"][0]], n_results=limit)
 
     matches = []
     for index in range(len(result["ids"][0])):
@@ -273,7 +273,7 @@ def recommend_candidates_for_job(job_id: str, limit: int = 50, min_score: float 
     if not normalized_job_id.startswith("job_"):
         candidate_ids.append(f"job_{normalized_job_id}")
 
-    job = store.jobs_col.get(ids=candidate_ids)
+    job = store.internal_jobs_col.get(ids=candidate_ids)
     if not job.get("documents"):
         return []
 

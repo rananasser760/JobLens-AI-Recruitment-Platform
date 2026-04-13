@@ -15,6 +15,8 @@ export interface RealtimeSocketLike {
   onclose: ((event: CloseEvent) => void) | null;
   send(data: Blob | ArrayBuffer | string): void;
   close(): void;
+  requestOpeningPrompt(): void;
+  sendVideoFrame(base64Frame: string): void;
 }
 
 class SignalRInterviewSocket implements RealtimeSocketLike {
@@ -58,6 +60,20 @@ class SignalRInterviewSocket implements RealtimeSocketLike {
       this.currentState = WebSocket.CLOSED;
       this.onclose?.(new CloseEvent('close'));
     });
+  }
+
+  requestOpeningPrompt(): void {
+    if (this.currentState !== WebSocket.OPEN) {
+      return;
+    }
+    void this.connection.invoke('RequestOpeningPrompt', this.sessionId).catch(() => {});
+  }
+
+  sendVideoFrame(base64Frame: string): void {
+    if (this.currentState !== WebSocket.OPEN) {
+      return;
+    }
+    void this.connection.invoke('SubmitVideoFrame', this.sessionId, base64Frame).catch(() => {});
   }
 
   private registerHandlers(): void {
@@ -168,12 +184,17 @@ class SignalRInterviewSocket implements RealtimeSocketLike {
       return btoa(data);
     }
 
-    if (data instanceof Blob) {
-      const buffer = await data.arrayBuffer();
-      return this.arrayBufferToBase64(buffer);
-    }
-
-    return this.arrayBufferToBase64(data);
+    const blob = data instanceof Blob ? data : new Blob([data]);
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.split(',')[1];
+        resolve(base64 ?? '');
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
   private arrayBufferToBase64(buffer: ArrayBuffer): string {

@@ -32,6 +32,7 @@ export interface JobDto {
   companyLogo?: string | null;
   requiredSkills: string[];
   applicationCount: number;
+  interviewDefaults?: JobInterviewDefaultsDto | null;
 }
 
 export interface JobListDto {
@@ -46,12 +47,23 @@ export interface JobListDto {
   source: string;
   topSkills: string[];
   matchScore?: number | null;
+  externalUrl?: string | null;
 }
 
 export interface CreateJobSkillDto {
   skillName: string;
   importance?: number;
   isRequired?: boolean;
+}
+
+export interface JobInterviewDefaultsDto {
+  agentType: 'Technical' | 'Behavioral' | 'Mixed';
+  maxQuestions: number;
+  evaluationCriteria: string;
+  focusSkills?: string[];
+  questionTimeLimitSeconds?: number;
+  totalInterviewDurationMinutes?: number;
+  proctoringStrictness?: 'Low' | 'Medium' | 'High';
 }
 
 export interface CreateJobDto {
@@ -68,6 +80,7 @@ export interface CreateJobDto {
   experienceLevel?: string;
   expiresAt?: string;
   requiredSkills: CreateJobSkillDto[];
+  interviewDefaults: JobInterviewDefaultsDto;
 }
 
 export interface UpdateJobDto {
@@ -83,6 +96,7 @@ export interface UpdateJobDto {
   experienceLevel?: string;
   expiresAt?: string;
   isActive?: boolean;
+  interviewDefaults?: JobInterviewDefaultsDto;
 }
 
 export interface JobSearchParams extends PaginationParams {
@@ -113,9 +127,13 @@ export interface ScrapedJobDto {
   title: string;
   description: string;
   requirements?: string | null;
+  responsibilities?: string | null;
   location?: string | null;
+  city?: string | null;
+  country?: string | null;
   salaryRange?: string | null;
   employmentType?: string | null;
+  experienceLevel?: string | null;
   externalUrl: string;
   externalSource: string;
   companyName?: string | null;

@@ -15,7 +15,7 @@ public sealed class ResumeService(
     IBackgroundJobClient backgroundJobs,
     IAiBackendClient aiBackendClient) : IResumeService
 {
-    public async Task<ApiResponse<ResumeDto>> UploadAsync(long candidateUserId, ResumeUploadRequest request, CancellationToken cancellationToken)
+    public async Task<ApiResponse<ResumeDto>> UploadAsync(long candidateUserId, ResumeUploadRequest request, bool queueParsing, CancellationToken cancellationToken)
     {
         var candidate = await dbContext.CandidateProfiles.FirstOrDefaultAsync(x => x.UserId == candidateUserId, cancellationToken);
         if (candidate is null)
@@ -43,13 +43,16 @@ public sealed class ResumeService(
             ContentHash = contentHash,
             RawText = rawText,
             IsDefault = request.IsDefault,
-            ParseStatus = "Queued",
+            ParseStatus = queueParsing ? "Queued" : "Pending",
         };
 
         dbContext.Resumes.Add(resume);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        backgroundJobs.Enqueue<ResumeWorkflowJob>(job => job.ProcessResumeAsync(resume.Id));
+        if (queueParsing)
+        {
+            backgroundJobs.Enqueue<ResumeWorkflowJob>(job => job.ProcessResumeAsync(resume.Id));
+        }
 
         return new ApiResponse<ResumeDto>(true, new ResumeDto(resume.Id, resume.FileName, resume.ContentType, resume.IsDefault, resume.ParseStatus, resume.CreatedAtUtc), "Resume uploaded.");
     }

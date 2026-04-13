@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { catchError, finalize, forkJoin, map, of } from 'rxjs';
+import { environment } from '../../../../../environments/environment';
 
 import {
   AddSkillDto,
@@ -69,6 +70,13 @@ export class CandidateProfilePage {
     const rows = Object.entries(report?.categoryScores ?? {});
     rows.sort((left, right) => right[1] - left[1]);
     return rows;
+  });
+
+  readonly profileImageUrl = computed(() => {
+    const path = this.profile()?.profileImagePath;
+    if (!path) return null;
+    if (path.startsWith('http')) return path;
+    return `${environment.apiBaseUrl}${path}`;
   });
   readonly pendingDeleteBusy = computed(() => {
     const pending = this.pendingResumeDelete();

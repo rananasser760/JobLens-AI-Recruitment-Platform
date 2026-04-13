@@ -52,6 +52,12 @@ export interface ScheduleInterviewDto {
   scheduledAt: string;
   agentType?: InterviewAgentType;
   interviewTitle?: string;
+  maxQuestions?: number;
+  evaluationCriteria?: string;
+  focusSkills?: string[];
+  questionTimeLimitSeconds?: number;
+  totalInterviewDurationMinutes?: number;
+  proctoringStrictness?: 'Low' | 'Medium' | 'High';
 }
 
 export interface InterviewAnswerDto {

@@ -608,6 +608,12 @@ namespace JobLens.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("InterviewDefaultsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("nvarchar(max)")
+                        .HasDefaultValue("{}");
+
                     b.Property<string>("SourceType")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");

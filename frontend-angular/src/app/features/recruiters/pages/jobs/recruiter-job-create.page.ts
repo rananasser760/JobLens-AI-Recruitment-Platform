@@ -6,7 +6,12 @@ import { catchError, finalize, map, of } from 'rxjs';
 
 import { MetadataService } from '../../../../core/api/metadata.service';
 import { EnumOptionDto } from '../../../../core/models/metadata.model';
-import { CreateJobDto, CreateJobSkillDto, EmploymentType } from '../../../../core/models/job.model';
+import {
+  CreateJobDto,
+  CreateJobSkillDto,
+  EmploymentType,
+  JobInterviewDefaultsDto
+} from '../../../../core/models/job.model';
 import { JobsService } from '../../../jobs/jobs.service';
 
 const FALLBACK_EMPLOYMENT_TYPES: EmploymentType[] = [
@@ -54,7 +59,14 @@ export class RecruiterJobCreatePage {
     salaryMax: [''],
     currency: ['USD'],
     experienceLevel: [''],
-    expiresAt: ['']
+    expiresAt: [''],
+    interviewAgentType: ['Mixed', Validators.required],
+    interviewMaxQuestions: ['5', Validators.required],
+    interviewEvaluationCriteria: ['', [Validators.required, Validators.minLength(10)]],
+    interviewFocusSkills: [''],
+    interviewQuestionTimeLimitSeconds: ['90'],
+    interviewTotalDurationMinutes: ['30'],
+    interviewProctoringStrictness: ['Medium', Validators.required]
   });
 
   constructor() {
@@ -155,7 +167,16 @@ export class RecruiterJobCreatePage {
       currency: raw.currency.trim() || undefined,
       experienceLevel: raw.experienceLevel.trim() || undefined,
       expiresAt: this.toIsoDateTime(raw.expiresAt),
-      requiredSkills: [...this.requiredSkills()]
+      requiredSkills: [...this.requiredSkills()],
+      interviewDefaults: {
+        agentType: this.toInterviewAgentType(raw.interviewAgentType),
+        maxQuestions: this.parseNumber(raw.interviewMaxQuestions) ?? 5,
+        evaluationCriteria: raw.interviewEvaluationCriteria.trim(),
+        focusSkills: this.parseFocusSkills(raw.interviewFocusSkills),
+        questionTimeLimitSeconds: this.parseNumber(raw.interviewQuestionTimeLimitSeconds),
+        totalInterviewDurationMinutes: this.parseNumber(raw.interviewTotalDurationMinutes),
+        proctoringStrictness: this.toProctoringStrictness(raw.interviewProctoringStrictness)
+      }
     };
 
     this.jobsService
@@ -197,6 +218,32 @@ export class RecruiterJobCreatePage {
     }
 
     return '';
+  }
+
+  private toInterviewAgentType(value: string): JobInterviewDefaultsDto['agentType'] {
+    if (value === 'Technical' || value === 'Behavioral' || value === 'Mixed') {
+      return value;
+    }
+    return 'Mixed';
+  }
+
+  private toProctoringStrictness(value: string): JobInterviewDefaultsDto['proctoringStrictness'] {
+    if (value === 'Low' || value === 'High' || value === 'Medium') {
+      return value;
+    }
+    return 'Medium';
+  }
+
+  private parseFocusSkills(value: unknown): string[] | undefined {
+    if (typeof value !== 'string' || !value.trim()) {
+      return undefined;
+    }
+
+    const parsed = value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => !!item);
+    return parsed.length > 0 ? parsed : undefined;
   }
 
   private parseNumber(value: unknown): number | undefined {

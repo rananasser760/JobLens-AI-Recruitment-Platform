@@ -7,6 +7,7 @@ using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using InterviewContracts = JobLens.Application.DTOs.Interviews;
 
 namespace JobLens.Api.Controllers;
@@ -33,25 +34,46 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
             return Forbid();
         }
 
+        var jobDefaults = ParseInterviewDefaults(application.JobPosting.InterviewDefaultsJson);
+        var criteria = request.EvaluationCriteria?.Trim();
+        if (string.IsNullOrWhiteSpace(criteria))
+        {
+            criteria = jobDefaults?.EvaluationCriteria;
+        }
+        var focusSkills = request.FocusSkills?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray()
+            ?? jobDefaults?.FocusSkills
+            ?? Array.Empty<string>();
+        var criteriaWithSkills = criteria ?? string.Empty;
+        if (focusSkills.Length > 0)
+        {
+            criteriaWithSkills = $"{criteriaWithSkills}\nFocus skills: {string.Join(", ", focusSkills)}".Trim();
+        }
+
+        var maxQuestions = request.MaxQuestions
+            ?? jobDefaults?.MaxQuestions
+            ?? 5;
+
         var session = new Domain.Entities.InterviewSession
         {
             ApplicationId = application.Id,
             ScheduledAtUtc = request.ScheduledAt,
             Status = Domain.Enums.InterviewSessionStatus.Scheduled,
-            CriteriaSnapshot = string.IsNullOrWhiteSpace(request.AgentType)
+            CriteriaSnapshot = string.IsNullOrWhiteSpace(criteriaWithSkills)
                 ? "General interview"
+                : criteriaWithSkills,
+            AgentType = string.IsNullOrWhiteSpace(request.AgentType)
+                ? (jobDefaults?.AgentType ?? "Mixed")
                 : request.AgentType,
-            AgentType = string.IsNullOrWhiteSpace(request.AgentType) ? "Mixed" : request.AgentType,
             InterviewTitle = request.InterviewTitle?.Trim() ?? string.Empty,
-            MaxQuestions = 5,
+            MaxQuestions = Math.Clamp(maxQuestions, 1, 20),
         };
 
         application.Status = Domain.Enums.ApplicationStatus.InterviewScheduled;
         dbContext.InterviewSessions.Add(session);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var loaded = await LoadSessionAsync(session.Id, cancellationToken);
-        return Ok(new ApiResponse<InterviewSessionDto>(true, ToInterviewSessionDto(loaded!), "Interview scheduled."));
+        var loaded = await LoadSessionForSummaryAsync(session.Id, cancellationToken);
+        return Ok(new ApiResponse<InterviewSessionDto>(true, loaded is null ? null : ToInterviewSessionDto(loaded), "Interview scheduled."));
     }
 
     [Authorize(Roles = "Candidate")]
@@ -69,7 +91,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
             return BadRequest(new ApiResponse<InterviewSessionDto>(false, null, response.Message, response.Errors));
         }
 
-        var loaded = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var loaded = await LoadSessionForSummaryAsync(interviewSessionId, cancellationToken);
         return Ok(new ApiResponse<InterviewSessionDto>(true, loaded is null ? null : ToInterviewSessionDto(loaded), response.Message));
     }
 
@@ -120,7 +142,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         [FromForm] IFormFile? frameImage,
         CancellationToken cancellationToken)
     {
-        var session = await LoadSessionAsync(sessionId, cancellationToken);
+        var session = await LoadSessionForAccessAsync(sessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<bool>(false, false, "Interview session not found.", ["not_found"]));
@@ -157,7 +179,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
     [HttpPost("{interviewSessionId:long}/video")]
     public async Task<IActionResult> UploadVideo(long interviewSessionId, [FromForm] IFormFile videoFile, CancellationToken cancellationToken)
     {
-        var session = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var session = await LoadSessionForAccessAsync(interviewSessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<bool>(false, false, "Interview session not found.", ["not_found"]));
@@ -184,7 +206,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
     [HttpGet("{interviewSessionId:long}/report")]
     public async Task<IActionResult> Report(long interviewSessionId, CancellationToken cancellationToken)
     {
-        var session = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var session = await LoadSessionForReportAsync(interviewSessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<InterviewReportViewDto>(false, null, "Interview session not found.", ["not_found"]));
@@ -202,7 +224,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
     [HttpGet("{interviewSessionId:long}")]
     public async Task<IActionResult> GetSession(long interviewSessionId, CancellationToken cancellationToken)
     {
-        var session = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var session = await LoadSessionForSummaryAsync(interviewSessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<InterviewSessionDto>(false, null, "Interview session not found.", ["not_found"]));
@@ -219,7 +241,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
     [HttpGet("{interviewSessionId:long}/questions")]
     public async Task<IActionResult> GetQuestions(long interviewSessionId, CancellationToken cancellationToken)
     {
-        var session = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var session = await LoadSessionForRealtimeAsync(interviewSessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<IReadOnlyList<InterviewQuestionDto>>(false, null, "Interview session not found.", ["not_found"]));
@@ -237,7 +259,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
     [HttpGet("{interviewSessionId:long}/next-question")]
     public async Task<IActionResult> GetNextQuestion(long interviewSessionId, CancellationToken cancellationToken)
     {
-        var session = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var session = await LoadSessionForRealtimeAsync(interviewSessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<InterviewQuestionDto>(false, null, "Interview session not found.", ["not_found"]));
@@ -266,7 +288,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         CancellationToken cancellationToken)
     {
         var sessionId = questionId <= 0 ? 0 : ((questionId - 1) / 1000) + 1;
-        var session = await LoadSessionAsync(sessionId, cancellationToken);
+        var session = await LoadSessionForRealtimeAsync(sessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<bool>(false, false, "Interview session not found for provided question.", ["not_found"]));
@@ -329,7 +351,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
     [HttpGet("{interviewSessionId:long}/cheating-events")]
     public async Task<IActionResult> GetCheatingEvents(long interviewSessionId, CancellationToken cancellationToken)
     {
-        var session = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var session = await LoadSessionForProctoringAsync(interviewSessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<IReadOnlyList<CheatingEventDto>>(false, null, "Interview session not found.", ["not_found"]));
@@ -477,7 +499,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
     [HttpPost("{interviewSessionId:long}/cancel")]
     public async Task<IActionResult> Cancel(long interviewSessionId, [FromBody] CancelInterviewRequest request, CancellationToken cancellationToken)
     {
-        var session = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var session = await LoadSessionForAccessAsync(interviewSessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<bool>(false, false, "Interview session not found.", ["not_found"]));
@@ -503,7 +525,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
     [HttpPost("{interviewSessionId:long}/reschedule")]
     public async Task<IActionResult> Reschedule(long interviewSessionId, [FromBody] RescheduleInterviewRequest request, CancellationToken cancellationToken)
     {
-        var session = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var session = await LoadSessionForAccessAsync(interviewSessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<bool>(false, false, "Interview session not found.", ["not_found"]));
@@ -529,17 +551,64 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         return Ok(new ApiResponse<bool>(true, true, "Interview rescheduled."));
     }
 
-    private async Task<Domain.Entities.InterviewSession?> LoadSessionAsync(long interviewSessionId, CancellationToken cancellationToken)
+    private async Task<Domain.Entities.InterviewSession?> LoadSessionForAccessAsync(long interviewSessionId, CancellationToken cancellationToken)
     {
         return await dbContext.InterviewSessions
+            .Include(x => x.Application)
+            .ThenInclude(x => x.CandidateProfile)
+            .Include(x => x.Application)
+            .ThenInclude(x => x.JobPosting)
+            .FirstOrDefaultAsync(x => x.Id == interviewSessionId, cancellationToken);
+    }
+
+    private async Task<Domain.Entities.InterviewSession?> LoadSessionForRealtimeAsync(long interviewSessionId, CancellationToken cancellationToken)
+    {
+        return await dbContext.InterviewSessions
+            .AsSplitQuery()
+            .Include(x => x.Application)
+            .ThenInclude(x => x.CandidateProfile)
+            .Include(x => x.Application)
+            .ThenInclude(x => x.JobPosting)
+            .Include(x => x.TranscriptSegments)
+            .FirstOrDefaultAsync(x => x.Id == interviewSessionId, cancellationToken);
+    }
+
+    private async Task<Domain.Entities.InterviewSession?> LoadSessionForSummaryAsync(long interviewSessionId, CancellationToken cancellationToken)
+    {
+        return await dbContext.InterviewSessions
+            .AsSplitQuery()
             .Include(x => x.Application)
             .ThenInclude(x => x.CandidateProfile)
             .ThenInclude(x => x.User)
             .Include(x => x.Application)
             .ThenInclude(x => x.JobPosting)
-            .ThenInclude(x => x.Company)
+            .Include(x => x.TranscriptSegments)
+            .Include(x => x.ProctoringEvents)
+            .Include(x => x.Reports)
+            .FirstOrDefaultAsync(x => x.Id == interviewSessionId, cancellationToken);
+    }
+
+    private async Task<Domain.Entities.InterviewSession?> LoadSessionForProctoringAsync(long interviewSessionId, CancellationToken cancellationToken)
+    {
+        return await dbContext.InterviewSessions
+            .AsSplitQuery()
             .Include(x => x.Application)
-            .ThenInclude(x => x.Resume)
+            .ThenInclude(x => x.CandidateProfile)
+            .Include(x => x.Application)
+            .ThenInclude(x => x.JobPosting)
+            .Include(x => x.ProctoringEvents)
+            .FirstOrDefaultAsync(x => x.Id == interviewSessionId, cancellationToken);
+    }
+
+    private async Task<Domain.Entities.InterviewSession?> LoadSessionForReportAsync(long interviewSessionId, CancellationToken cancellationToken)
+    {
+        return await dbContext.InterviewSessions
+            .AsSplitQuery()
+            .Include(x => x.Application)
+            .ThenInclude(x => x.CandidateProfile)
+            .ThenInclude(x => x.User)
+            .Include(x => x.Application)
+            .ThenInclude(x => x.JobPosting)
             .Include(x => x.TranscriptSegments)
             .Include(x => x.ProctoringEvents)
             .Include(x => x.BrowserEvents)
@@ -581,9 +650,11 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
 
     private static InterviewSessionDto ToInterviewSessionDto(Domain.Entities.InterviewSession session)
     {
-        var answeredCount = session.TranscriptSegments.Count(x => string.Equals(x.Speaker, "candidate", StringComparison.OrdinalIgnoreCase));
+        var questions = BuildQuestions(session);
+        var answeredCount = questions.Count(x => x.IsAnswered);
         var candidateName = session.Application.CandidateProfile.User.DisplayName;
         var jobTitle = session.Application.JobPosting.Title;
+        var latestReport = session.Reports.OrderByDescending(x => x.GeneratedAtUtc).FirstOrDefault();
 
         return new InterviewSessionDto(
             session.Id,
@@ -595,13 +666,13 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
             session.EndedAtUtc,
             session.FinalScore,
             session.ProctoringEvents.Any(),
-            Math.Max(session.MaxQuestions, 1),
+            Math.Max(questions.Count, 1),
             answeredCount,
             FrontendStatusMapper.ToFrontend(session.Status),
             long.TryParse(session.IntegrityBackendSessionId, out var integrityId) ? integrityId : null,
             string.IsNullOrWhiteSpace(session.InterviewBackendSessionId) ? null : session.InterviewBackendSessionId,
-            session.Reports.OrderByDescending(x => x.GeneratedAtUtc).FirstOrDefault()?.RecruiterReportJson,
-            session.Reports.OrderByDescending(x => x.GeneratedAtUtc).FirstOrDefault()?.CandidateFeedbackJson,
+            latestReport?.RecruiterReportJson,
+            latestReport?.CandidateFeedbackJson,
             candidateName,
             jobTitle,
             session.ProctoringEvents.Count);
@@ -632,9 +703,12 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
             .Where(x => string.Equals(x.Speaker, "candidate", StringComparison.OrdinalIgnoreCase))
             .OrderBy(x => x.Sequence)
             .ToList();
+        var meaningfulAssistantLines = assistantLines
+            .Where(x => IsMeaningfulQuestionLine(x.Content))
+            .ToList();
 
         var generated = new List<InterviewQuestionDto>();
-        if (assistantLines.Count == 0)
+        if (meaningfulAssistantLines.Count == 0)
         {
             var prompts = GenerateDefaultPrompts(session.CriteriaSnapshot, Math.Max(session.MaxQuestions, 5));
             for (var i = 0; i < prompts.Count; i++)
@@ -664,24 +738,29 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
             return generated;
         }
 
-        for (var i = 0; i < assistantLines.Count; i++)
+        for (var i = 0; i < meaningfulAssistantLines.Count; i++)
         {
             var questionId = (session.Id - 1) * 1000 + i + 1;
-            var answer = i < candidateLines.Count
+            var answerCandidate = FindCandidateAnswerForQuestion(
+                candidateLines,
+                meaningfulAssistantLines[i].Sequence,
+                i + 1 < meaningfulAssistantLines.Count ? meaningfulAssistantLines[i + 1].Sequence : int.MaxValue);
+            var hasValidAnswer = answerCandidate is not null && IsMeaningfulCandidateAnswer(answerCandidate.Content);
+            var answer = hasValidAnswer
                 ? new InterviewAnswerDto(
                     questionId,
                     questionId,
-                    candidateLines[i].Content,
+                    answerCandidate!.Content,
                     null,
                     null,
                     null,
-                    candidateLines[i].OccurredAtUtc)
+                    answerCandidate.OccurredAtUtc)
                 : null;
 
             generated.Add(new InterviewQuestionDto(
                 questionId,
                 session.Id,
-                assistantLines[i].Content,
+                meaningfulAssistantLines[i].Content,
                 i + 1,
                 null,
                 null,
@@ -691,6 +770,65 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         }
 
         return generated;
+    }
+
+    private static Domain.Entities.InterviewTranscriptSegment? FindCandidateAnswerForQuestion(
+        IReadOnlyList<Domain.Entities.InterviewTranscriptSegment> candidateLines,
+        int currentQuestionSequence,
+        int nextQuestionSequence)
+    {
+        return candidateLines
+            .FirstOrDefault(x =>
+                x.Sequence > currentQuestionSequence
+                && x.Sequence < nextQuestionSequence
+                && IsMeaningfulCandidateAnswer(x.Content));
+    }
+
+    private static bool IsMeaningfulQuestionLine(string? text)
+    {
+        var normalized = NormalizeText(text);
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        if (normalized.StartsWith("thank you. moving to the next question", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (normalized.StartsWith("proctoring notice:", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (normalized.StartsWith("interview completed", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsMeaningfulCandidateAnswer(string? text)
+    {
+        var normalized = NormalizeText(text);
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        if (normalized.Contains("could not transcribe candidate response clearly", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string NormalizeText(string? text)
+    {
+        return (text ?? string.Empty).Trim().ToLowerInvariant();
     }
 
     private static List<string> GenerateDefaultPrompts(string criteria, int max)
@@ -709,16 +847,55 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         return prompts.Take(Math.Max(1, max)).ToList();
     }
 
+    private sealed record InterviewDefaultsSnapshot(
+        string AgentType,
+        int MaxQuestions,
+        string EvaluationCriteria,
+        string[] FocusSkills);
+
+    private static InterviewDefaultsSnapshot? ParseInterviewDefaults(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var focusSkills = root.TryGetProperty("focusSkills", out var focusEl) && focusEl.ValueKind == JsonValueKind.Array
+                ? focusEl.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString() ?? string.Empty).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray()
+                : Array.Empty<string>();
+
+            var agentType = root.TryGetProperty("agentType", out var agentEl) && agentEl.ValueKind == JsonValueKind.String
+                ? agentEl.GetString() ?? "Mixed"
+                : "Mixed";
+            var maxQuestions = root.TryGetProperty("maxQuestions", out var maxEl) && maxEl.ValueKind == JsonValueKind.Number
+                ? Math.Clamp(maxEl.GetInt32(), 1, 20)
+                : 5;
+            var evaluationCriteria = root.TryGetProperty("evaluationCriteria", out var evalEl) && evalEl.ValueKind == JsonValueKind.String
+                ? evalEl.GetString() ?? string.Empty
+                : string.Empty;
+
+            return new InterviewDefaultsSnapshot(agentType, maxQuestions, evaluationCriteria, focusSkills);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private async Task<ApiResponse<InterviewSessionDto>> CompleteWithFallbackAsync(long interviewSessionId, CancellationToken cancellationToken)
     {
         var complete = await interviewService.CompleteAsync(interviewSessionId, cancellationToken);
         if (complete.Success)
         {
-            var updated = await LoadSessionAsync(interviewSessionId, cancellationToken);
+            var updated = await LoadSessionForSummaryAsync(interviewSessionId, cancellationToken);
             return new ApiResponse<InterviewSessionDto>(true, updated is null ? null : ToInterviewSessionDto(updated), complete.Message);
         }
 
-        var session = await LoadSessionAsync(interviewSessionId, cancellationToken);
+        var session = await LoadSessionForAccessAsync(interviewSessionId, cancellationToken);
         if (session is null)
         {
             return new ApiResponse<InterviewSessionDto>(false, null, complete.Message, complete.Errors);
@@ -726,11 +903,19 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
 
         session.Status = Domain.Enums.InterviewSessionStatus.Completed;
         session.EndedAtUtc = DateTime.UtcNow;
-        session.FinalVerdict = string.IsNullOrWhiteSpace(session.FinalVerdict) ? "Completed" : session.FinalVerdict;
-        session.FinalScore ??= 0;
+        var reason = string.IsNullOrWhiteSpace(complete.Message)
+            ? "AI finalization unavailable"
+            : complete.Message.Trim();
+        session.FinalVerdict = string.IsNullOrWhiteSpace(session.FinalVerdict)
+            ? $"Completed - manual review required ({reason})"
+            : session.FinalVerdict;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new ApiResponse<InterviewSessionDto>(true, ToInterviewSessionDto(session), "Interview completed with fallback summary.");
+        var fallbackUpdated = await LoadSessionForSummaryAsync(interviewSessionId, cancellationToken);
+        return new ApiResponse<InterviewSessionDto>(
+            true,
+            fallbackUpdated is null ? null : ToInterviewSessionDto(fallbackUpdated),
+            "Interview completed with manual review required.");
     }
 
     private Task<InterviewReportViewDto> BuildReportAsync(Domain.Entities.InterviewSession session, CancellationToken cancellationToken)

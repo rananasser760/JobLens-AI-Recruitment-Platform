@@ -228,6 +228,15 @@ public sealed record RecruiterDashboardDto(
 
 public sealed record CreateJobSkillRequest(string SkillName, int? Importance, bool? IsRequired);
 
+public sealed record InterviewDefaultsRequest(
+    string AgentType,
+    int MaxQuestions,
+    string EvaluationCriteria,
+    IReadOnlyList<string>? FocusSkills,
+    int? QuestionTimeLimitSeconds,
+    int? TotalInterviewDurationMinutes,
+    string? ProctoringStrictness);
+
 public sealed record CreateJobCompatRequest(
     string Title,
     string Description,
@@ -241,7 +250,8 @@ public sealed record CreateJobCompatRequest(
     string? Currency,
     string? ExperienceLevel,
     DateTime? ExpiresAt,
-    IReadOnlyList<CreateJobSkillRequest>? RequiredSkills);
+    IReadOnlyList<CreateJobSkillRequest>? RequiredSkills,
+    InterviewDefaultsRequest? InterviewDefaults);
 
 public sealed record UpdateJobCompatRequest(
     string? Title,
@@ -255,7 +265,8 @@ public sealed record UpdateJobCompatRequest(
     decimal? SalaryMax,
     string? ExperienceLevel,
     DateTime? ExpiresAt,
-    bool? IsActive);
+    bool? IsActive,
+    InterviewDefaultsRequest? InterviewDefaults);
 
 public sealed record JobViewDto(
     long Id,
@@ -278,7 +289,8 @@ public sealed record JobViewDto(
     string? CompanyName,
     string? CompanyLogo,
     IReadOnlyList<string> RequiredSkills,
-    int ApplicationCount);
+    int ApplicationCount,
+    InterviewDefaultsRequest? InterviewDefaults);
 
 public sealed record JobListItemDto(
     long Id,
@@ -291,7 +303,8 @@ public sealed record JobListItemDto(
     string? CompanyLogo,
     string Source,
     IReadOnlyList<string> TopSkills,
-    double? MatchScore);
+    double? MatchScore,
+    string? ExternalUrl = null);
 
 public sealed record JobRecommendationDto(
     long JobId,
@@ -307,9 +320,13 @@ public sealed record ScrapedJobDto(
     string Title,
     string Description,
     string? Requirements,
+    string? Responsibilities,
     string? Location,
+    string? City,
+    string? Country,
     string? SalaryRange,
     string? EmploymentType,
+    string? ExperienceLevel,
     string ExternalUrl,
     string ExternalSource,
     string? CompanyName,
@@ -360,7 +377,13 @@ public sealed record ScheduleInterviewCompatRequest(
     long ApplicationId,
     DateTime ScheduledAt,
     string? AgentType,
-    string? InterviewTitle);
+    string? InterviewTitle,
+    int? MaxQuestions,
+    string? EvaluationCriteria,
+    IReadOnlyList<string>? FocusSkills,
+    int? QuestionTimeLimitSeconds,
+    int? TotalInterviewDurationMinutes,
+    string? ProctoringStrictness);
 
 public sealed record SubmitAnswerCompatRequest(
     long QuestionId,

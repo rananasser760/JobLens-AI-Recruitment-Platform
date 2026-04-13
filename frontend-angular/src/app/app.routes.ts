@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { interviewSessionLeaveGuard } from './core/guards/interview-session.guard';
 import { roleGuard } from './core/guards/role.guard';
 import { AuthLayoutComponent } from './layouts/auth-layout/auth-layout.component';
 import { CandidateLayoutComponent } from './layouts/candidate-layout/candidate-layout.component';
@@ -93,6 +94,7 @@ export const routes: Routes = [
 			},
 			{
 				path: 'interviews/:sessionId',
+				canDeactivate: [interviewSessionLeaveGuard],
 				loadComponent: () =>
 					import('./features/candidates/pages/interviews/candidate-interview-session.page').then(
 						(m) => m.CandidateInterviewSessionPage

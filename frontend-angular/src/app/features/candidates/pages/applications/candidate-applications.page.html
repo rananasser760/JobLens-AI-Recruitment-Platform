@@ -2,118 +2,152 @@
   <header class="page-header">
     <div>
       <h1>My Applications</h1>
-      <p>Track your hiring pipeline, follow interview progress, and withdraw open applications.</p>
+      <p>Track your hiring pipeline, follow interview progress, and manage open applications.</p>
     </div>
     <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
-      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+      <i class="fa-solid fa-rotate"></i> {{ loading() ? 'Loading…' : 'Refresh' }}
     </button>
   </header>
 
   @if (error()) {
-    <p class="banner error">{{ error() }}</p>
+    <p class="banner error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error() }}</p>
   }
-
   @if (success()) {
-    <p class="banner success">{{ success() }}</p>
+    <p class="banner success"><i class="fa-solid fa-check"></i> {{ success() }}</p>
   }
 
   <section class="stats-grid">
     <article class="stat-card">
-      <span>Total applications</span>
+      <span><i class="fa-solid fa-layer-group"></i> Total Applications</span>
       <strong>{{ totalApplications() }}</strong>
     </article>
-
     <article class="stat-card">
-      <span>Active pipeline</span>
+      <span><i class="fa-solid fa-spinner"></i> Active Pipeline</span>
       <strong>{{ activeApplications() }}</strong>
     </article>
-
     <article class="stat-card">
-      <span>Interview stage</span>
+      <span><i class="fa-solid fa-microphone-lines"></i> Interview Stage</span>
       <strong>{{ interviewReady() }}</strong>
     </article>
   </section>
 
-  <section class="panel filters">
-    <label>
-      Status filter
-      <select #statusSelect [value]="statusFilter()" (change)="onStatusFilterChanged(statusSelect.value)" [disabled]="loading()">
+  <div class="panel filters">
+    <div class="filter-group">
+      <label class="filter-label" for="app-status-filter">Status</label>
+      <select
+        id="app-status-filter"
+        class="filter-select"
+        #statusSelect
+        [value]="statusFilter()"
+        (change)="onStatusFilterChanged(statusSelect.value)"
+        [disabled]="loading()"
+      >
         <option value="">All statuses</option>
         @for (status of statusOptions(); track status) {
           <option [value]="status">{{ formatStatus(status) }}</option>
         }
       </select>
-    </label>
-
-    <div class="filter-actions">
-      <button type="button" (click)="applyFilter()" [disabled]="loading()">Apply</button>
-      <button type="button" class="secondary" (click)="clearFilter()" [disabled]="loading()">Clear</button>
     </div>
-  </section>
+    <div class="filter-actions">
+      <button type="button" class="btn-apply" (click)="applyFilter()" [disabled]="loading()">
+        <i class="fa-solid fa-filter"></i> Apply
+      </button>
+      <button type="button" class="btn-clear" (click)="clearFilter()" [disabled]="loading()">
+        <i class="fa-solid fa-xmark"></i> Clear
+      </button>
+    </div>
+  </div>
 
-  <section class="panel list-panel">
+  <div class="panel list-panel">
     <div class="section-head">
-      <h2>Application timeline</h2>
+      <h2>Application Timeline</h2>
       <span>{{ applications().length }} records</span>
     </div>
 
-    @if (applications().length === 0) {
-      <p class="empty">No applications found for your current filter.</p>
+    @if (loading() && applications().length === 0) {
+      <div class="skeleton-list">
+        @for (i of [1, 2, 3]; track i) {
+          <div class="sk-app-card">
+            <div class="sk-line wide"></div>
+            <div class="sk-line med"></div>
+            <div class="sk-line short"></div>
+          </div>
+        }
+      </div>
+    } @else if (applications().length === 0) {
+      <div class="empty">
+        <i class="fa-solid fa-inbox" style="font-size:2rem;opacity:.3;display:block;margin-bottom:.5rem"></i>
+        No applications found for your current filter.
+      </div>
     } @else {
       <div class="list">
-        @for (application of applications(); track application.id) {
+        @for (app of applications(); track app.id) {
           <article class="application-card">
-            <header>
+            <div class="card-top">
               <div>
-                <h3>{{ application.jobTitle }}</h3>
-                <p>{{ application.companyName || 'Company' }}</p>
+                <h3 class="card-title">{{ app.jobTitle }}</h3>
+                <p class="card-company">{{ app.companyName || 'Company' }}</p>
               </div>
-              <span [class]="getStatusClass(application.status)">{{ formatStatus(application.status) }}</span>
-            </header>
+              <span [class]="getStatusClass(app.status)">{{ formatStatus(app.status) }}</span>
+            </div>
 
             <div class="meta">
-              <small>Applied {{ application.appliedAt | date: 'mediumDate' }}</small>
-              <small>Via {{ application.appliedVia }}</small>
-              @if (application.hasInterview) {
-                <small>Interview linked</small>
+              <span class="meta-chip">
+                <i class="fa-solid fa-calendar-days"></i> {{ app.appliedAt | date: 'MMM d, y' }}
+              </span>
+              <span class="meta-chip">
+                <i class="fa-solid fa-globe"></i> {{ app.appliedVia }}
+              </span>
+              @if (app.hasInterview) {
+                <span class="meta-chip interview">
+                  <i class="fa-solid fa-microphone"></i> Interview linked
+                </span>
               }
-              @if (application.atsScore !== null && application.atsScore !== undefined) {
-                <small>ATS {{ application.atsScore }}</small>
+              @if (app.atsScore !== null && app.atsScore !== undefined) {
+                <span class="meta-chip ats">
+                  <i class="fa-solid fa-chart-line"></i> ATS {{ app.atsScore }}
+                </span>
               }
             </div>
 
-            @if (application.coverLetter) {
-              <p class="cover-letter">{{ application.coverLetter }}</p>
+            @if (app.coverLetter) {
+              <p class="cover-letter">{{ app.coverLetter }}</p>
             }
 
-            <footer class="actions">
-              <a [routerLink]="['/candidate/jobs', application.jobId]">View job</a>
-              <a [routerLink]="['/candidate/applications', application.id]">View details</a>
+            <div class="card-actions">
+              <a class="btn-card-action" [routerLink]="['/candidate/jobs', app.jobId]">
+                <i class="fa-solid fa-briefcase"></i> View Job
+              </a>
+              @if (app.hasInterview) {
+                <a class="btn-card-action" routerLink="/candidate/interviews">
+                  <i class="fa-solid fa-microphone"></i> My Interviews
+                </a>
+              }
               <button
                 type="button"
-                class="secondary-action"
-                (click)="requestWithdraw(application)"
-                [disabled]="!canWithdraw(application)"
+                class="btn-card-action danger"
+                (click)="requestWithdraw(app)"
+                [disabled]="!canWithdraw(app)"
               >
-                @if (isWithdrawing(application.id)) {
-                  Withdrawing...
-                } @else if (application.status === 'Withdrawn') {
-                  Withdrawn
+                @if (isWithdrawing(app.id)) {
+                  <i class="fa-solid fa-circle-notch fa-spin"></i> Withdrawing…
+                } @else if (app.status === 'Withdrawn') {
+                  <i class="fa-solid fa-ban"></i> Withdrawn
                 } @else {
-                  Withdraw
+                  <i class="fa-solid fa-hand"></i> Withdraw
                 }
               </button>
-            </footer>
+            </div>
           </article>
         }
       </div>
     }
-  </section>
+  </div>
 
   <app-confirm-dialog
     [open]="confirmWithdrawOpen()"
-    title="Withdraw application"
-    [message]="'Withdraw your application for ' + (pendingWithdrawApplication()?.jobTitle || 'this role') + '?'"
+    title="Withdraw Application"
+    [message]="'Withdraw your application for ' + (pendingWithdrawApplication()?.jobTitle || 'this role') + '? This cannot be undone.'"
     confirmLabel="Withdraw"
     cancelLabel="Keep"
     [busy]="pendingWithdrawBusy()"

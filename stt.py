@@ -10,17 +10,17 @@ logging.getLogger("nemo_logger").setLevel(logging.ERROR)
 MODEL_NAME = "nvidia/parakeet-tdt-0.6b-v2"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-print(f"🔄 Loading STT Model ({device})... This might take a minute.")
+print(f"[stt] Loading STT model ({device})... This might take a minute.")
 if torch.cuda.is_available():
-    print(f"   Using GPU: {torch.cuda.get_device_name(0)}")
+    print(f"[stt] Using GPU: {torch.cuda.get_device_name(0)}")
 
 # --- 3. Load Model Globally ---
 try:
     model = ASRModel.from_pretrained(MODEL_NAME).to(device)
     model.eval()
-    print("✅ STT Model loaded successfully.")
+    print("[stt] STT model loaded successfully.")
 except Exception as e:
-    print(f"❌ Failed to load NeMo model: {e}")
+    print(f"[stt] Failed to load NeMo model: {e}")
     raise e
 
 def speech_to_text(audio_file_path: str) -> str:
@@ -31,7 +31,7 @@ def speech_to_text(audio_file_path: str) -> str:
     abs_path = os.path.abspath(audio_file_path)
     
     if not os.path.exists(abs_path):
-        print(f"⚠️ Error: Audio file not found at {abs_path}")
+        print(f"[stt] Error: Audio file not found at {abs_path}")
         return ""
 
     try:
@@ -59,5 +59,5 @@ def speech_to_text(audio_file_path: str) -> str:
             return ""
             
     except Exception as e:
-        print(f"⚠️ Transcription error: {e}")
+        print(f"[stt] Transcription error: {e}")
         return ""

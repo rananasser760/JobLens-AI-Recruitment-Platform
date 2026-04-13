@@ -1,9 +1,11 @@
 using System.Text.Json;
+using Hangfire;
 using JobLens.Api.Contracts;
 using JobLens.Application.Common;
 using JobLens.Application.DTOs.Resumes;
 using JobLens.Application.Interfaces;
 using JobLens.Domain.Entities;
+using JobLens.Infrastructure.BackgroundJobs;
 using JobLens.Infrastructure.Persistence;
 using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -18,6 +20,7 @@ public sealed class ResumesController(
     IResumeService resumeService,
     IAiBackendClient aiBackendClient,
     JobLensDbContext dbContext,
+    IBackgroundJobClient backgroundJobs,
     IFileStorageService fileStorageService) : AppControllerBase
 {
     [HttpPost]
@@ -29,15 +32,10 @@ public sealed class ResumesController(
         await stream.CopyToAsync(memory, cancellationToken);
 
         var request = new ResumeUploadRequest(file.FileName, file.ContentType, memory.ToArray(), isDefault);
-        var result = await resumeService.UploadAsync(GetRequiredUserId(), request, cancellationToken);
+        var result = await resumeService.UploadAsync(GetRequiredUserId(), request, parseNow, cancellationToken);
         if (!result.Success || result.Data is null)
         {
             return BadRequest(new ApiResponse<ResumeViewDto>(false, null, result.Message, result.Errors));
-        }
-
-        if (parseNow)
-        {
-            await ParseStoredResumeInternalAsync(result.Data.ResumeId, cancellationToken);
         }
 
         var resume = await LoadResumeAsync(result.Data.ResumeId, cancellationToken);
@@ -94,11 +92,44 @@ public sealed class ResumesController(
             return NotFound(new ApiResponse<bool>(false, false, "Resume not found.", ["not_found"]));
         }
 
-        await fileStorageService.DeleteAsync(resume.StorageKey, cancellationToken);
+        var fallbackResume = await dbContext.Resumes
+            .Where(x => x.CandidateProfileId == resume.CandidateProfileId && x.Id != resume.Id)
+            .OrderByDescending(x => x.IsDefault)
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var linkedApplicationsCount = await dbContext.Applications
+            .CountAsync(x => x.ResumeId == resume.Id, cancellationToken);
+
+        if (linkedApplicationsCount > 0 && fallbackResume is null)
+        {
+            return Conflict(new ApiResponse<bool>(
+                false,
+                false,
+                "This resume is used by existing applications. Upload another resume before deleting this one.",
+                ["resume_in_use"]));
+        }
+
+        if (linkedApplicationsCount > 0 && fallbackResume is not null)
+        {
+            var linkedApplications = await dbContext.Applications
+                .Where(x => x.ResumeId == resume.Id)
+                .ToListAsync(cancellationToken);
+
+            foreach (var application in linkedApplications)
+            {
+                application.ResumeId = fallbackResume.Id;
+            }
+        }
+
+        if (resume.IsDefault && fallbackResume is not null)
+        {
+            fallbackResume.IsDefault = true;
+        }
+
         dbContext.Resumes.Remove(resume);
 
-        var hasOtherResumes = await dbContext.Resumes
-            .AnyAsync(x => x.CandidateProfileId == resume.CandidateProfileId && x.Id != resume.Id, cancellationToken);
+        var hasOtherResumes = fallbackResume is not null;
 
         if (!hasOtherResumes)
         {
@@ -111,6 +142,7 @@ public sealed class ResumesController(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await fileStorageService.DeleteAsync(resume.StorageKey, cancellationToken);
 
         if (!hasOtherResumes)
         {
@@ -145,13 +177,33 @@ public sealed class ResumesController(
     [HttpPost("{resumeId:long}/parse")]
     public async Task<IActionResult> ParseStoredResume(long resumeId, CancellationToken cancellationToken)
     {
-        var success = await ParseStoredResumeInternalAsync(resumeId, cancellationToken);
-        if (!success)
+        var resume = await LoadResumeAsync(resumeId, cancellationToken);
+        if (resume is null)
         {
-            return BadRequest(new ApiResponse<bool>(false, false, "Could not parse this resume."));
+            return NotFound(new ApiResponse<bool>(false, false, "Resume not found.", ["not_found"]));
         }
 
-        return Ok(new ApiResponse<bool>(true, true, "Resume parsed."));
+        if (string.IsNullOrWhiteSpace(resume.RawText))
+        {
+            return BadRequest(new ApiResponse<bool>(false, false, "This resume has no extractable text."));
+        }
+
+        if (resume.ParseStatus is "Queued" or "Parsing")
+        {
+            return Ok(new ApiResponse<bool>(true, true, "Resume parsing is already in progress."));
+        }
+
+        if (resume.ParseStatus == "Completed" && resume.ParsedResumeResult is not null)
+        {
+            return Ok(new ApiResponse<bool>(true, true, "Resume is already parsed."));
+        }
+
+        resume.ParseStatus = "Queued";
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<ResumeWorkflowJob>(job => job.ProcessResumeAsync(resume.Id));
+
+        return Ok(new ApiResponse<bool>(true, true, "Resume parsing queued."));
     }
 
     [HttpGet("{resumeId:long}/ats-score")]
@@ -284,40 +336,6 @@ public sealed class ResumesController(
             .Include(x => x.ParsedResumeResult)
             .Include(x => x.CandidateProfile)
             .FirstOrDefaultAsync(x => x.Id == resumeId && x.CandidateProfile.UserId == userId, cancellationToken);
-    }
-
-    private async Task<bool> ParseStoredResumeInternalAsync(long resumeId, CancellationToken cancellationToken)
-    {
-        var resume = await LoadResumeAsync(resumeId, cancellationToken);
-        if (resume is null)
-        {
-            return false;
-        }
-
-        var ai = await aiBackendClient.ParseResumeTextAsync(resume.RawText, cancellationToken);
-        if (!ai.Success || ai.Data is null)
-        {
-            return false;
-        }
-
-        var parsed = resume.ParsedResumeResult;
-        if (parsed is null)
-        {
-            parsed = new ParsedResumeResult { ResumeId = resume.Id };
-            dbContext.ParsedResumeResults.Add(parsed);
-            resume.ParsedResumeResult = parsed;
-        }
-
-        parsed.FullName = ai.Data.FullName;
-        parsed.Email = ai.Data.Email;
-        parsed.Phone = ai.Data.Phone;
-        parsed.SkillsJson = ServiceJson.Serialize(ai.Data.Skills);
-        parsed.StructuredJson = ai.Data.StructuredJson;
-        parsed.ParsedAtUtc = DateTime.UtcNow;
-        resume.ParseStatus = "Completed";
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return true;
     }
 
     private async Task<ResumeViewDto> ToResumeViewAsync(Resume resume, CancellationToken cancellationToken)

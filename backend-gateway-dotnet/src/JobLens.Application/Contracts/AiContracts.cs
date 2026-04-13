@@ -20,7 +20,14 @@ public sealed record ScrapedJobItemDto(
     string Title,
     string Company,
     string Location,
+    string? City,
+    string? Country,
     string Description,
+    string? Requirements,
+    string? Responsibilities,
+    string? EmploymentType,
+    string? ExperienceLevel,
+    string? EnrichmentSource,
     IReadOnlyList<string> Skills,
     DateTime? PostedAtUtc,
     IReadOnlyDictionary<string, object?> Metadata);
@@ -37,7 +44,14 @@ public sealed record StartInterviewAiRequest(
 
 public sealed record InterviewSessionInitResponseDto(string InterviewSessionId, string IntegritySessionId, int MaxQuestions, string WelcomeMessage);
 public sealed record AudioAnalysisRequest(string InterviewSessionId, string Base64Audio, int Sequence);
-public sealed record AudioAnalysisResponseDto(string Transcript, string Reply, bool IsComplete, double? Score, IReadOnlyList<string> Flags);
+public sealed record AudioAnalysisResponseDto(
+    string Transcript,
+    string Reply,
+    bool IsComplete,
+    double? Score,
+    IReadOnlyList<string> Flags,
+    string? ReplyAudioBase64,
+    string? ReplyAudioMimeType);
 public sealed record VideoAnalysisRequest(string InterviewSessionId, string Base64Frame, int Sequence);
 public sealed record VideoFlagDto(string EventType, string Severity, string Source, string Description, string? MediaReference = null);
 public sealed record VideoAnalysisResponseDto(IReadOnlyList<VideoFlagDto> Events);

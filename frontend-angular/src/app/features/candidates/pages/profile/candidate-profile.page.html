@@ -10,11 +10,11 @@
   </header>
 
   @if (error()) {
-    <p class="banner error">{{ error() }}</p>
+    <p class="banner error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error() }}</p>
   }
 
   @if (success()) {
-    <p class="banner success">{{ success() }}</p>
+    <p class="banner success"><i class="fa-solid fa-check"></i> {{ success() }}</p>
   }
 
   @if (profile(); as currentProfile) {
@@ -70,17 +70,34 @@
       </section>
 
       <section class="panel">
-        <h2>Profile image</h2>
+        <h2><i class="fa-solid fa-camera" style="color:#4059aa;margin-right:.4rem"></i> Profile image</h2>
 
-        @if (currentProfile.profileImagePath) {
-          <img class="profile-image" [src]="currentProfile.profileImagePath" alt="Candidate profile" />
+        @if (profileImageUrl()) {
+          <img class="profile-image"
+            [src]="profileImageUrl()"
+            alt="Candidate profile"
+            (error)="$event.target.style.display='none'"
+          />
         } @else {
-          <p class="empty">No profile image uploaded yet.</p>
+          <div class="img-placeholder">
+            <i class="fa-solid fa-user-circle fa-3x" style="color:#c5c5d3"></i>
+            <p class="empty">No profile image uploaded yet.</p>
+          </div>
         }
 
         <div class="inline-actions">
-          <input #profileImageInput type="file" accept="image/*" (change)="onProfileImageSelected(profileImageInput.files)" />
-          <button type="button" (click)="uploadProfileImage()" [disabled]="uploadingImage() || !selectedImageFile()">
+          <input
+            #profileImageInput
+            type="file"
+            accept="image/*"
+            (change)="onProfileImageSelected(profileImageInput.files)"
+          />
+          <button
+            type="button"
+            (click)="uploadProfileImage(); profileImageInput.value = ''"
+            [disabled]="uploadingImage() || !selectedImageFile()"
+          >
+            <i class="fa-solid fa-upload"></i>
             {{ uploadingImage() ? 'Uploading...' : 'Upload image' }}
           </button>
         </div>

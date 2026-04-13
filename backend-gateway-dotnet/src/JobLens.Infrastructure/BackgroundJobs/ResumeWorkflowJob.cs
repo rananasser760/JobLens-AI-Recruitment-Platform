@@ -54,10 +54,15 @@ public sealed class ResumeWorkflowJob(
                 return;
             }
 
-            var parsed = await aiBackendClient.ParseResumeTextAsync(resume.RawText, CancellationToken.None);
+            using var parseTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+            var parsed = await aiBackendClient.ParseResumeTextAsync(resume.RawText, parseTimeout.Token);
             if (!parsed.Success || parsed.Data is null)
             {
-                await FailStateAsync(state, parsed.Error?.Message ?? "Resume parse failed.");
+                var error = parsed.Error?.Code == "RequestCanceled"
+                    ? "Resume parse timed out after 90 seconds."
+                    : parsed.Error?.Message ?? "Resume parse failed.";
+
+                await FailStateAsync(state, error);
                 resume.ParseStatus = "Failed";
                 await dbContext.SaveChangesAsync();
                 return;

@@ -50,19 +50,24 @@ describe('CandidateInterviewSessionPage', () => {
 
   let submitAnswerCalls: Array<{ payload: SubmitAnswerDto; audio?: File }>;
   let reportBrowserCalls: ReportBrowserEventDto[];
+  let startCalls: number;
 
   let interviewsServiceMock: Partial<InterviewsService>;
 
   beforeEach(async () => {
     submitAnswerCalls = [];
     reportBrowserCalls = [];
+    startCalls = 0;
 
     interviewsServiceMock = {
       getSession: (): Observable<any> =>
         of({ success: true, message: 'ok', data: session }),
       getQuestions: (): Observable<any> =>
         of({ success: true, message: 'ok', data: [question] }),
-      start: (): Observable<any> => of({ success: true, message: 'ok', data: session }),
+      start: (): Observable<any> => {
+        startCalls += 1;
+        return of({ success: true, message: 'ok', data: session });
+      },
       end: (): Observable<any> => of({ success: true, message: 'ok', data: session }),
       submitAnswer: (payload: SubmitAnswerDto, audioFile?: File): Observable<any> => {
         submitAnswerCalls.push({ payload, audio: audioFile });
@@ -96,6 +101,29 @@ describe('CandidateInterviewSessionPage', () => {
     expect(component.session()?.id).toBe(7);
     expect(component.questions().length).toBe(1);
     expect(component.selectedQuestion()?.id).toBe(11);
+  });
+
+  it('treats Live status as in-progress', () => {
+    const fixture = TestBed.createComponent(CandidateInterviewSessionPage);
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance;
+    expect(component.interviewPhase()).toBe('in-progress');
+  });
+
+  it('requires microphone and camera before starting', () => {
+    const fixture = TestBed.createComponent(CandidateInterviewSessionPage);
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance;
+    component.session.set({ ...session, status: 'Scheduled' });
+    component.interviewPhase.set('pre-check');
+    component.permissionsGranted.set({ mic: true, camera: false });
+
+    component.enterInterview();
+
+    expect(startCalls).toBe(0);
+    expect(component.error()).toContain('microphone and camera');
   });
 
   it('submits answer draft for selected question', () => {

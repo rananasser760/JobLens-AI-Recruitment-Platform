@@ -32,6 +32,10 @@ body {
 	line-height: 1.4;
 }
 
+.page-content:has(app-candidate-interview-session-page) {
+	padding: 0 !important;
+}
+
 button,
 input,
 textarea,

@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
@@ -9,7 +9,6 @@ import { JobsService } from '../../../jobs/jobs.service';
 import { ResumeService } from '../../../resumes/resume.service';
 import { EmploymentType, JobListDto, JobSource } from '../../../../core/models/job.model';
 import { ResumeDto } from '../../../../core/models/resume.model';
-import { LoadingSpinnerComponent } from '../../../../shared/components/loading-spinner/loading-spinner.component';
 
 const EMPLOYMENT_TYPES: EmploymentType[] = [
   'FullTime',
@@ -25,7 +24,7 @@ const PAGE_SIZE_OPTIONS = [12, 24, 48] as const;
 
 @Component({
   selector: 'app-candidate-jobs-page',
-  imports: [CommonModule, RouterLink, LoadingSpinnerComponent],
+  imports: [CommonModule, RouterLink, DatePipe],
   templateUrl: './candidate-jobs.page.html',
   styleUrl: './candidate-jobs.page.css'
 })
@@ -219,6 +218,21 @@ export class CandidateJobsPage {
     this.updateQueryParams();
   }
 
+  onPrimaryAction(job: JobListDto): void {
+    if (this.isExternalJob(job)) {
+      const externalUrl = job.externalUrl?.trim();
+      if (!externalUrl) {
+        this.error.set('This external listing does not include an application link yet.');
+        return;
+      }
+
+      window.open(externalUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    this.applyToJob(job.id);
+  }
+
   applyToJob(jobId: number): void {
     if (this.isApplied(jobId) || this.isApplying(jobId)) {
       return;
@@ -262,12 +276,16 @@ export class CandidateJobsPage {
   }
 
   shouldDisableApply(job: JobListDto): boolean {
-    return this.isExternalJob(job) || this.isApplied(job.id) || this.isApplying(job.id);
+    if (this.isExternalJob(job)) {
+      return !job.externalUrl;
+    }
+
+    return this.isApplied(job.id) || this.isApplying(job.id);
   }
 
   getApplyLabel(job: JobListDto): string {
     if (this.isExternalJob(job)) {
-      return 'External listing';
+      return job.externalUrl ? 'Apply externally' : 'External listing';
     }
     if (this.isApplied(job.id)) {
       return 'Applied';

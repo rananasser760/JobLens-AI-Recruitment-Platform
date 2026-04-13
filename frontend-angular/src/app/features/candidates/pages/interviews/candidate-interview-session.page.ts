@@ -1,9 +1,10 @@
-import { CommonModule, DatePipe, DecimalPipe, isPlatformBrowser } from '@angular/common';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import {
   AfterViewChecked,
   Component,
   computed,
   ElementRef,
+  HostListener,
   inject,
   OnDestroy,
   PLATFORM_ID,
@@ -11,14 +12,16 @@ import {
   ViewChild
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError, finalize, forkJoin, map, of } from 'rxjs';
+import { Observable, catchError, finalize, forkJoin, map, of } from 'rxjs';
 
+import { TokenStoreService } from '../../../../core/auth/token-store.service';
 import { InterviewsService } from '../../../interviews/interviews.service';
 import {
   InterviewRealtimeService,
   RealtimeSocketLike
 } from '../../../interviews/interview-realtime.service';
 import { InterviewQuestionDto, InterviewSessionDto } from '../../../../core/models/interview.model';
+import { environment } from '../../../../../environments/environment';
 
 type BrowserCounterKey =
   | 'tabSwitchCount'
@@ -66,15 +69,15 @@ const WAVEFORM_COUNT = 18;
 
 @Component({
   selector: 'app-candidate-interview-session-page',
-  imports: [CommonModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, RouterLink],
   templateUrl: './candidate-interview-session.page.html',
-  styleUrls: ['./candidate-interview-session.page.css'],
-  host: { class: 'interview-host' }
+  styleUrls: ['./candidate-interview-session.page.css']
 })
 export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecked {
   private readonly route = inject(ActivatedRoute);
   private readonly interviewsService = inject(InterviewsService);
   private readonly interviewRealtime = inject(InterviewRealtimeService);
+  private readonly tokenStore = inject(TokenStoreService);
   private readonly platformId = inject(PLATFORM_ID);
 
   @ViewChild('previewVideo') previewVideoRef!: ElementRef<HTMLVideoElement>;
@@ -94,8 +97,21 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
   private mediaStream: MediaStream | null = null;
   private audioPlayer: HTMLAudioElement | null = null;
   private readonly audioQueue: Blob[] = [];
+  private fallbackSpeechTimer: ReturnType<typeof setTimeout> | null = null;
+  private frameCaptureTimer: ReturnType<typeof setInterval> | null = null;
+  private frameCanvas: HTMLCanvasElement | null = null;
   private timerInterval: ReturnType<typeof setInterval> | null = null;
+  private deviceHealthTimer: ReturnType<typeof setInterval> | null = null;
+  private deviceGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldScrollTranscript = false;
+  private lastAssistantReplyText: string | null = null;
+  private pausedCaptureForPlayback = false;
+  private providerAutoEnding = false;
+  private readonly deviceGracePeriodMs = 5000;
+  private captureStartedAtMs: number | null = null;
+  private lastTranscriptReceivedAtMs: number | null = null;
+  private noTranscriptWarningShown = false;
+  private readonly noTranscriptWarningDelayMs = 12000;
 
   // ─── Phase & UI State ───
   readonly interviewPhase = signal<InterviewPhase>('loading');
@@ -131,6 +147,10 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
   readonly liveCapturing = signal(false);
   readonly micSupported = signal(false);
   readonly audioPlaying = signal(false);
+  readonly aiConnected = signal(false);
+  readonly cameraMonitoringActive = signal(false);
+  readonly aiSpeechMode = signal<'idle' | 'audio' | 'fallback'>('idle');
+  readonly proctoringEvents = signal<string[]>([]);
   readonly confirmEndSessionOpen = signal(false);
 
   // ─── Waveform bars (static data) ───
@@ -178,13 +198,19 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
     const s = this.realtimeState();
     return s === 'connecting' || s === 'reconnecting';
   });
+  readonly hasRequiredPermissions = computed(
+    () => this.permissionsGranted().mic && this.permissionsGranted().camera
+  );
   readonly hasTranscripts = computed(() => this.transcriptEntries().length > 0);
+  readonly hasProctoringEvents = computed(() => this.proctoringEvents().length > 0);
   readonly formattedTimer = computed(() => {
     const s = this.sessionTimerSeconds();
     const m = Math.floor(s / 60);
     const sec = s % 60;
     return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   });
+  readonly leaveWarningOpen = signal(false);
+  readonly leaveAttemptCount = signal(0);
 
   constructor() {
     if (this.isBrowser) {
@@ -259,24 +285,31 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
   // ─── Phase derivation ───
   private derivePhase(session: InterviewSessionDto | null): void {
     if (!session) {
+      this.stopDeviceHealthMonitor();
       this.interviewPhase.set('error');
       return;
     }
     const status = this.normalizeStatus(session.status);
-    if (status.includes('scheduled') || status.includes('draft')) {
-      this.interviewPhase.set('pre-check');
-    } else if (status.includes('progress') || status.includes('started')) {
+    if (this.isLiveStatus(status)) {
       this.interviewPhase.set('in-progress');
       this.startTimer();
+      this.startDeviceHealthMonitor();
       this.syncRealtimeState();
-    } else if (status.includes('complet') || status.includes('ended')) {
+      if (!this.hasRequiredPermissions() && !this.requestingPerms()) {
+        void this.requestPermissions(true);
+      }
+    } else if (this.isCompletedStatus(status)) {
       this.interviewPhase.set('completed');
       this.stopTimer();
-    } else if (status.includes('cancel')) {
+      this.stopDeviceHealthMonitor();
+    } else if (this.isCancelledStatus(status)) {
       this.interviewPhase.set('error');
       this.error.set('This interview session has been cancelled.');
+      this.stopDeviceHealthMonitor();
     } else {
+      // Anything else (Scheduled, Draft, Pending, Created, NotStarted, etc.) → pre-check
       this.interviewPhase.set('pre-check');
+      this.stopDeviceHealthMonitor();
     }
   }
 
@@ -287,37 +320,98 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
 
   canStart(): boolean {
     const status = this.normalizeStatus(this.session()?.status);
-    return status.includes('scheduled') || status.includes('draft');
+    // Allow starting unless the session is already in-progress, completed, or cancelled
+    if (!status) return false;
+    return (
+      !this.isLiveStatus(status) &&
+      !this.isCompletedStatus(status) &&
+      !this.isCancelledStatus(status)
+    );
   }
 
   canEnd(): boolean {
     const status = this.normalizeStatus(this.session()?.status);
-    return status.includes('progress') || status.includes('started');
+    return this.isLiveStatus(status);
   }
 
   // ─── Permissions ───
-  async requestPermissions(): Promise<void> {
-    if (!this.isBrowser) return;
+  async requestPermissions(silent = false): Promise<void> {
+    if (!this.isBrowser || !navigator.mediaDevices?.getUserMedia) {
+      this.error.set('This browser does not support camera and microphone access.');
+      return;
+    }
+
     this.requestingPerms.set(true);
     this.permChecked.set(false);
+    this.error.set(null);
+    this.success.set(null);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      this.cameraStream.set(stream);
-      this.permissionsGranted.set({ camera: true, mic: true });
-    } catch {
-      // Try audio only
       try {
-        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        this.cameraStream.set(audioStream);
-        this.permissionsGranted.set({ camera: false, mic: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: this.getAudioConstraints(),
+          video: true
+        });
+        this.releaseCameraStream();
+        this.cameraStream.set(stream);
+        this.permissionsGranted.set({ camera: true, mic: true });
+        if (!silent) {
+          this.success.set('Microphone and camera are ready. You can start the interview.');
+        }
+        this.clearDeviceGraceTimer();
+        return;
       } catch {
-        this.permissionsGranted.set({ camera: false, mic: false });
+        // Fall through and detect partial permission grants.
+      }
+
+      let micGranted = false;
+      let cameraGranted = false;
+      let videoOnlyStream: MediaStream | null = null;
+
+      try {
+        const micOnlyStream = await navigator.mediaDevices.getUserMedia({
+          audio: this.getAudioConstraints(),
+          video: false
+        });
+        micGranted = true;
+        for (const track of micOnlyStream.getTracks()) track.stop();
+      } catch {}
+
+      try {
+        videoOnlyStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: true
+        });
+        cameraGranted = true;
+      } catch {}
+
+      this.releaseCameraStream();
+      if (videoOnlyStream) {
+        this.cameraStream.set(videoOnlyStream);
+      }
+
+      this.permissionsGranted.set({ camera: cameraGranted, mic: micGranted });
+      if (!cameraGranted || !micGranted) {
+        this.error.set(
+          'Microphone and camera access are required before starting the interview. Please allow both permissions and try again.'
+        );
+      } else {
+        this.clearDeviceGraceTimer();
       }
     } finally {
       this.permChecked.set(true);
       this.requestingPerms.set(false);
     }
+  }
+
+  private getAudioConstraints(): MediaTrackConstraints {
+    return {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      channelCount: 1,
+      sampleRate: { ideal: 16000 }
+    };
   }
 
   private attachCameraToVideoElement(): void {
@@ -329,15 +423,51 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       this.arenaVideoRef
     ];
     for (const ref of targets) {
-      if (ref?.nativeElement && ref.nativeElement.srcObject !== stream) {
-        ref.nativeElement.srcObject = stream;
+      const element = ref?.nativeElement;
+      if (!element) {
+        continue;
+      }
+
+      if (element.srcObject !== stream) {
+        element.srcObject = stream;
+      }
+
+      // Force local camera feeds to stay silent so only AI playback is audible.
+      if (!element.muted) {
+        element.muted = true;
+      }
+      if (!element.defaultMuted) {
+        element.defaultMuted = true;
+      }
+      if (element.volume !== 0) {
+        element.volume = 0;
+      }
+      if (!element.hasAttribute('muted')) {
+        element.setAttribute('muted', '');
       }
     }
   }
 
   // ─── Enter Interview (Pre-check → In-progress) ───
   enterInterview(): void {
-    if (this.acting() || !this.canStart() || !this.permissionsGranted().mic) return;
+    if (this.acting()) {
+      return;
+    }
+
+    if (!this.hasRequiredPermissions()) {
+      this.error.set('Please grant microphone and camera access before starting the interview.');
+      return;
+    }
+
+    if (!this.canStart()) {
+      const status = this.session()?.status ?? 'unknown';
+      this.error.set(
+        `Cannot start the interview right now. Current session status: "${status}". ` +
+        `Please refresh or contact support if this persists.`
+      );
+      return;
+    }
+
     this.startSessionInternal();
   }
 
@@ -352,19 +482,20 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       .start(id)
       .pipe(finalize(() => this.acting.set(false)))
       .subscribe({
-        next: () => {
+        next: (res) => {
+          if (res.data) {
+            this.session.set(res.data);
+          }
+          this.leaveAttemptCount.set(0);
+          this.leaveWarningOpen.set(false);
+          this.providerAutoEnding = false;
           this.interviewPhase.set('in-progress');
+          this.syncBrowserMonitorState();
           this.startTimer();
+          this.startDeviceHealthMonitor();
+          this.aiConnected.set(false);
+          this.syncRealtimeState();
           this.load();
-          // Auto-connect realtime and start mic after brief delay
-          setTimeout(() => {
-            this.ensureRealtimeConnection(false);
-            setTimeout(() => {
-              if (this.isRealtimeConnected()) {
-                void this.startLiveCapture();
-              }
-            }, 1500);
-          }, 800);
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to start the interview session.'));
@@ -405,18 +536,115 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       .pipe(finalize(() => this.acting.set(false)))
       .subscribe({
         next: (res) => {
-          this.stopLiveCapture();
-          this.disconnectRealtime(true);
-          this.stopTimer();
-          this.releaseCameraStream();
-          this.session.set(res.data);
-          this.interviewPhase.set('completed');
+          this.finalizeSessionCompletion(res.data);
         },
         error: (err: unknown) => {
           this.interviewPhase.set('in-progress');
           this.error.set(this.mapError(err, 'Unable to end the interview session right now.'));
         }
       });
+  }
+
+  handleRouteLeaveAttempt(): boolean | Observable<boolean> {
+    if (!this.isInProgress() || !this.canEnd()) {
+      return true;
+    }
+
+    if (this.leaveAttemptCount() === 0) {
+      this.leaveAttemptCount.set(1);
+      this.leaveWarningOpen.set(true);
+      this.error.set('Leaving this live interview is blocked. A second leave attempt will end your interview automatically.');
+      return false;
+    }
+
+    this.leaveWarningOpen.set(false);
+    return this.forceAutoEndSession('second_route_leave_attempt');
+  }
+
+  dismissLeaveWarning(): void {
+    this.leaveWarningOpen.set(false);
+  }
+
+  endSessionAfterLeaveWarning(): void {
+    this.leaveWarningOpen.set(false);
+    this.leaveAttemptCount.set(2);
+    this.forceAutoEndSession('leave_warning_confirm_end').subscribe(() => {});
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  handleBeforeUnload(event: BeforeUnloadEvent): void {
+    if (!this.isInProgress() || !this.canEnd()) {
+      return;
+    }
+
+    this.tryEndWithKeepAlive('browser_unload');
+    event.preventDefault();
+    event.returnValue = '';
+  }
+
+  private forceAutoEndSession(reason: string): Observable<boolean> {
+    const id = this.sessionId();
+    if (!id || this.acting() || !this.canEnd()) {
+      return of(false);
+    }
+
+    this.interviewPhase.set('completing');
+    this.acting.set(true);
+    this.error.set(`Interview is ending automatically (${reason.replaceAll('_', ' ')}).`);
+
+    if (this.hasBrowserEvents()) {
+      this.reportBrowserEvents(true);
+    }
+
+    return this.interviewsService.end(id).pipe(
+      map((res) => {
+        this.finalizeSessionCompletion(res.data);
+        return true;
+      }),
+      catchError((err: unknown) => {
+        this.interviewPhase.set('in-progress');
+        this.error.set(this.mapError(err, 'Unable to end the interview session automatically.'));
+        return of(false);
+      }),
+      finalize(() => this.acting.set(false))
+    );
+  }
+
+  private finalizeSessionCompletion(session: InterviewSessionDto | null): void {
+    this.stopLiveCapture();
+    this.disconnectRealtime(true);
+    this.stopTimer();
+    this.stopDeviceHealthMonitor();
+    this.releaseCameraStream();
+    this.session.set(session);
+    this.leaveWarningOpen.set(false);
+    this.leaveAttemptCount.set(0);
+    this.providerAutoEnding = false;
+    this.interviewPhase.set('completed');
+  }
+
+  private tryEndWithKeepAlive(reason: string): void {
+    if (!this.isBrowser) {
+      return;
+    }
+
+    const id = this.sessionId();
+    const token = this.tokenStore.getAccessToken();
+    if (!id || !token) {
+      return;
+    }
+
+    const url = `${environment.apiBaseUrl}${environment.apiPrefix}/interviews/${id}/end`;
+    void fetch(url, {
+      method: 'POST',
+      keepalive: true,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ reason })
+    }).catch(() => {});
   }
 
   // ─── Timer ───
@@ -452,6 +680,11 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
   }
 
   toggleLiveCapture(): void {
+    if (!this.isInProgress()) {
+      this.error.set('Microphone controls are only available during a live interview session.');
+      return;
+    }
+
     if (this.liveCapturing()) {
       this.stopLiveCapture();
       return;
@@ -480,16 +713,21 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       return;
     }
     if (!this.isRealtimeConnected()) {
-      this.realtimeError.set('Connect live mode before starting microphone capture.');
+      this.realtimeError.set(
+        `Live connection is not ready (${this.realtimeStateLabel().toLowerCase()}). Wait until it becomes connected, then retry microphone capture.`
+      );
       return;
     }
     if (this.liveCapturing()) return;
 
     try {
-      // Reuse existing camera stream's audio track if available
+      // Reuse existing camera stream's audio track if available and alive
       let stream = this.cameraStream();
-      if (!stream || !stream.getAudioTracks().length) {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!stream || !this.hasLiveEnabledTrack(stream, 'audio')) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: this.getAudioConstraints(),
+          video: false
+        });
       }
 
       const preferredMimeTypes = [
@@ -504,14 +742,19 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
 
       recorder.ondataavailable = (event: BlobEvent) => {
         const socket = this.realtimeSocket;
-        if (!socket || socket.readyState !== WebSocket.OPEN || !event.data || event.data.size === 0)
+        if (!socket || socket.readyState !== WebSocket.OPEN || !event.data || event.data.size === 0) {
+          if (this.isInProgress()) {
+            this.realtimeError.set('Live connection dropped while streaming microphone audio. Reconnecting...');
+          }
           return;
+        }
 
         void event.data
           .arrayBuffer()
           .then((buffer) => {
             if (this.realtimeSocket && this.realtimeSocket.readyState === WebSocket.OPEN) {
               this.realtimeSocket.send(buffer);
+              this.maybeWarnMissingTranscript();
             }
           })
           .catch(() => {});
@@ -520,25 +763,82 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       recorder.start(1500);
       this.mediaRecorder = recorder;
       this.mediaStream = stream;
+      this.pausedCaptureForPlayback = false;
+      this.captureStartedAtMs = Date.now();
+      this.lastTranscriptReceivedAtMs = null;
+      this.noTranscriptWarningShown = false;
       this.liveCapturing.set(true);
       this.realtimeError.set(null);
       this.pushTranscript('system', 'Live microphone streaming started.');
     } catch (err: unknown) {
       this.realtimeError.set(this.mapError(err, 'Unable to access your microphone.'));
+      this.captureStartedAtMs = null;
+      this.lastTranscriptReceivedAtMs = null;
+      this.noTranscriptWarningShown = false;
       this.releaseMediaResources();
     }
   }
 
   private stopLiveCapture(): void {
+    this.stopLiveCaptureInternal(true);
+  }
+
+  private stopLiveCaptureInternal(announce: boolean): void {
     if (!this.liveCapturing()) {
       this.releaseMediaResources();
+      if (announce) {
+        this.pausedCaptureForPlayback = false;
+      }
       return;
     }
+
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       this.mediaRecorder.stop();
     }
+
     this.releaseMediaResources();
-    this.pushTranscript('system', 'Live microphone streaming stopped.');
+    this.captureStartedAtMs = null;
+    this.lastTranscriptReceivedAtMs = null;
+    this.noTranscriptWarningShown = false;
+    if (announce) {
+      this.pausedCaptureForPlayback = false;
+      this.pushTranscript('system', 'Live microphone streaming stopped.');
+    }
+  }
+
+  private pauseCaptureForAiPlayback(): void {
+    if (!this.liveCapturing()) {
+      return;
+    }
+
+    this.pausedCaptureForPlayback = true;
+
+    // Pause the existing recorder instead of destroying it.
+    // This avoids re-creating the entire audio capture pipeline
+    // which can leave the mic in a broken state.
+    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      this.mediaRecorder.pause();
+    }
+  }
+
+  private resumeCaptureAfterAiPlayback(): void {
+    if (!this.pausedCaptureForPlayback) {
+      return;
+    }
+
+    this.pausedCaptureForPlayback = false;
+    if (!this.canUseRealtime() || !this.isRealtimeConnected()) {
+      return;
+    }
+
+    // Resume the paused recorder if it's still alive.
+    if (this.mediaRecorder && this.mediaRecorder.state === 'paused') {
+      this.mediaRecorder.resume();
+      return;
+    }
+
+    // Recorder was lost (e.g. reconnect happened) — fall back to full restart.
+    void this.startLiveCapture();
   }
 
   private syncRealtimeState(): void {
@@ -554,6 +854,7 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
     if (nextKey !== this.lastRealtimeGatewaySessionId) {
       this.lastRealtimeGatewaySessionId = nextKey;
       this.transcriptEntries.set([]);
+      this.proctoringEvents.set([]);
       this.disconnectRealtime(false);
     }
     if (this.manualRealtimeDisconnect) return;
@@ -588,8 +889,10 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       this.reconnectAttempts = 0;
       this.realtimeState.set('connected');
       this.realtimeError.set(null);
-      // Auto-start mic capture once connected
-      setTimeout(() => void this.startLiveCapture(), 500);
+      this.aiConnected.set(true);
+      this.startVideoFrameStreaming();
+      socket.requestOpeningPrompt();
+      void this.startLiveCapture();
     };
 
     socket.onmessage = (event: MessageEvent) => {
@@ -602,6 +905,8 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
 
     socket.onclose = () => {
       this.realtimeSocket = null;
+      this.aiConnected.set(false);
+      this.stopVideoFrameStreaming();
       if (this.liveCapturing()) this.stopLiveCapture();
       const shouldReconnect = !this.manualRealtimeDisconnect && this.canUseRealtime();
       if (shouldReconnect) {
@@ -614,7 +919,9 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
 
   private disconnectRealtime(manual: boolean): void {
     this.manualRealtimeDisconnect = manual;
+    this.aiConnected.set(false);
     this.clearReconnectTimer();
+    this.stopVideoFrameStreaming();
     if (this.realtimeSocket) {
       this.interviewRealtime.close(this.realtimeSocket);
       this.realtimeSocket = null;
@@ -647,10 +954,14 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       return;
     }
     if (payload instanceof Blob) {
+      this.clearFallbackSpeechTimer();
+      this.cancelBrowserSpeech();
       this.enqueueAudio(payload);
       return;
     }
     if (payload instanceof ArrayBuffer) {
+      this.clearFallbackSpeechTimer();
+      this.cancelBrowserSpeech();
       this.enqueueAudio(new Blob([payload]));
     }
   }
@@ -664,11 +975,45 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
     }
 
     if (parsed['ping']) return;
+    if (parsed['type'] === 'error') {
+      const message = typeof parsed['message'] === 'string' ? parsed['message'].trim() : '';
+      const code = typeof parsed['code'] === 'string' ? parsed['code'].trim() : '';
+
+      if (message) {
+        this.pushTranscript('system', message);
+        this.error.set(message);
+      }
+
+      if (code.startsWith('Provider') && this.canEnd() && !this.providerAutoEnding) {
+        this.providerAutoEnding = true;
+        this.forceAutoEndSession(`provider_failure_${code.toLowerCase()}`).subscribe(() => {
+          this.providerAutoEnding = false;
+        });
+      }
+      return;
+    }
+
+    if (parsed['type'] === 'proctoring') {
+      const alerts = Array.isArray(parsed['events'])
+        ? parsed['events'].filter((entry): entry is string => typeof entry === 'string' && !!entry.trim())
+        : [];
+      if (alerts.length > 0) {
+        this.proctoringEvents.set(alerts);
+        this.pushTranscript('system', `Proctoring notice: ${alerts.join(' | ')}`);
+      }
+      return;
+    }
     if (parsed['type'] !== 'transcript') return;
 
     const userText = typeof parsed['user'] === 'string' ? parsed['user'].trim() : '';
     const aiText = typeof parsed['ai'] === 'string' ? parsed['ai'].trim() : '';
     const isComplete = !!parsed['is_complete'];
+    const hasAudio = parsed['has_audio'] === true;
+
+    if (userText || aiText) {
+      this.lastTranscriptReceivedAtMs = Date.now();
+      this.noTranscriptWarningShown = false;
+    }
 
     if (userText && userText !== '(Silence / Inaudible)' && userText !== '(System)') {
       this.pushTranscript('candidate', userText);
@@ -676,28 +1021,21 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
     if (userText === '(System)' && aiText) {
       this.pushTranscript('system', aiText);
     } else if (aiText) {
+      this.lastAssistantReplyText = aiText;
       this.pushTranscript('assistant', aiText);
+      if (hasAudio) {
+        this.aiSpeechMode.set('audio');
+        this.clearFallbackSpeechTimer();
+      } else {
+        this.scheduleFallbackSpeech(aiText);
+      }
     }
 
     if (isComplete) {
       this.stopLiveCapture();
-      // Auto-end the session
-      const id = this.sessionId();
-      if (id && this.canEnd()) {
+      if (this.canEnd()) {
         this.pushTranscript('system', 'AI interview completed. Generating your report...');
-        this.interviewPhase.set('completing');
-        this.interviewsService.end(id).subscribe({
-          next: (res) => {
-            this.stopTimer();
-            this.releaseCameraStream();
-            this.disconnectRealtime(true);
-            this.session.set(res.data);
-            this.interviewPhase.set('completed');
-          },
-          error: () => {
-            this.interviewPhase.set('in-progress');
-          }
-        });
+        this.forceAutoEndSession('ai_interview_complete').subscribe();
       }
     }
   }
@@ -718,21 +1056,88 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
   }
 
   private enqueueAudio(audioBlob: Blob): void {
+    this.cancelBrowserSpeech();
     this.audioQueue.push(audioBlob);
     if (this.audioPlaying()) return;
     this.playNextAudio();
+  }
+
+  private scheduleFallbackSpeech(text: string): void {
+    if (!this.isBrowser) return;
+
+    const content = text.trim();
+    if (!content) return;
+
+    const canSpeak = this.canUseBrowserSpeechSynthesis();
+    if (this.isInProgress() && canSpeak) {
+      this.pauseCaptureForAiPlayback();
+    }
+
+    this.clearFallbackSpeechTimer();
+    this.fallbackSpeechTimer = setTimeout(() => {
+      this.aiSpeechMode.set('fallback');
+      if (!this.speakWithBrowserVoice(content)) {
+        this.aiSpeechMode.set('idle');
+        this.resumeCaptureAfterAiPlayback();
+      }
+    }, 300);
+  }
+
+  private clearFallbackSpeechTimer(): void {
+    if (!this.fallbackSpeechTimer) return;
+    clearTimeout(this.fallbackSpeechTimer);
+    this.fallbackSpeechTimer = null;
+  }
+
+  private speakWithBrowserVoice(text: string): boolean {
+    if (!this.canUseBrowserSpeechSynthesis()) {
+      return false;
+    }
+
+    const synth = (window as Window & { speechSynthesis?: SpeechSynthesis }).speechSynthesis!;
+    synth.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.onend = () => {
+      if (!this.audioPlaying()) {
+        this.aiSpeechMode.set('idle');
+      }
+      this.resumeCaptureAfterAiPlayback();
+    };
+    utterance.onerror = () => {
+      this.aiSpeechMode.set('idle');
+      this.resumeCaptureAfterAiPlayback();
+    };
+    synth.speak(utterance);
+    return true;
+  }
+
+  private cancelBrowserSpeech(): void {
+    if (!this.canUseBrowserSpeechSynthesis()) {
+      return;
+    }
+
+    (window as Window & { speechSynthesis?: SpeechSynthesis }).speechSynthesis?.cancel();
   }
 
   private playNextAudio(): void {
     const next = this.audioQueue.shift();
     if (!next) {
       this.audioPlaying.set(false);
+      this.resumeCaptureAfterAiPlayback();
       return;
     }
+
+    this.pauseCaptureForAiPlayback();
+
     const url = URL.createObjectURL(next);
     const player = new Audio(url);
     this.audioPlayer = player;
     this.audioPlaying.set(true);
+    this.aiSpeechMode.set('audio');
 
     player.onended = () => {
       URL.revokeObjectURL(url);
@@ -744,6 +1149,13 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
     };
     void player.play().catch(() => {
       URL.revokeObjectURL(url);
+      const fallbackText = this.lastAssistantReplyText;
+      if (fallbackText) {
+        this.aiSpeechMode.set('fallback');
+        if (!this.speakWithBrowserVoice(fallbackText)) {
+          this.resumeCaptureAfterAiPlayback();
+        }
+      }
       this.playNextAudio();
     });
   }
@@ -867,9 +1279,28 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
     return (status ?? '').trim().toLowerCase();
   }
 
+  private isLiveStatus(status: string): boolean {
+    return (
+      status.includes('live') ||
+      status.includes('progress') ||
+      status.includes('started') ||
+      status.includes('inprogress')
+    );
+  }
+
+  private isCompletedStatus(status: string): boolean {
+    return status.includes('complet') || status.includes('ended') || status.includes('graded');
+  }
+
+  private isCancelledStatus(status: string): boolean {
+    return status.includes('cancel');
+  }
+
   // ─── Lifecycle ───
   ngOnDestroy(): void {
     this.detachBrowserMonitors();
+    this.stopVideoFrameStreaming();
+    this.stopDeviceHealthMonitor();
     this.stopLiveCapture();
     this.disconnectRealtime(true);
     this.clearReconnectTimer();
@@ -880,6 +1311,8 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       this.audioPlayer = null;
     }
     this.audioQueue.length = 0;
+    this.clearFallbackSpeechTimer();
+    this.cancelBrowserSpeech();
     if (this.hasBrowserEvents()) this.reportBrowserEvents(true);
   }
 
@@ -913,6 +1346,72 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
     } else {
       this.detachBrowserMonitors();
     }
+  }
+
+  private startDeviceHealthMonitor(): void {
+    if (!this.isBrowser || this.deviceHealthTimer) {
+      return;
+    }
+
+    this.deviceHealthTimer = setInterval(() => {
+      this.checkLiveDeviceHealth();
+    }, 1000);
+  }
+
+  private stopDeviceHealthMonitor(): void {
+    if (this.deviceHealthTimer) {
+      clearInterval(this.deviceHealthTimer);
+      this.deviceHealthTimer = null;
+    }
+
+    this.clearDeviceGraceTimer();
+  }
+
+  private clearDeviceGraceTimer(): void {
+    if (!this.deviceGraceTimer) {
+      return;
+    }
+
+    clearTimeout(this.deviceGraceTimer);
+    this.deviceGraceTimer = null;
+  }
+
+  private checkLiveDeviceHealth(): void {
+    if (!this.isInProgress() || !this.canEnd()) {
+      this.clearDeviceGraceTimer();
+      return;
+    }
+
+    if (this.requestingPerms()) {
+      return;
+    }
+
+    if (!this.permChecked() && !this.hasRequiredPermissions()) {
+      return;
+    }
+
+    const cameraStream = this.cameraStream();
+    const captureStream = this.mediaStream;
+    const hasCamera = this.hasLiveEnabledTrack(cameraStream, 'video');
+    const hasMic =
+      this.hasLiveEnabledTrack(cameraStream, 'audio') ||
+      this.hasLiveEnabledTrack(captureStream, 'audio');
+
+    if (hasCamera && hasMic) {
+      this.clearDeviceGraceTimer();
+      this.maybeWarnMissingTranscript();
+      return;
+    }
+
+    if (this.deviceGraceTimer) {
+      return;
+    }
+
+    this.error.set('Camera or microphone disconnected. Restore both within 5 seconds or the interview will end automatically.');
+    this.deviceGraceTimer = setTimeout(() => {
+      this.deviceGraceTimer = null;
+      this.forceAutoEndSession('device_interruption_grace_elapsed').subscribe();
+    }, this.deviceGracePeriodMs);
   }
 
   private canCaptureBrowserSignals(): boolean {
@@ -966,5 +1465,82 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
   private mapError(err: unknown, fallback: string): string {
     if (err instanceof Error && err.message) return err.message;
     return fallback;
+  }
+
+  private canUseBrowserSpeechSynthesis(): boolean {
+    return (
+      this.isBrowser &&
+      typeof SpeechSynthesisUtterance !== 'undefined' &&
+      !!(window as Window & { speechSynthesis?: SpeechSynthesis }).speechSynthesis
+    );
+  }
+
+  private hasLiveEnabledTrack(stream: MediaStream | null, kind: 'audio' | 'video'): boolean {
+    if (!stream) {
+      return false;
+    }
+
+    const tracks = kind === 'audio' ? stream.getAudioTracks() : stream.getVideoTracks();
+    return tracks.some((track) => track.readyState === 'live' && track.enabled);
+  }
+
+  private maybeWarnMissingTranscript(): void {
+    if (!this.isInProgress() || !this.liveCapturing() || this.noTranscriptWarningShown) {
+      return;
+    }
+
+    if (!this.captureStartedAtMs) {
+      return;
+    }
+
+    const now = Date.now();
+    const baseline = this.lastTranscriptReceivedAtMs ?? this.captureStartedAtMs;
+    if (now - baseline < this.noTranscriptWarningDelayMs) {
+      return;
+    }
+
+    this.noTranscriptWarningShown = true;
+    const warning =
+      'Microphone is active, but no transcript is coming back yet. Check your selected mic and live connection status.';
+    this.realtimeError.set(warning);
+    this.pushTranscript('system', warning);
+  }
+
+  private startVideoFrameStreaming(): void {
+    if (!this.isBrowser || this.frameCaptureTimer || !this.isRealtimeConnected()) return;
+    this.cameraMonitoringActive.set(true);
+
+    this.frameCaptureTimer = setInterval(() => {
+      const socket = this.realtimeSocket;
+      const stream = this.cameraStream();
+      if (!socket || socket.readyState !== WebSocket.OPEN || !stream) return;
+
+      const video = this.arenaVideoRef?.nativeElement ?? this.previewVideoRef?.nativeElement;
+      if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth <= 0 || video.videoHeight <= 0) {
+        return;
+      }
+
+      if (!this.frameCanvas) this.frameCanvas = document.createElement('canvas');
+      const canvas = this.frameCanvas;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      if (!context) return;
+
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.45);
+      const base64Frame = dataUrl.split(',', 2)[1] ?? '';
+      if (!base64Frame) return;
+
+      socket.sendVideoFrame(base64Frame);
+    }, 650);
+  }
+
+  private stopVideoFrameStreaming(): void {
+    this.cameraMonitoringActive.set(false);
+    if (this.frameCaptureTimer) {
+      clearInterval(this.frameCaptureTimer);
+      this.frameCaptureTimer = null;
+    }
   }
 }

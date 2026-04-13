@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -8,7 +8,7 @@ import { JobsService } from '../../../jobs/jobs.service';
 
 @Component({
   selector: 'app-candidate-recommendations-page',
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, DatePipe],
   templateUrl: './candidate-recommendations.page.html',
   styleUrl: './candidate-recommendations.page.css'
 })
@@ -60,6 +60,13 @@ export class CandidateRecommendationsPage {
     }
 
     this.load(true);
+  }
+
+  getScoreTier(score: number | null | undefined): string {
+    if (score === null || score === undefined) return 'low';
+    if (score >= 80) return 'high';
+    if (score >= 60) return 'mid';
+    return 'low';
   }
 
   trackByJobId(_: number, item: JobRecommendationDto): number {

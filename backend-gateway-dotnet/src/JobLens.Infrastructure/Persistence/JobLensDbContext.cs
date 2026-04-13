@@ -73,6 +73,7 @@ public sealed class JobLensDbContext(DbContextOptions<JobLensDbContext> options)
         modelBuilder.Entity<JobPosting>(entity =>
         {
             entity.Property(x => x.SourceType).HasConversion<string>();
+            entity.Property(x => x.InterviewDefaultsJson).HasDefaultValue("{}");
             entity.HasIndex(x => new { x.ExternalJobId, x.SourceUrl });
             entity.HasIndex(x => x.PostedAtUtc);
             entity.HasIndex(x => x.IsActive);

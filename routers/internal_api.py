@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import hashlib
 import json
 import os
 import subprocess
@@ -21,11 +23,21 @@ from recruitment.matcher_service import JobMatcher, recommend_candidates_for_job
 from recruitment.scraper_service import run_scraper
 from recruitment.vector_store import store
 from request_context import get_request_id
-from response import generate_interview_response, generate_interview_summary
+from response import InterviewProviderError, generate_interview_response, generate_interview_summary
 from stt import speech_to_text
 from session_store import INTERVIEW_SESSIONS
+from tts import text_to_speech_file
 
 router = APIRouter(prefix="/internal/v1", tags=["internal"])
+
+VIDEO_DEDUP_WINDOW_SECONDS = 1.0
+VIDEO_MIN_INTERVAL_SECONDS = 0.45
+_VIDEO_FRAME_STATE: dict[str, tuple[str, datetime, int]] = {}
+
+_EXTERNAL_SCRAPED_SOURCE_TOKENS = {"wuzzuf", "linkedin", "scraped", "external"}
+_EXTERNAL_SCRAPED_HOST_TOKENS = ("wuzzuf.net", "linkedin.com")
+DEFAULT_TTS_TIMEOUT_SECONDS = 12.0
+TTS_TIMEOUT_ENV_VAR = "JOBLENS_TTS_TIMEOUT_SECONDS"
 
 
 class ParseResumeTextRequest(BaseModel):
@@ -151,6 +163,19 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _resolve_tts_timeout_seconds() -> float:
+    raw = str(os.getenv(TTS_TIMEOUT_ENV_VAR, "") or "").strip()
+    if not raw:
+        return DEFAULT_TTS_TIMEOUT_SECONDS
+
+    try:
+        parsed = float(raw)
+    except Exception:
+        return DEFAULT_TTS_TIMEOUT_SECONDS
+
+    return max(2.0, min(parsed, 120.0))
+
+
 def _to_target_id(value: Any) -> int:
     if isinstance(value, int):
         return value
@@ -203,6 +228,15 @@ def _normalize_iso_datetime(value: Any) -> str | None:
 def _decode_data_uri_base64(value: str) -> bytes:
     payload = value.split(",", 1)[1] if "," in value else value
     return base64.b64decode(payload)
+
+
+def _is_external_scraped_record(source: str, source_url: str, redirect_url: str) -> bool:
+    normalized_source = source.strip().lower()
+    if normalized_source in _EXTERNAL_SCRAPED_SOURCE_TOKENS:
+        return True
+
+    links = f"{source_url} {redirect_url}".lower()
+    return any(token in links for token in _EXTERNAL_SCRAPED_HOST_TOKENS)
 
 
 def _to_wav(src_path: str, dst_path: str) -> None:
@@ -361,19 +395,19 @@ async def upsert_job_vector(request: JobVectorSyncRequest):
         normalized_id = f"job_{request.jobId}"
 
         if request.contentHash:
-            existing = store.jobs_col.get(ids=[normalized_id], include=["metadatas"])
+            existing = store.internal_jobs_col.get(ids=[normalized_id], include=["metadatas"])
             metadatas = existing.get("metadatas", []) if isinstance(existing, dict) else []
             metadata = metadatas[0] if metadatas else None
             if isinstance(metadata, dict) and str(metadata.get("content_hash", "")) == request.contentHash:
                 return _envelope_ok(
                     {
                         "vectorId": normalized_id,
-                        "collection": "job_listings",
+                        "collection": "job_listings_internal",
                         "model": "chroma",
                     }
                 )
 
-        store.jobs_col.upsert(
+        store.internal_jobs_col.upsert(
             documents=[_safe_json(request.jobData)],
             metadatas=[
                 {
@@ -392,7 +426,7 @@ async def upsert_job_vector(request: JobVectorSyncRequest):
         return _envelope_ok(
             {
                 "vectorId": normalized_id,
-                "collection": "job_listings",
+                "collection": "job_listings_internal",
                 "model": "chroma",
             }
         )
@@ -412,7 +446,7 @@ async def delete_candidate_vector(request: DeleteCandidateVectorRequest):
 @router.post("/vectors/jobs/delete")
 async def delete_job_vector(request: DeleteJobVectorRequest):
     try:
-        store.jobs_col.delete(ids=[f"job_{request.jobId}"])
+        store.internal_jobs_col.delete(ids=[f"job_{request.jobId}"])
         return _envelope_ok(True)
     except Exception as exc:
         return _envelope_error("JobVectorDeleteFailed", "Could not delete job vector.", str(exc))
@@ -472,7 +506,7 @@ async def scrape_jobs(request: ScrapeJobsRequest):
     try:
         scrape_result = await run_scraper(max_categories=request.maxCategories)
 
-        stored = store.jobs_col.get(limit=200)
+        stored = store.scraped_jobs_col.get()
         ids = stored.get("ids", [])
         metadatas = stored.get("metadatas", [])
 
@@ -484,36 +518,81 @@ async def scrape_jobs(request: ScrapeJobsRequest):
             except Exception:
                 detail = {}
 
-            source_url = str(metadata.get("job_page_link", "") or "")
-            redirect_url = str(metadata.get("apply_link", "") or source_url)
+            source = str(metadata.get("source", "") or detail.get("source", "") or "")
+            source_url = str(metadata.get("job_page_link", "") or detail.get("job_page_link", "") or "")
+            redirect_url = str(metadata.get("apply_link", "") or detail.get("apply_link", "") or source_url)
+            if not _is_external_scraped_record(source, source_url, redirect_url):
+                continue
+
             external_job_id = str(ids[index]) if index < len(ids) else str(uuid.uuid4().hex)
+            location = str(detail.get("location", "") or metadata.get("location", "") or "")
+            city = str(detail.get("city", "") or metadata.get("city", "") or "")
+            country = str(detail.get("country", "") or metadata.get("country", "") or "")
+            enrichment_source = str(metadata.get("enrichment_source", "") or detail.get("_enrichment_source", "") or "")
 
             skill_values = detail.get("skills") if isinstance(detail.get("skills"), list) else []
             skills = [str(skill).strip() for skill in skill_values if str(skill).strip()]
 
+            requirements = str(
+                detail.get("requirements", "")
+                or metadata.get("requirements_snippet", "")
+                or ""
+            )
+            responsibilities = str(
+                detail.get("responsibilities", "")
+                or metadata.get("responsibilities_snippet", "")
+                or ""
+            )
+            employment_type = str(
+                detail.get("employment_type", "")
+                or metadata.get("employment_type", "")
+                or ""
+            )
+            experience_level = str(
+                detail.get("experience_level", "")
+                or metadata.get("experience_level", "")
+                or ""
+            )
+
             jobs.append(
                 {
-                    "source": str(metadata.get("source", "") or ""),
+                    "source": source,
                     "externalJobId": external_job_id,
                     "sourceUrl": source_url,
                     "redirectUrl": redirect_url,
                     "title": str(metadata.get("title", "") or ""),
                     "company": str(metadata.get("company", "") or ""),
-                    "location": str(metadata.get("location", "") or ""),
+                    "location": location,
+                    "city": city,
+                    "country": country,
                     "description": str(detail.get("description", "") or metadata.get("description_snippet", "") or ""),
+                    "requirements": requirements,
+                    "responsibilities": responsibilities,
+                    "employmentType": employment_type,
+                    "experienceLevel": experience_level,
+                    "enrichmentSource": enrichment_source,
                     "skills": skills,
                     "postedAtUtc": _normalize_iso_datetime(metadata.get("posted_time")),
                     "metadata": detail,
                 }
             )
 
-        return _envelope_ok(
-            {
-                "processedCategories": int(scrape_result.get("processed_categories", 0)),
-                "upsertedJobs": int(scrape_result.get("upserted_jobs", 0)),
-                "jobs": jobs,
-            }
-        )
+        payload = {
+            "processedCategories": int(scrape_result.get("processed_categories", 0)),
+            "upsertedJobs": int(scrape_result.get("upserted_jobs", 0)),
+            "totalJobs": int(scrape_result.get("total_jobs", len(jobs))),
+            "jobs": jobs,
+        }
+
+        stats = scrape_result.get("stats")
+        if isinstance(stats, dict):
+            payload["stats"] = stats
+
+        warning = scrape_result.get("warning")
+        if isinstance(warning, str) and warning.strip():
+            payload["warning"] = warning.strip()
+
+        return _envelope_ok(payload)
     except Exception as exc:
         return _envelope_error("ScrapeJobsFailed", "Could not scrape jobs.", str(exc))
 
@@ -560,6 +639,8 @@ async def analyze_audio(request: AudioAnalysisRequest):
 
         flags: list[str] = []
         transcript = ""
+        reply_audio_base64: str | None = None
+        reply_audio_mime_type: str | None = None
         temp_raw_path = None
         temp_wav_path = None
 
@@ -593,25 +674,75 @@ async def analyze_audio(request: AudioAnalysisRequest):
         history.append({"role": "user", "content": transcript})
         session["turn_count"] = int(session.get("turn_count", 0)) + 1
 
-        reply = generate_interview_response(
-            current_transcript=transcript,
-            chat_history=history,
-            cv_text=session.get("cv_text", ""),
-            job_description=session.get("job_description", ""),
-        )
+        try:
+            reply = generate_interview_response(
+                current_transcript=transcript,
+                chat_history=history,
+                cv_text=session.get("cv_text", ""),
+                job_description=session.get("job_description", ""),
+            )
+        except InterviewProviderError as exc:
+            return _envelope_error(exc.code, str(exc), f"retryable={str(exc.retryable).lower()}")
+
         history.append({"role": "assistant", "content": reply})
+
+        tts_path: str | None = None
+        tts_timeout_seconds = _resolve_tts_timeout_seconds()
+        if reply.strip():
+            try:
+                tts_path = await asyncio.wait_for(
+                    asyncio.to_thread(text_to_speech_file, reply),
+                    timeout=tts_timeout_seconds,
+                )
+                with open(tts_path, "rb") as audio_file:
+                    audio_bytes = audio_file.read()
+
+                if audio_bytes:
+                    reply_audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+                else:
+                    flags.append("tts_empty_audio")
+
+                if reply_audio_base64 and tts_path.lower().endswith(".mp3"):
+                    reply_audio_mime_type = "audio/mpeg"
+                elif reply_audio_base64:
+                    reply_audio_mime_type = "audio/wav"
+            except asyncio.TimeoutError:
+                flags.append("tts_timeout")
+                print(
+                    f"[internal_api] TTS timeout after {tts_timeout_seconds:.1f}s "
+                    f"for interview session {request.interviewSessionId}"
+                )
+            except Exception as exc:
+                flags.append("tts_generation_error")
+                print(
+                    "[internal_api] TTS generation failed for interview session "
+                    f"{request.interviewSessionId}: {exc}"
+                )
+            finally:
+                if tts_path and os.path.exists(tts_path):
+                    try:
+                        os.remove(tts_path)
+                    except Exception:
+                        pass
+
+        if reply.strip() and not reply_audio_base64:
+            flags.append("tts_unavailable")
 
         max_questions = int(session.get("max_questions", 5))
         is_complete = int(session.get("turn_count", 0)) >= max_questions
 
         score = None
         if is_complete:
-            summary = generate_interview_summary(
-                chat_history=history,
-                cv_text=session.get("cv_text", ""),
-                job_description=session.get("job_description", ""),
-                criteria=session.get("criteria", ""),
-            )
+            try:
+                summary = generate_interview_summary(
+                    chat_history=history,
+                    cv_text=session.get("cv_text", ""),
+                    job_description=session.get("job_description", ""),
+                    criteria=session.get("criteria", ""),
+                )
+            except InterviewProviderError as exc:
+                return _envelope_error(exc.code, str(exc), f"retryable={str(exc.retryable).lower()}")
+
             session["summary"] = summary
             score = _to_float(summary.get("score")) if isinstance(summary, dict) else None
 
@@ -622,6 +753,8 @@ async def analyze_audio(request: AudioAnalysisRequest):
                 "isComplete": is_complete,
                 "score": score,
                 "flags": flags,
+                "replyAudioBase64": reply_audio_base64,
+                "replyAudioMimeType": reply_audio_mime_type,
             }
         )
     except Exception as exc:
@@ -634,6 +767,42 @@ async def analyze_video(request: VideoAnalysisRequest):
         session = INTERVIEW_SESSIONS.get(request.interviewSessionId)
         if session is None:
             return _envelope_error("InterviewSessionNotFound", "Interview session not found.")
+
+        now_utc = datetime.now(timezone.utc)
+        frame_hash = hashlib.sha1(request.base64Frame.encode("utf-8")).hexdigest()
+        last_state = _VIDEO_FRAME_STATE.get(request.interviewSessionId)
+        if last_state is not None:
+            last_hash, last_at, last_sequence = last_state
+            elapsed = (now_utc - last_at).total_seconds()
+
+            if request.sequence <= last_sequence:
+                return _envelope_ok(
+                    {
+                        "events": [],
+                        "skipped": True,
+                        "reason": "sequence_not_advanced",
+                    }
+                )
+
+            if frame_hash == last_hash and elapsed < VIDEO_DEDUP_WINDOW_SECONDS:
+                return _envelope_ok(
+                    {
+                        "events": [],
+                        "skipped": True,
+                        "reason": "duplicate_frame",
+                    }
+                )
+
+            if elapsed < VIDEO_MIN_INTERVAL_SECONDS:
+                return _envelope_ok(
+                    {
+                        "events": [],
+                        "skipped": True,
+                        "reason": "throttled",
+                    }
+                )
+
+        _VIDEO_FRAME_STATE[request.interviewSessionId] = (frame_hash, now_utc, request.sequence)
 
         events: list[dict[str, Any]] = []
         try:
@@ -713,12 +882,16 @@ async def finalize_interview(request: FinalizeInterviewRequest):
                     for item in sorted_transcript
                 ]
 
-            summary = generate_interview_summary(
-                chat_history=history,
-                cv_text=session.get("cv_text", ""),
-                job_description=session.get("job_description", ""),
-                criteria=session.get("criteria", ""),
-            )
+            try:
+                summary = generate_interview_summary(
+                    chat_history=history,
+                    cv_text=session.get("cv_text", ""),
+                    job_description=session.get("job_description", ""),
+                    criteria=session.get("criteria", ""),
+                )
+            except InterviewProviderError as exc:
+                return _envelope_error(exc.code, str(exc), f"retryable={str(exc.retryable).lower()}")
+
             session["summary"] = summary
 
         final_score = round(_to_float(summary.get("score")) if isinstance(summary, dict) else 0.0, 2)

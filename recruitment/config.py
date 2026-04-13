@@ -17,6 +17,13 @@ def _bool_env(name: str, default: bool) -> bool:
     return os.getenv(name, fallback).lower() in {"1", "true", "yes", "on"}
 
 
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
 class RecruitmentSettings(BaseModel):
     chroma_path: str = Field(default_factory=lambda: os.getenv("JOBLENS_CHROMA_PATH", "./joblens_db"))
     provider: str = Field(default_factory=lambda: os.getenv("JOBLENS_LLM_PROVIDER", "openrouter"))
@@ -36,6 +43,22 @@ class RecruitmentSettings(BaseModel):
     concurrency_limit: int = Field(default_factory=lambda: _int_env("JOBLENS_SCRAPER_CONCURRENCY", 5))
     scheduled_scrape_hours: int = Field(default_factory=lambda: _int_env("JOBLENS_SCRAPER_INTERVAL_HOURS", 6))
     scheduled_scrape_enabled: bool = Field(default_factory=lambda: _bool_env("JOBLENS_SCRAPER_SCHEDULED", False))
+    strict_egypt_only: bool = Field(default_factory=lambda: _bool_env("JOBLENS_SCRAPER_STRICT_EGYPT_ONLY", True))
+    scraper_enrichment_enabled: bool = Field(
+        default_factory=lambda: _bool_env("JOBLENS_SCRAPER_ENRICHMENT_ENABLED", True)
+    )
+    scraper_enrichment_model: str = Field(
+        default_factory=lambda: os.getenv("JOBLENS_SCRAPER_ENRICHMENT_MODEL", "meta-llama/llama-3.3-70b-instruct")
+    )
+    scraper_enrichment_max_tokens: int = Field(
+        default_factory=lambda: _int_env("JOBLENS_SCRAPER_ENRICHMENT_MAX_TOKENS", 1200)
+    )
+    scraper_enrichment_temperature: float = Field(
+        default_factory=lambda: _float_env("JOBLENS_SCRAPER_ENRICHMENT_TEMPERATURE", 0.1)
+    )
+    scraper_enrichment_timeout_seconds: float = Field(
+        default_factory=lambda: _float_env("JOBLENS_SCRAPER_ENRICHMENT_TIMEOUT_SECONDS", 45.0)
+    )
 
     target_categories: list[str] = Field(
         default=[
