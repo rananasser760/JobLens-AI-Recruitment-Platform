@@ -1,3 +1,4 @@
+using Hangfire;
 using JobLens.Application.Contracts;
 using JobLens.Application.Interfaces;
 using JobLens.Domain.Entities;
@@ -7,7 +8,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace JobLens.Infrastructure.BackgroundJobs;
 
-public sealed class JobScrapingJob(Persistence.JobLensDbContext dbContext, IAiBackendClient aiBackendClient, IContentHashService contentHashService)
+public sealed class JobScrapingJob(
+    Persistence.JobLensDbContext dbContext,
+    IAiBackendClient aiBackendClient,
+    IContentHashService contentHashService,
+    IBackgroundJobClient backgroundJobs)
 {
     public async Task RunAsync(int? maxCategories)
     {
@@ -271,6 +276,12 @@ public sealed class JobScrapingJob(Persistence.JobLensDbContext dbContext, IAiBa
                 upsertedJobs: upsertedJobs,
                 skippedInvalidJobs: skippedInvalidJobs);
             await dbContext.SaveChangesAsync();
+
+            if (processedJobs > 0)
+            {
+                // Scraped SQL jobs must be re-indexed in recommendation vectors after ingestion.
+                backgroundJobs.Enqueue<RecommendationRefreshJob>(job => job.RefreshAllAsync());
+            }
         }
         catch (Exception ex)
         {

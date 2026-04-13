@@ -150,7 +150,7 @@
         } @else if (recommendedJobs().length === 0) {
           <div class="empty-state">
             <i class="fa-solid fa-magnifying-glass empty-icon"></i>
-            <p>No recommendations yet. Upload your resume and let our AI find your best matches.</p>
+            <p>{{ recommendationNote() || 'No recommendations yet. Upload your resume and let our AI find your best matches.' }}</p>
           </div>
         } @else {
           <div class="jobs-grid">

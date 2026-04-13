@@ -7,6 +7,7 @@ using JobLens.Domain.Entities;
 using JobLens.Domain.Enums;
 using JobLens.Infrastructure.BackgroundJobs;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace JobLens.Infrastructure.Services;
 
@@ -165,13 +166,26 @@ public sealed class JobService(
                 return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, staleCached, "Showing cached recommendations while fresh results are generated.");
             }
 
+            var hasReadyJobVectors = await dbContext.VectorIndexEntries.AnyAsync(
+                x => x.EntityType == "job" && x.Status == VectorIndexStatus.Ready,
+                cancellationToken);
+            if (!hasReadyJobVectors)
+            {
+                backgroundJobs.Enqueue<RecommendationRefreshJob>(jobRunner => jobRunner.RefreshAllAsync());
+                return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, Array.Empty<RecommendationDto>(), "Recommendations are being prepared. Job vectors are syncing now.");
+            }
+
             return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, Array.Empty<RecommendationDto>(), "Recommendations are being generated. Please refresh shortly.");
         }
 
-        var resume = await dbContext.Resumes.Where(x => x.CandidateProfileId == candidate.Id && x.IsDefault).OrderByDescending(x => x.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
+        var resume = await dbContext.Resumes
+            .Where(x => x.CandidateProfileId == candidate.Id)
+            .OrderByDescending(x => x.IsDefault)
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
         if (resume is null || string.IsNullOrWhiteSpace(resume.RawText))
         {
-            return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, "No default resume found for recommendations.", ["missing_resume"]);
+            return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, "No resume with extractable text found for recommendations.", ["missing_resume"]);
         }
 
         var aiResult = await aiBackendClient.RecommendJobsAsync(new JobRecommendationRequest(candidate.Id, resume.RawText, safeLimit), cancellationToken);
@@ -193,48 +207,96 @@ public sealed class JobService(
         }
 
         var sanitized = SanitizeRecommendations(aiResult.Data, safeLimit);
+        if (sanitized.Count == 0)
+        {
+            backgroundJobs.Enqueue<RecommendationRefreshJob>(jobRunner => jobRunner.RefreshAllAsync());
+
+            var staleCached = await dbContext.RecommendationCacheEntries
+                .Where(x => x.SubjectType == RecommendationSubjectType.Candidate && x.SubjectId == candidate.Id && x.TargetType == RecommendationTargetType.Job)
+                .OrderBy(x => x.Rank)
+                .Take(safeLimit)
+                .Select(x => new RecommendationDto(x.TargetId, "Job", x.Score, x.Reason, string.Empty))
+                .ToListAsync(cancellationToken);
+
+            if (staleCached.Count > 0)
+            {
+                return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, staleCached, "Showing cached recommendations while fresh results are generated.");
+            }
+
+            return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, Array.Empty<RecommendationDto>(), "No matches returned yet. Recommendation vectors are being refreshed.");
+        }
+
         await UpsertRecommendationCacheAsync(candidate.Id, RecommendationSubjectType.Candidate, RecommendationTargetType.Job, sanitized, cancellationToken);
         return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, sanitized.Select(x => new RecommendationDto(x.TargetId, x.TargetType, x.Score, x.Reason, x.PreviewJson)).ToList());
     }
 
-    public async Task<ApiResponse<IReadOnlyList<RecommendationDto>>> GetRecommendationsForJobAsync(long recruiterUserId, long jobId, int limit, CancellationToken cancellationToken)
+    public async Task<ApiResponse<IReadOnlyList<RecommendationDto>>> GetRecommendationsForJobAsync(long recruiterUserId, long jobId, int limit, CancellationToken cancellationToken, bool forceRefresh = false)
     {
         var safeLimit = Math.Clamp(limit, 1, 50);
         var now = DateTime.UtcNow;
         var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == recruiterUserId, cancellationToken);
+        var isAdmin = await dbContext.Users.AnyAsync(x => x.Id == recruiterUserId && x.Role == AppRole.Admin, cancellationToken);
         var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
-        if (recruiter is null || job is null)
+        if (job is null || (recruiter is null && !isAdmin))
         {
             return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, "Job or recruiter not found.", ["not_found"]);
         }
 
-        var cached = await dbContext.RecommendationCacheEntries
-            .Where(x => x.SubjectType == RecommendationSubjectType.Job && x.SubjectId == job.Id && x.TargetType == RecommendationTargetType.Candidate && x.ExpiresAtUtc > now)
-            .OrderBy(x => x.Rank)
-            .Take(safeLimit)
-            .Select(x => new RecommendationDto(x.TargetId, "Candidate", x.Score, x.Reason, string.Empty))
-            .ToListAsync(cancellationToken);
-
-        if (cached.Count > 0)
+        if (!forceRefresh)
         {
-            return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, cached);
+            var cached = await dbContext.RecommendationCacheEntries
+                .Where(x => x.SubjectType == RecommendationSubjectType.Job && x.SubjectId == job.Id && x.TargetType == RecommendationTargetType.Candidate && x.ExpiresAtUtc > now)
+                .OrderBy(x => x.Rank)
+                .Take(safeLimit)
+                .Select(x => new RecommendationDto(x.TargetId, "Candidate", x.Score, x.Reason, string.Empty))
+                .ToListAsync(cancellationToken);
+
+            if (cached.Count > 0)
+            {
+                return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, cached);
+            }
+
+            var staleCached = await dbContext.RecommendationCacheEntries
+                .Where(x => x.SubjectType == RecommendationSubjectType.Job && x.SubjectId == job.Id && x.TargetType == RecommendationTargetType.Candidate)
+                .OrderBy(x => x.Rank)
+                .Take(safeLimit)
+                .Select(x => new RecommendationDto(x.TargetId, "Candidate", x.Score, x.Reason, string.Empty))
+                .ToListAsync(cancellationToken);
+
+            backgroundJobs.Enqueue<RecommendationRefreshJob>(jobRunner => jobRunner.RefreshJobAsync(job.Id));
+
+            if (staleCached.Count > 0)
+            {
+                return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, staleCached, "Showing cached recommendations while fresh results are generated.");
+            }
+
+            return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, Array.Empty<RecommendationDto>(), "Recommendations are being generated. Please refresh shortly.");
         }
 
-        var staleCached = await dbContext.RecommendationCacheEntries
+        var staleCachedForForceRefresh = await dbContext.RecommendationCacheEntries
             .Where(x => x.SubjectType == RecommendationSubjectType.Job && x.SubjectId == job.Id && x.TargetType == RecommendationTargetType.Candidate)
             .OrderBy(x => x.Rank)
             .Take(safeLimit)
             .Select(x => new RecommendationDto(x.TargetId, "Candidate", x.Score, x.Reason, string.Empty))
             .ToListAsync(cancellationToken);
 
-        backgroundJobs.Enqueue<RecommendationRefreshJob>(jobRunner => jobRunner.RefreshJobAsync(job.Id));
+        var aiResult = await aiBackendClient.RecommendCandidatesAsync(
+            new CandidateRecommendationRequest(job.Id, job.Description ?? string.Empty, safeLimit),
+            cancellationToken);
 
-        if (staleCached.Count > 0)
+        if (!aiResult.Success || aiResult.Data is null)
         {
-            return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, staleCached, "Showing cached recommendations while fresh results are generated.");
+            if (staleCachedForForceRefresh.Count > 0)
+            {
+                return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, staleCachedForForceRefresh, "Showing cached recommendations because refresh failed.");
+            }
+
+            return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, aiResult.Error?.Message ?? "Recommendation request failed.");
         }
 
-        return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, Array.Empty<RecommendationDto>(), "Recommendations are being generated. Please refresh shortly.");
+        var sanitized = SanitizeRecommendations(aiResult.Data, safeLimit);
+        await UpsertRecommendationCacheAsync(job.Id, RecommendationSubjectType.Job, RecommendationTargetType.Candidate, sanitized, cancellationToken);
+        return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, sanitized.Select(x => new RecommendationDto(x.TargetId, x.TargetType, x.Score, x.Reason, x.PreviewJson)).ToList());
     }
 
     private async Task UpsertRecommendationCacheAsync(
@@ -244,34 +306,42 @@ public sealed class JobService(
         IReadOnlyList<RecommendationResultDto> data,
         CancellationToken cancellationToken)
     {
-        await dbContext.RecommendationCacheEntries
-            .Where(x => x.SubjectId == subjectId && x.SubjectType == subjectType && x.TargetType == targetType)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        if (data.Count == 0)
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            return;
-        }
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
 
-        var refreshedAt = DateTime.UtcNow;
-        for (var i = 0; i < data.Count; i++)
-        {
-            dbContext.RecommendationCacheEntries.Add(new RecommendationCacheEntry
+            await dbContext.RecommendationCacheEntries
+                .Where(x => x.SubjectId == subjectId && x.SubjectType == subjectType && x.TargetType == targetType)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            if (data.Count == 0)
             {
-                SubjectId = subjectId,
-                SubjectType = subjectType,
-                TargetType = targetType,
-                TargetId = data[i].TargetId,
-                Rank = i + 1,
-                Score = data[i].Score,
-                Reason = data[i].Reason,
-                SourceSnapshotHash = data[i].PreviewJson,
-                RefreshedAtUtc = refreshedAt,
-                ExpiresAtUtc = refreshedAt.AddHours(6),
-            });
-        }
+                await transaction.CommitAsync(cancellationToken);
+                return;
+            }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+            var refreshedAt = DateTime.UtcNow;
+            for (var i = 0; i < data.Count; i++)
+            {
+                dbContext.RecommendationCacheEntries.Add(new RecommendationCacheEntry
+                {
+                    SubjectId = subjectId,
+                    SubjectType = subjectType,
+                    TargetType = targetType,
+                    TargetId = data[i].TargetId,
+                    Rank = i + 1,
+                    Score = data[i].Score,
+                    Reason = data[i].Reason,
+                    SourceSnapshotHash = data[i].PreviewJson,
+                    RefreshedAtUtc = refreshedAt,
+                    ExpiresAtUtc = refreshedAt.AddHours(6),
+                });
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        });
     }
 
     private static IReadOnlyList<RecommendationResultDto> SanitizeRecommendations(

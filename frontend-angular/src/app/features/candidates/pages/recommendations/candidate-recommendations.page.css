@@ -103,6 +103,15 @@
   font-size: 0.88rem;
 }
 
+.alert-info {
+  background: #edf4ff;
+  border: 1px solid #cfe0ff;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  color: #1f4f8f;
+  font-size: 0.88rem;
+}
+
 /* ── Cards grid ── */
 .cards-grid {
   display: grid;

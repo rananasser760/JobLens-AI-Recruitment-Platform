@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from recruitment.ats_service import analyze_ats_with_llm
 from recruitment.cv_service import parse_cv_with_llm
-from recruitment.matcher_service import JobMatcher, recommend_candidates_for_job
+from recruitment.matcher_service import JobMatcher, recommend_candidates_for_job, recommend_jobs_for_candidate
 from recruitment.scraper_service import run_scraper
 from recruitment.vector_store import store
 from request_context import get_request_id
@@ -27,6 +27,7 @@ from response import InterviewProviderError, generate_interview_response, genera
 from stt import speech_to_text
 from session_store import INTERVIEW_SESSIONS
 from tts import text_to_speech_file
+from routers.integrity import start_session, end_session, _active_get, StartSessionRequest
 
 router = APIRouter(prefix="/internal/v1", tags=["internal"])
 
@@ -178,7 +179,7 @@ def _resolve_tts_timeout_seconds() -> float:
 
 def _to_target_id(value: Any) -> int:
     if isinstance(value, int):
-        return value
+        return value if value > 0 else 0
 
     text = str(value or "").strip()
     if not text:
@@ -187,8 +188,16 @@ def _to_target_id(value: Any) -> int:
     if text.isdigit():
         return int(text)
 
-    digits = "".join(ch for ch in text if ch.isdigit())
-    return int(digits) if digits else 0
+    lowered = text.lower()
+    if lowered.startswith("job_"):
+        suffix = text[4:]
+        return int(suffix) if suffix.isdigit() else 0
+
+    if lowered.startswith("candidate_"):
+        suffix = text[10:]
+        return int(suffix) if suffix.isdigit() else 0
+
+    return 0
 
 
 def _flatten_skills(skills: Any) -> list[str]:
@@ -455,12 +464,20 @@ async def delete_job_vector(request: DeleteJobVectorRequest):
 @router.post("/recommendations/jobs")
 async def recommend_jobs(request: JobRecommendationRequest):
     try:
-        parsed = parse_cv_with_llm(request.resumeText)
-        matches = JobMatcher().match_jobs_from_db(parsed, n_results=request.limit)
+        matches = []
+        if request.candidateId > 0:
+            matches = recommend_jobs_for_candidate(request.candidateId, limit=request.limit)
+
+        if not matches:
+            parsed = parse_cv_with_llm(request.resumeText)
+            matches = JobMatcher().match_jobs_from_db(parsed, n_results=request.limit)
 
         result = []
         for match in matches:
-            target_id = _to_target_id(match.get("job_id") or match.get("db_id") or match.get("external_job_id"))
+            target_id = _to_target_id(match.get("db_id") or match.get("job_id") or match.get("external_job_id"))
+            if target_id <= 0:
+                continue
+
             result.append(
                 {
                     "targetId": target_id,
@@ -601,7 +618,14 @@ async def scrape_jobs(request: ScrapeJobsRequest):
 async def start_interview_session(request: StartInterviewSessionRequest):
     try:
         interview_session_id = str(uuid.uuid4())
-        integrity_session_id = str(uuid.uuid4())
+        
+        # Start true proctoring session
+        integrity_resp = start_session(StartSessionRequest(
+             candidate_name=request.candidateName,
+             candidate_id=request.candidateId,
+             interview_session_id=interview_session_id
+        ))
+        integrity_session_id = str(integrity_resp.get("session_id"))
 
         INTERVIEW_SESSIONS[interview_session_id] = {
             "cv_text": request.resumeText,
@@ -804,60 +828,87 @@ async def analyze_video(request: VideoAnalysisRequest):
 
         _VIDEO_FRAME_STATE[request.interviewSessionId] = (frame_hash, now_utc, request.sequence)
 
-        events: list[dict[str, Any]] = []
         try:
+            integrity_id_str = session.get("integrity_session_id")
+            if not integrity_id_str:
+                return _envelope_ok({"events": [], "skipped": True, "reason": "no_integrity_session"})
+                
+            proc = _active_get(int(integrity_id_str))
+            if not proc:
+                return _envelope_ok({"events": [], "skipped": True, "reason": "processor_not_found"})
+
             frame = _decode_frame(request.base64Frame)
-            if frame is None:
-                raise ValueError("Could not decode frame")
-
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            brightness = float(np.mean(gray))
-
-            if brightness < 20:
-                events.append(
-                    {
-                        "eventType": "CAMERA_BLOCKED_OR_DARK",
-                        "severity": "warning",
-                        "source": "vision",
-                        "description": "Frame appears too dark or camera might be blocked.",
-                        "mediaReference": None,
-                    }
-                )
-
-            faces = _get_face_cascade().detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(40, 40))
-            face_count = len(faces)
-            if face_count == 0:
-                events.append(
-                    {
-                        "eventType": "NO_FACE_DETECTED",
-                        "severity": "medium",
-                        "source": "vision",
-                        "description": "No face detected in the frame.",
-                        "mediaReference": None,
-                    }
-                )
-            elif face_count > 1:
-                events.append(
-                    {
-                        "eventType": "MULTIPLE_FACES_DETECTED",
-                        "severity": "high",
-                        "source": "vision",
-                        "description": f"Detected {face_count} faces in frame.",
-                        "mediaReference": None,
-                    }
-                )
-        except Exception:
-            events.append(
-                {
-                    "eventType": "FRAME_DECODE_ERROR",
-                    "severity": "warning",
+            if frame is not None:
+                proc.push_frame(frame)
+                
+            state = proc.get_state()
+            
+            events: list[dict[str, Any]] = []
+            alert = state.get("current_alert")
+            yolo_alert = state.get("yolo_alert")
+            
+            alert_map = {
+                "NO_FACE": ("No face detected in frame", "high"),
+                "MULTIPLE_FACES": ("Multiple faces detected in frame (Mediapipe)", "high"),
+                "LOOKING_LEFT": ("Looking far left", "low"),
+                "LOOKING_RIGHT": ("Looking far right", "low"),
+                "LOOKING_UP": ("Looking up", "medium"),
+                "LOOKING_DOWN": ("Looking down", "medium"),
+                "HEAD_TURNED_LEFT": ("Head turned left", "medium"),
+                "HEAD_TURNED_RIGHT": ("Head turned right", "medium"),
+                "HEAD_TILTED_UP": ("Head tilted up", "medium"),
+                "HEAD_TILTED_DOWN": ("Head tilted down", "medium"),
+                "HEAD_TILTED_SIDE": ("Head tilted sideways", "low"),
+                "EYE_LEFT": ("Eyes looking left", "medium"),
+                "EYE_RIGHT": ("Eyes looking right", "medium"),
+                "EYE_UP": ("Eyes looking up", "medium"),
+                "EYE_DOWN": ("Eyes looking down", "medium"),
+                "MULTIPLE_PEOPLE": ("Multiple people detected in background (YOLO)", "high"),
+                "CHEATING_ITEM_MOBILE": ("Mobile phone detected in frame (YOLO)", "high"),
+            }
+            
+            if alert and alert in alert_map:
+                desc, sev = alert_map[alert]
+                events.append({
+                    "eventType": alert,
+                    "severity": sev,
                     "source": "vision",
-                    "description": "Could not decode submitted video frame.",
+                    "description": desc,
                     "mediaReference": None,
+                })
+                
+            if yolo_alert and yolo_alert in alert_map and yolo_alert != alert:
+                desc, sev = alert_map[yolo_alert]
+                events.append({
+                    "eventType": yolo_alert,
+                    "severity": sev,
+                    "source": "yolo",
+                    "description": desc,
+                    "mediaReference": None,
+                })
+
+            # Append the state to reason for debugging if needed, but return events clearly
+            reason_str = None
+            if not events and state.get("calibrated") is False:
+                reason_str = "calibrating"
+
+            return _envelope_ok(
+                {
+                    "events": events,
+                    "skipped": False,
+                    "reason": reason_str,
                 }
             )
 
-        return _envelope_ok({"events": events})
+        except Exception as inner_exc:
+            return _envelope_ok(
+                {
+                    "events": [],
+                    "skipped": True,
+                    "reason": f"processing_error: {str(inner_exc)}",
+                }
+            )
+
     except Exception as exc:
         return _envelope_error("InterviewVideoAnalysisFailed", "Could not analyze video frame.", str(exc))
 
@@ -865,6 +916,12 @@ async def analyze_video(request: VideoAnalysisRequest):
 @router.post("/interviews/finalize")
 async def finalize_interview(request: FinalizeInterviewRequest):
     try:
+        if request.integritySessionId:
+            try:
+                end_session(int(request.integritySessionId))
+            except Exception as e:
+                print(f"Error finalizing integrity session: {e}")
+                
         session = INTERVIEW_SESSIONS.get(request.interviewSessionId)
         if session is None:
             return _envelope_error("InterviewSessionNotFound", "Interview session not found.")

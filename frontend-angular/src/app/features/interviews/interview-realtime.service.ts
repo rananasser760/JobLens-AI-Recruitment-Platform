@@ -1,11 +1,13 @@
-import { Injectable } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import {
   HubConnection,
   HubConnectionBuilder,
+  HttpTransportType,
   LogLevel
 } from '@microsoft/signalr';
 
 import { environment } from '../../../environments/environment';
+import { TokenStoreService } from '../../core/auth/token-store.service';
 
 export interface RealtimeSocketLike {
   readonly readyState: number;
@@ -27,12 +29,19 @@ class SignalRInterviewSocket implements RealtimeSocketLike {
 
   private readonly connection: HubConnection;
   private audioSequence = 0;
+  private videoSequence = 0;
   private manualClose = false;
   private currentState: number = WebSocket.CONNECTING;
 
-  constructor(private readonly sessionId: number) {
+  constructor(
+    private readonly sessionId: number,
+    private readonly accessTokenFactory: () => string
+  ) {
     this.connection = new HubConnectionBuilder()
-      .withUrl(environment.realtimeHubUrl)
+      .withUrl(environment.realtimeHubUrl, {
+        accessTokenFactory: () => this.accessTokenFactory(),
+        transport: HttpTransportType.WebSockets | HttpTransportType.LongPolling
+      })
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build();
@@ -73,7 +82,8 @@ class SignalRInterviewSocket implements RealtimeSocketLike {
     if (this.currentState !== WebSocket.OPEN) {
       return;
     }
-    void this.connection.invoke('SubmitVideoFrame', this.sessionId, base64Frame).catch(() => {});
+    this.videoSequence++;
+    void this.connection.invoke('SubmitVideoFrame', this.sessionId, base64Frame, this.videoSequence).catch(() => {});
   }
 
   private registerHandlers(): void {
@@ -102,17 +112,12 @@ class SignalRInterviewSocket implements RealtimeSocketLike {
       const entries = Array.isArray(data)
         ? data.filter((item): item is string => typeof item === 'string')
         : [];
-      if (entries.length === 0) {
-        return;
-      }
 
       this.onmessage?.(
         new MessageEvent('message', {
           data: JSON.stringify({
-            type: 'transcript',
-            user: '(System)',
-            ai: `Proctoring notice: ${entries.join(' | ')}`,
-            is_complete: false
+            type: 'proctoring',
+            events: entries
           })
         })
       );
@@ -218,8 +223,13 @@ class SignalRInterviewSocket implements RealtimeSocketLike {
 
 @Injectable({ providedIn: 'root' })
 export class InterviewRealtimeService {
+  private readonly tokenStore = inject(TokenStoreService);
+
   connectInterview(interviewSessionId: number): RealtimeSocketLike {
-    return new SignalRInterviewSocket(interviewSessionId);
+    return new SignalRInterviewSocket(
+      interviewSessionId,
+      () => this.tokenStore.getAccessToken() ?? ''
+    );
   }
 
   close(socket: RealtimeSocketLike): void {

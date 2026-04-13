@@ -11,5 +11,5 @@ public interface IJobService
     Task<ApiResponse<JobPostingDto>> UpdateJobAsync(long recruiterUserId, long jobId, UpdateJobRequest request, CancellationToken cancellationToken);
     Task<ApiResponse<IReadOnlyList<RecommendationDto>>> MatchJobsFromTextAsync(string resumeText, int limit, CancellationToken cancellationToken);
     Task<ApiResponse<IReadOnlyList<RecommendationDto>>> GetRecommendationsForCandidateAsync(long candidateUserId, int limit, CancellationToken cancellationToken, bool forceRefresh = false);
-    Task<ApiResponse<IReadOnlyList<RecommendationDto>>> GetRecommendationsForJobAsync(long recruiterUserId, long jobId, int limit, CancellationToken cancellationToken);
+    Task<ApiResponse<IReadOnlyList<RecommendationDto>>> GetRecommendationsForJobAsync(long recruiterUserId, long jobId, int limit, CancellationToken cancellationToken, bool forceRefresh = false);
 }

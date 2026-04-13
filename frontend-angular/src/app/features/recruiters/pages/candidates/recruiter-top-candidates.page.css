@@ -64,7 +64,48 @@ td {
   color: #9b1c1c;
 }
 
+.banner.info {
+  color: #1f4f8f;
+  background: #edf4ff;
+  border: 1px solid #cfe0ff;
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+}
+
 .empty {
   text-align: center;
   color: #697789;
+}
+
+.match-score {
+  font-weight: 700;
+  color: #0f3d88;
+}
+
+.match-reason {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: #5a6574;
+}
+
+.skills-list {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.skill-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d5dce8;
+  background: #f7f9fc;
+  color: #354153;
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+.skill-chip.muted {
+  color: #6b7686;
 }

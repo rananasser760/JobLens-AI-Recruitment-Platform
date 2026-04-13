@@ -4,6 +4,7 @@ using JobLens.Domain.Entities;
 using JobLens.Domain.Enums;
 using JobLens.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace JobLens.Infrastructure.BackgroundJobs;
 
@@ -39,6 +40,51 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
         {
             return;
         }
+
+        var vectorResult = await aiBackendClient.UpsertCandidateVectorAsync(
+            new CandidateVectorSyncRequest(
+                candidate.Id,
+                new Dictionary<string, object?>
+                {
+                    ["candidateId"] = candidate.Id,
+                    ["headline"] = candidate.Headline,
+                    ["summary"] = candidate.Summary,
+                    ["skills"] = ServiceJson.DeserializeStringList(candidate.SkillsJson),
+                    ["resumeText"] = resume.RawText,
+                },
+                resume.ContentHash),
+            CancellationToken.None);
+
+        var vectorEntry = await dbContext.VectorIndexEntries
+            .FirstOrDefaultAsync(x => x.EntityType == "candidate" && x.EntityId == candidate.Id);
+        if (vectorEntry is null)
+        {
+            vectorEntry = new VectorIndexEntry
+            {
+                EntityType = "candidate",
+                EntityId = candidate.Id,
+            };
+            dbContext.VectorIndexEntries.Add(vectorEntry);
+        }
+
+        vectorEntry.ContentHash = resume.ContentHash;
+        vectorEntry.EmbeddedAtUtc = DateTime.UtcNow;
+
+        if (vectorResult.Success && vectorResult.Data is not null)
+        {
+            vectorEntry.Collection = vectorResult.Data.Collection;
+            vectorEntry.VectorId = vectorResult.Data.VectorId;
+            vectorEntry.Model = vectorResult.Data.Model;
+            vectorEntry.Status = VectorIndexStatus.Ready;
+            vectorEntry.LastError = string.Empty;
+        }
+        else
+        {
+            vectorEntry.Status = VectorIndexStatus.Failed;
+            vectorEntry.LastError = vectorResult.Error?.Message ?? "Candidate vector upsert failed.";
+        }
+
+        await dbContext.SaveChangesAsync();
 
         var results = await aiBackendClient.RecommendJobsAsync(new JobRecommendationRequest(candidateId, resume.RawText, 10), CancellationToken.None);
         if (!results.Success || results.Data is null)
@@ -128,35 +174,43 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
         IReadOnlyList<RecommendationResultDto> recommendations,
         CancellationToken cancellationToken)
     {
-        await dbContext.RecommendationCacheEntries
-            .Where(x => x.SubjectType == subjectType && x.SubjectId == subjectId && x.TargetType == targetType)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        if (recommendations.Count == 0)
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            return;
-        }
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
 
-        var refreshedAt = DateTime.UtcNow;
-        for (var i = 0; i < recommendations.Count; i++)
-        {
-            var item = recommendations[i];
-            dbContext.RecommendationCacheEntries.Add(new RecommendationCacheEntry
+            await dbContext.RecommendationCacheEntries
+                .Where(x => x.SubjectType == subjectType && x.SubjectId == subjectId && x.TargetType == targetType)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            if (recommendations.Count == 0)
             {
-                SubjectType = subjectType,
-                SubjectId = subjectId,
-                TargetType = targetType,
-                TargetId = item.TargetId,
-                Rank = i + 1,
-                Score = item.Score,
-                Reason = item.Reason,
-                SourceSnapshotHash = item.PreviewJson,
-                RefreshedAtUtc = refreshedAt,
-                ExpiresAtUtc = refreshedAt.AddHours(6),
-            });
-        }
+                await transaction.CommitAsync(cancellationToken);
+                return;
+            }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+            var refreshedAt = DateTime.UtcNow;
+            for (var i = 0; i < recommendations.Count; i++)
+            {
+                var item = recommendations[i];
+                dbContext.RecommendationCacheEntries.Add(new RecommendationCacheEntry
+                {
+                    SubjectType = subjectType,
+                    SubjectId = subjectId,
+                    TargetType = targetType,
+                    TargetId = item.TargetId,
+                    Rank = i + 1,
+                    Score = item.Score,
+                    Reason = item.Reason,
+                    SourceSnapshotHash = item.PreviewJson,
+                    RefreshedAtUtc = refreshedAt,
+                    ExpiresAtUtc = refreshedAt.AddHours(6),
+                });
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        });
     }
 
     private static IReadOnlyList<RecommendationResultDto> SanitizeRecommendations(

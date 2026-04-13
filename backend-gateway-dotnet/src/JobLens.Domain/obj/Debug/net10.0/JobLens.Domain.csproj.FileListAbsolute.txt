@@ -10,3 +10,12 @@ D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Doma
 D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\refint\JobLens.Domain.dll
 D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\JobLens.Domain.pdb
 D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\ref\JobLens.Domain.dll
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\.artifacts\validation-build\JobLens.Domain.deps.json
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\.artifacts\validation-build\JobLens.Domain.dll
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\.artifacts\validation-build\JobLens.Domain.pdb
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build\JobLens.Domain.deps.json
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build\JobLens.Domain.dll
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build\JobLens.Domain.pdb
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Domain.deps.json
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Domain.dll
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Domain.pdb

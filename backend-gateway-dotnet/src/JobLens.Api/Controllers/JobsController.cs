@@ -416,8 +416,39 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
 
     [Authorize(Roles = "Recruiter,Admin")]
     [HttpGet("{jobId:long}/candidate-recommendations")]
-    public async Task<IActionResult> GetCandidateRecommendationsForJob(long jobId, [FromQuery] int limit = 10, CancellationToken cancellationToken = default) =>
-        Ok(await jobService.GetRecommendationsForJobAsync(GetRequiredUserId(), jobId, limit, cancellationToken));
+    public async Task<IActionResult> GetCandidateRecommendationsForJob(long jobId, [FromQuery] int limit = 10, [FromQuery] bool forceRefresh = false, CancellationToken cancellationToken = default)
+    {
+        var recs = await jobService.GetRecommendationsForJobAsync(GetRequiredUserId(), jobId, limit, cancellationToken, forceRefresh);
+        if (!recs.Success || recs.Data is null)
+        {
+            return BadRequest(new ApiResponse<IReadOnlyList<CandidateRecommendationDto>>(false, null, recs.Message, recs.Errors));
+        }
+
+        var candidateIds = recs.Data.Select(x => x.TargetId).Distinct().Where(x => x > 0).ToList();
+        var candidates = await dbContext.CandidateProfiles
+            .Include(x => x.User)
+            .Where(x => candidateIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        var mapped = recs.Data
+            .Select(x =>
+            {
+                candidates.TryGetValue(x.TargetId, out var candidate);
+                return new CandidateRecommendationDto(
+                    x.TargetId,
+                    candidate?.User?.DisplayName ?? "Candidate",
+                    string.IsNullOrWhiteSpace(candidate?.Headline) ? null : candidate.Headline,
+                    string.IsNullOrWhiteSpace(candidate?.Location) ? null : candidate.Location,
+                    string.IsNullOrWhiteSpace(candidate?.ProfileImagePath) ? null : candidate.ProfileImagePath,
+                    candidate?.YearsExperience,
+                    ServiceJson.DeserializeStringList(candidate?.SkillsJson ?? "[]").Take(8).ToArray(),
+                    NormalizeRecommendationScore(x.Score),
+                    string.IsNullOrWhiteSpace(x.Reason) ? null : x.Reason);
+            })
+            .ToList();
+
+        return Ok(new ApiResponse<IReadOnlyList<CandidateRecommendationDto>>(true, mapped, recs.Message, recs.Errors));
+    }
 
     [Authorize(Roles = "Recruiter,Admin")]
     [HttpGet("my-jobs")]
@@ -970,6 +1001,17 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
         ]);
 
         return EgyptLocationTokens.Any(token => combined.Contains(token, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static double NormalizeRecommendationScore(double score)
+    {
+        if (!double.IsFinite(score) || score <= 0)
+        {
+            return 0;
+        }
+
+        var normalized = score <= 1 ? score * 100 : score;
+        return Math.Round(Math.Min(normalized, 100), 2);
     }
 
     private static double Percentage(int part, int total)

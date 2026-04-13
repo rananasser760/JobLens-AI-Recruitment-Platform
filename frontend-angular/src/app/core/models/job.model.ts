@@ -122,6 +122,18 @@ export interface JobRecommendationDto {
   matchReason?: string | null;
 }
 
+export interface CandidateRecommendationDto {
+  candidateId: number;
+  candidateName: string;
+  currentTitle?: string | null;
+  location?: string | null;
+  profileImage?: string | null;
+  yearsOfExperience?: number | null;
+  skills: string[];
+  matchScore: number;
+  matchReason?: string | null;
+}
+
 export interface ScrapedJobDto {
   externalJobId: string;
   title: string;

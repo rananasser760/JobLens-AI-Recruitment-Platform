@@ -3,9 +3,7 @@ import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, map, of } from 'rxjs';
 
-import { CandidateApplicationDto } from '../../../../core/models/application.model';
-import { JobDto } from '../../../../core/models/job.model';
-import { ApplicationsService } from '../../../applications/applications.service';
+import { CandidateRecommendationDto, JobDto } from '../../../../core/models/job.model';
 import { JobsService } from '../../../jobs/jobs.service';
 
 @Component({
@@ -17,14 +15,14 @@ import { JobsService } from '../../../jobs/jobs.service';
 export class RecruiterTopCandidatesPage {
   private readonly route = inject(ActivatedRoute);
   private readonly jobsService = inject(JobsService);
-  private readonly applicationsService = inject(ApplicationsService);
 
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
+  readonly recommendationMessage = signal<string | null>(null);
 
   readonly jobId = signal<number | null>(null);
   readonly job = signal<JobDto | null>(null);
-  readonly candidates = signal<CandidateApplicationDto[]>([]);
+  readonly candidates = signal<CandidateRecommendationDto[]>([]);
 
   constructor() {
     this.route.paramMap.subscribe((params) => {
@@ -40,7 +38,7 @@ export class RecruiterTopCandidatesPage {
     });
   }
 
-  load(): void {
+  load(forceRefresh = false): void {
     const id = this.jobId();
     if (!id) {
       return;
@@ -48,22 +46,36 @@ export class RecruiterTopCandidatesPage {
 
     this.loading.set(true);
     this.error.set(null);
+    this.recommendationMessage.set(null);
 
     forkJoin({
       job: this.jobsService.getById(id).pipe(
         map((res) => res.data),
         catchError(() => of(null))
       ),
-      candidates: this.applicationsService.getRankedCandidates(id).pipe(
-        map((res) => res.data ?? []),
-        catchError(() => of([] as CandidateApplicationDto[]))
+      recommendations: this.jobsService.getCandidateRecommendationsForJob(id, 20, forceRefresh).pipe(
+        map((res) => ({
+          candidates: res.data ?? [],
+          message: res.message ?? null
+        })),
+        catchError(() =>
+          of({
+            candidates: [] as CandidateRecommendationDto[],
+            message: 'Unable to load AI recommendations right now.'
+          })
+        )
       )
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
-        next: ({ job, candidates }) => {
+        next: ({ job, recommendations }) => {
           this.job.set(job);
-          this.candidates.set(candidates);
+          this.candidates.set(recommendations.candidates);
+
+          if (recommendations.candidates.length === 0 && recommendations.message) {
+            this.recommendationMessage.set(recommendations.message);
+          }
+
           if (!job) {
             this.error.set('Job details are unavailable.');
           }
@@ -74,7 +86,7 @@ export class RecruiterTopCandidatesPage {
       });
   }
 
-  trackByApplicationId(_: number, item: CandidateApplicationDto): number {
-    return item.applicationId;
+  trackByCandidateId(_: number, item: CandidateRecommendationDto): number {
+    return item.candidateId;
   }
 }

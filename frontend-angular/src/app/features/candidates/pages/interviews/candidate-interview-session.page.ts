@@ -721,10 +721,21 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
     if (this.liveCapturing()) return;
 
     try {
-      // Reuse existing camera stream's audio track if available and alive
-      let stream = this.cameraStream();
-      if (!stream || !this.hasLiveEnabledTrack(stream, 'audio')) {
-        stream = await navigator.mediaDevices.getUserMedia({
+      // Always build an audio-only stream for the MediaRecorder.
+      // Using the full camera stream (audio+video) causes some browsers to
+      // produce empty or corrupted audio chunks when an audio-only MIME type
+      // is specified.
+      let audioStream: MediaStream | null = null;
+
+      const camStream = this.cameraStream();
+      if (camStream && this.hasLiveEnabledTrack(camStream, 'audio')) {
+        // Clone only the audio tracks into a dedicated audio-only stream.
+        audioStream = new MediaStream(camStream.getAudioTracks());
+      }
+
+      if (!audioStream || audioStream.getAudioTracks().length === 0) {
+        // No usable audio track on the camera stream — request a fresh one.
+        audioStream = await navigator.mediaDevices.getUserMedia({
           audio: this.getAudioConstraints(),
           video: false
         });
@@ -737,15 +748,12 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       ];
       const selectedMimeType = preferredMimeTypes.find((t) => MediaRecorder.isTypeSupported(t));
       const recorder = selectedMimeType
-        ? new MediaRecorder(stream, { mimeType: selectedMimeType })
-        : new MediaRecorder(stream);
+        ? new MediaRecorder(audioStream, { mimeType: selectedMimeType })
+        : new MediaRecorder(audioStream);
 
       recorder.ondataavailable = (event: BlobEvent) => {
         const socket = this.realtimeSocket;
         if (!socket || socket.readyState !== WebSocket.OPEN || !event.data || event.data.size === 0) {
-          if (this.isInProgress()) {
-            this.realtimeError.set('Live connection dropped while streaming microphone audio. Reconnecting...');
-          }
           return;
         }
 
@@ -762,7 +770,7 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
 
       recorder.start(1500);
       this.mediaRecorder = recorder;
-      this.mediaStream = stream;
+      this.mediaStream = audioStream;
       this.pausedCaptureForPlayback = false;
       this.captureStartedAtMs = Date.now();
       this.lastTranscriptReceivedAtMs = null;
@@ -807,15 +815,15 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
   }
 
   private pauseCaptureForAiPlayback(): void {
+    // Always mark that we intend to pause for playback, even if capture
+    // hasn't started yet (race condition with opening prompt).
+    this.pausedCaptureForPlayback = true;
+
     if (!this.liveCapturing()) {
       return;
     }
 
-    this.pausedCaptureForPlayback = true;
-
     // Pause the existing recorder instead of destroying it.
-    // This avoids re-creating the entire audio capture pipeline
-    // which can leave the mic in a broken state.
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
       this.mediaRecorder.pause();
     }
@@ -837,7 +845,7 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       return;
     }
 
-    // Recorder was lost (e.g. reconnect happened) — fall back to full restart.
+    // Recorder was lost or capture never started — start fresh.
     void this.startLiveCapture();
   }
 
@@ -997,9 +1005,15 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
       const alerts = Array.isArray(parsed['events'])
         ? parsed['events'].filter((entry): entry is string => typeof entry === 'string' && !!entry.trim())
         : [];
+      
       if (alerts.length > 0) {
-        this.proctoringEvents.set(alerts);
-        this.pushTranscript('system', `Proctoring notice: ${alerts.join(' | ')}`);
+        const prevAlerts = this.proctoringEvents();
+        const newAlerts = alerts.filter(a => !prevAlerts.includes(a));
+
+        if (newAlerts.length > 0) {
+          this.proctoringEvents.update(prev => Array.from(new Set([...prev, ...alerts])));
+          this.pushTranscript('system', `Proctoring Alert: ${newAlerts.join(', ')}`);
+        }
       }
       return;
     }
@@ -1399,6 +1413,19 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
 
     if (hasCamera && hasMic) {
       this.clearDeviceGraceTimer();
+
+      // Watchdog: auto-restart mic capture if it should be running but isn't.
+      // This covers race conditions where startLiveCapture failed silently,
+      // or where the pause/resume cycle lost the recorder.
+      if (
+        !this.liveCapturing() &&
+        !this.pausedCaptureForPlayback &&
+        !this.audioPlaying() &&
+        this.isRealtimeConnected()
+      ) {
+        void this.startLiveCapture();
+      }
+
       this.maybeWarnMissingTranscript();
       return;
     }

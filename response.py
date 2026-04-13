@@ -8,7 +8,7 @@ import re
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL_NAME = os.getenv(
     "JOBLENS_INTERVIEW_MODEL",
-    "mistralai/mistral-small-3.2-24b-instruct",
+    "google/gemini-2.5-flash:free",
 )
 
 

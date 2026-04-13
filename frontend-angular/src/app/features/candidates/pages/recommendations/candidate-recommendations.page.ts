@@ -18,6 +18,7 @@ export class CandidateRecommendationsPage {
   readonly loading = signal(true);
   readonly refreshing = signal(false);
   readonly error = signal<string | null>(null);
+  readonly info = signal<string | null>(null);
 
   readonly recommendations = signal<JobRecommendationDto[]>([]);
   readonly lastUpdated = signal<Date | null>(null);
@@ -34,6 +35,7 @@ export class CandidateRecommendationsPage {
     }
 
     this.error.set(null);
+    this.info.set(null);
 
     this.jobsService
       .getCandidateRecommendations(30, forceRefresh)
@@ -45,7 +47,9 @@ export class CandidateRecommendationsPage {
       )
       .subscribe({
         next: (res) => {
-          this.recommendations.set(res.data ?? []);
+          const items = res.data ?? [];
+          this.recommendations.set(items);
+          this.info.set(items.length === 0 ? (res.message ?? null) : null);
           this.lastUpdated.set(new Date());
         },
         error: (err: unknown) => {

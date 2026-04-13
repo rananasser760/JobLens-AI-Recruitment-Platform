@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -41,6 +41,24 @@ def _to_builtin_types(value):
         return value.item()
 
     return value
+
+
+def _extract_numeric_id(value: Any) -> int:
+    if isinstance(value, int):
+        return value if value > 0 else 0
+
+    text = str(value or "").strip()
+    if not text:
+        return 0
+
+    if text.isdigit():
+        return int(text)
+
+    if text.startswith("job_"):
+        suffix = text[4:]
+        return int(suffix) if suffix.isdigit() else 0
+
+    return 0
 
 
 class JobMatcher:
@@ -183,13 +201,20 @@ Return EXACTLY this JSON (no markdown):
 
         candidates = []
         for index in range(len(db_results["ids"][0])):
+            vector_id = str(db_results["ids"][0][index])
             metadata = db_results["metadatas"][0][index]
             try:
                 detailed = json.loads(metadata.get("json_detailed", "{}"))
             except Exception:
                 detailed = {}
 
+            db_id = _extract_numeric_id(metadata.get("job_id")) or _extract_numeric_id(vector_id)
+            external_job_id = str(metadata.get("external_job_id", "") or "").strip() or None
+
             job_doc = {
+                "job_id": vector_id,
+                "db_id": db_id,
+                "external_job_id": external_job_id,
                 "title": metadata.get("title", "N/A"),
                 "company": metadata.get("company", "N/A"),
                 "location": metadata.get("location", "N/A"),
@@ -211,6 +236,9 @@ Return EXACTLY this JSON (no markdown):
         for similarity, job in top_jobs:
             llm_analysis = self._llm_match(parsed_cv, job)
             entry = {
+                "job_id": job.get("job_id"),
+                "db_id": job.get("db_id"),
+                "external_job_id": job.get("external_job_id"),
                 "job_title": job["title"],
                 "company": job["company"],
                 "location": job["location"],
@@ -255,10 +283,14 @@ def recommend_jobs_for_candidate(candidate_id: int, limit: int = 10) -> List[Dic
 
     matches = []
     for index in range(len(result["ids"][0])):
+        vector_id = str(result["ids"][0][index])
+        metadata = result.get("metadatas", [[{}]])[0][index] if result.get("metadatas") else {}
+        db_id = _extract_numeric_id(metadata.get("job_id")) or _extract_numeric_id(vector_id)
         raw_preview = result["documents"][0][index]
         matches.append(
             {
-                "job_id": result["ids"][0][index],
+                "job_id": vector_id,
+                "db_id": db_id,
                 "match_score": float(round(max(0.0, 1.0 - result["distances"][0][index]), 2)),
                 "job_preview": _safe_json_load(raw_preview),
             }

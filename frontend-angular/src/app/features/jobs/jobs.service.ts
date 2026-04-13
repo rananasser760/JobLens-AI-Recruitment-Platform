@@ -4,6 +4,7 @@ import { timeout } from 'rxjs/operators';
 import { ApiClientService } from '../../core/api/api-client.service';
 import { ApiResponse, PaginatedResponse } from '../../core/models/api.model';
 import {
+  CandidateRecommendationDto,
   CreateJobDto,
   CreateJobSkillDto,
   JobOperationResultDto,
@@ -59,6 +60,15 @@ export class JobsService {
   getCandidateRecommendations(limit = 10, forceRefresh = false): Observable<ApiResponse<JobRecommendationDto[]>> {
     return this.apiClient
       .get<JobRecommendationDto[]>(`${this.base}/recommendations`, {
+        limit,
+        forceRefresh: forceRefresh || undefined
+      })
+      .pipe(timeout({ first: forceRefresh ? 30000 : 8000 }));
+  }
+
+  getCandidateRecommendationsForJob(jobId: number, limit = 10, forceRefresh = false): Observable<ApiResponse<CandidateRecommendationDto[]>> {
+    return this.apiClient
+      .get<CandidateRecommendationDto[]>(`${this.base}/${jobId}/candidate-recommendations`, {
         limit,
         forceRefresh: forceRefresh || undefined
       })

@@ -27,7 +27,14 @@ public sealed class ResumeService(
         var contentHash = contentHashService.Compute(request.Content);
         var rawText = await ExtractRawTextAsync(request, cancellationToken);
 
-        if (request.IsDefault)
+        var setAsDefault = request.IsDefault;
+        if (!setAsDefault)
+        {
+            var hasExistingResume = await dbContext.Resumes.AnyAsync(x => x.CandidateProfileId == candidate.Id, cancellationToken);
+            setAsDefault = !hasExistingResume;
+        }
+
+        if (setAsDefault)
         {
             var defaults = dbContext.Resumes.Where(x => x.CandidateProfileId == candidate.Id && x.IsDefault);
             await defaults.ForEachAsync(x => x.IsDefault = false, cancellationToken);
@@ -42,7 +49,7 @@ public sealed class ResumeService(
             StorageKey = storageKey,
             ContentHash = contentHash,
             RawText = rawText,
-            IsDefault = request.IsDefault,
+            IsDefault = setAsDefault,
             ParseStatus = queueParsing ? "Queued" : "Pending",
         };
 

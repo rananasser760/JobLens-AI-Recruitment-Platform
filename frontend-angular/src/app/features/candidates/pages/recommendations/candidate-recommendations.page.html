@@ -33,6 +33,12 @@
     </div>
   }
 
+  @if (info() && !error()) {
+    <div class="alert-info">
+      <i class="fa-solid fa-circle-info"></i> {{ info() }}
+    </div>
+  }
+
   @if (loading()) {
     <div class="cards-grid">
       @for (i of [1,2,3,4,5,6]; track i) {

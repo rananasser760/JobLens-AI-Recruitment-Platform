@@ -4,7 +4,6 @@ import { RouterLink } from '@angular/router';
 import { catchError, finalize, forkJoin, map, of } from 'rxjs';
 
 import { CandidateService } from '../../candidate.service';
-import { LoadingSpinnerComponent } from '../../../../shared/components/loading-spinner/loading-spinner.component';
 import {
   CandidateDashboardDto,
   CandidateProfileDto,
@@ -23,7 +22,7 @@ interface OnboardingChecklistItem {
 
 @Component({
   selector: 'app-candidate-dashboard-page',
-  imports: [CommonModule, RouterLink, DatePipe, LoadingSpinnerComponent],
+  imports: [CommonModule, RouterLink, DatePipe],
   templateUrl: './candidate-dashboard.page.html',
   styleUrl: './candidate-dashboard.page.css'
 })
@@ -34,6 +33,7 @@ export class CandidateDashboardPage {
   readonly loading = signal(true);
   readonly recommendationsLoading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly recommendationNote = signal<string | null>(null);
 
   readonly dashboard = signal<CandidateDashboardDto | null>(null);
   readonly profile = signal<CandidateProfileDto | null>(null);
@@ -151,13 +151,22 @@ export class CandidateDashboardPage {
 
   private loadRecommendations(): void {
     this.recommendationsLoading.set(true);
+    this.recommendationNote.set(null);
     this.jobsService
       .getCandidateRecommendations(4)
       .pipe(
-        map((res) => res.data ?? []),
-        catchError(() => of<JobRecommendationDto[]>([])),
         finalize(() => this.recommendationsLoading.set(false))
       )
-      .subscribe((recs) => this.recommendedJobs.set(recs));
+      .subscribe({
+        next: (res) => {
+          const recs = res.data ?? [];
+          this.recommendedJobs.set(recs);
+          this.recommendationNote.set(recs.length === 0 ? (res.message ?? null) : null);
+        },
+        error: () => {
+          this.recommendedJobs.set([]);
+          this.recommendationNote.set('Recommendations are unavailable right now. Please try again shortly.');
+        }
+      });
   }
 }

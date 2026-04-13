@@ -18,3 +18,15 @@ D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Infr
 D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Infrastructure\obj\Debug\net10.0\JobLens.Infrastructure.pdb
 D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Infrastructure\obj\Debug\net10.0\JobLens.Infrastructure.genruntimeconfig.cache
 D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Infrastructure\obj\Debug\net10.0\ref\JobLens.Infrastructure.dll
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\.artifacts\validation-build\JobLens.Infrastructure.deps.json
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\.artifacts\validation-build\JobLens.Infrastructure.runtimeconfig.json
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\.artifacts\validation-build\JobLens.Infrastructure.dll
+D:\GP_AI\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\.artifacts\validation-build\JobLens.Infrastructure.pdb
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build\JobLens.Infrastructure.deps.json
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build\JobLens.Infrastructure.runtimeconfig.json
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build\JobLens.Infrastructure.dll
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build\JobLens.Infrastructure.pdb
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Infrastructure.deps.json
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Infrastructure.runtimeconfig.json
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Infrastructure.dll
+D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Infrastructure.pdb

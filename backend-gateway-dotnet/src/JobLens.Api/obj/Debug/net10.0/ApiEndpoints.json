@@ -1302,6 +1302,11 @@
         "Name": "limit",
         "Type": "System.Int32",
         "IsRequired": false
+      },
+      {
+        "Name": "forceRefresh",
+        "Type": "System.Boolean",
+        "IsRequired": false
       }
     ],
     "ReturnTypes": []
@@ -1431,6 +1436,16 @@
     "ContainingType": "JobLens.Api.Controllers.JobsController",
     "Method": "RecruitmentStatus",
     "RelativePath": "api/jobs/recruitment/status",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "JobLens.Api.Controllers.JobsController",
+    "Method": "GetScrapingDiagnostics",
+    "RelativePath": "api/jobs/scraping/diagnostics",
     "HttpMethod": "GET",
     "IsController": true,
     "Order": 0,

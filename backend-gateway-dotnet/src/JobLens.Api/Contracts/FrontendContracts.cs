@@ -315,6 +315,17 @@ public sealed record JobRecommendationDto(
     IReadOnlyList<string> MatchingSkills,
     string? MatchReason);
 
+public sealed record CandidateRecommendationDto(
+    long CandidateId,
+    string CandidateName,
+    string? CurrentTitle,
+    string? Location,
+    string? ProfileImage,
+    int? YearsOfExperience,
+    IReadOnlyList<string> Skills,
+    double MatchScore,
+    string? MatchReason);
+
 public sealed record ScrapedJobDto(
     string ExternalJobId,
     string Title,
