@@ -1,0 +1,78 @@
+<div class="chat-container">
+  <!-- Header -->
+  <div class="chat-header">
+    <div class="header-left">
+      <button class="btn-icon back-btn" (click)="goBack()" title="Go Back">
+        <i class="fas fa-arrow-left"></i>
+      </button>
+      <div class="recipient-info">
+        <div class="recipient-avatar">
+          <!-- We can just show a placeholder or dynamic avatar -->
+          <i class="fas fa-user"></i>
+        </div>
+        <div class="recipient-text">
+          <h2 class="recipient-name">Conversation</h2>
+          <span class="recipient-status">Online</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Messages Area -->
+  <div class="messages-area" #messagesContainer>
+    <div *ngIf="loading" class="chat-loading">
+      <div class="spinner"></div>
+    </div>
+
+    <div *ngFor="let msg of messages" 
+         class="message-wrapper" 
+         [class.message-outgoing]="msg.senderId === currentUserId" 
+         [class.message-incoming]="msg.senderId !== currentUserId">
+      
+      <div class="message-meta" *ngIf="msg.senderId !== currentUserId">
+        <span class="sender-name">{{ msg.senderName }}</span>
+        <time class="message-time">{{ msg.sentAtUtc | date:'shortTime' }}</time>
+      </div>
+
+      <div class="message-bubble" [class.bubble-primary]="msg.senderId === currentUserId">
+        <p class="message-text">{{ msg.content }}</p>
+        
+        <div *ngIf="msg.attachments && msg.attachments.length" class="attachments-list">
+          <a *ngFor="let att of msg.attachments" [href]="att.fileUrl" target="_blank" class="attachment-link">
+            <i class="fas fa-paperclip"></i> {{ att.fileName }}
+          </a>
+        </div>
+      </div>
+
+      <div class="message-meta-bottom" *ngIf="msg.senderId === currentUserId">
+        <time class="message-time">{{ msg.sentAtUtc | date:'shortTime' }}</time>
+        <span class="message-status">
+          <i class="fas" [class.fa-check]="!msg.isRead" [class.fa-check-double]="msg.isRead" [class.text-primary]="msg.isRead"></i>
+          {{ msg.isRead ? 'Read' : 'Delivered' }}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input Area -->
+  <div class="chat-input-area">
+    <form (ngSubmit)="sendMessage()" class="chat-form">
+      <button type="button" class="btn-icon attachment-btn" title="Attach file">
+        <i class="fas fa-paperclip"></i>
+      </button>
+      <input 
+        type="text" 
+        [(ngModel)]="newMessage" 
+        name="newMessage"
+        placeholder="Type a message..." 
+        class="message-input"
+        autocomplete="off"
+        required
+      />
+      <button type="submit" class="btn-primary send-btn" [disabled]="!newMessage.trim() || sending">
+        <div *ngIf="sending" class="spinner spinner-small"></div>
+        <i *ngIf="!sending" class="fas fa-paper-plane"></i>
+      </button>
+    </form>
+  </div>
+</div>

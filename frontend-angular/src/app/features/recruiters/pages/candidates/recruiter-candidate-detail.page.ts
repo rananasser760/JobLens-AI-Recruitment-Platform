@@ -5,10 +5,11 @@ import { finalize } from 'rxjs';
 
 import { CandidateProfileDto } from '../../../../core/models/candidate.model';
 import { CandidateService } from '../../../candidates/candidate.service';
+import { ChatModalComponent } from '../../../../shared/components/chat-modal/chat-modal.component';
 
 @Component({
   selector: 'app-recruiter-candidate-detail-page',
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, ChatModalComponent],
   templateUrl: './recruiter-candidate-detail.page.html',
   styleUrl: './recruiter-candidate-detail.page.css'
 })
@@ -20,6 +21,7 @@ export class RecruiterCandidateDetailPage {
   readonly error = signal<string | null>(null);
   readonly profile = signal<CandidateProfileDto | null>(null);
   readonly candidateId = signal<number | null>(null);
+  readonly showChatModal = signal(false);
 
   constructor() {
     this.route.paramMap.subscribe((params) => {
@@ -58,6 +60,14 @@ export class RecruiterCandidateDetailPage {
           this.error.set(this.mapError(err, 'Unable to load candidate profile right now.'));
         }
       });
+  }
+
+  openChatModal(): void {
+    this.showChatModal.set(true);
+  }
+
+  closeChatModal(): void {
+    this.showChatModal.set(false);
   }
 
   private mapError(err: unknown, fallback: string): string {

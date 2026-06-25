@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -10,77 +10,15 @@ import { Subscription } from 'rxjs';
   selector: 'app-chat-window-page',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  template: `
-    <div class="container mx-auto max-w-4xl h-[calc(100vh-80px)] flex flex-col pt-4 pb-4">
-      
-      <!-- Header -->
-      <div class="bg-base-100 border-b border-base-200 p-4 flex items-center justify-between rounded-t-lg shadow-sm">
-        <div class="flex items-center gap-3">
-          <button class="btn btn-ghost btn-sm btn-circle" (click)="goBack()">
-            <i class="fas fa-arrow-left"></i>
-          </button>
-          <div>
-            <h2 class="font-bold text-lg">Conversation</h2>
-          </div>
-        </div>
-      </div>
-
-      <!-- Messages Area -->
-      <div class="flex-1 bg-base-200 overflow-y-auto p-4" #messagesContainer>
-        <div *ngIf="loading" class="text-center py-8">
-          <span class="loading loading-spinner loading-md"></span>
-        </div>
-
-        <div *ngFor="let msg of messages" class="chat" [class.chat-end]="msg.senderId === currentUserId" [class.chat-start]="msg.senderId !== currentUserId">
-          <div class="chat-header mb-1">
-            {{ msg.senderName }}
-            <time class="text-xs opacity-50 ml-1">{{ msg.sentAtUtc | date:'shortTime' }}</time>
-          </div>
-          <div class="chat-bubble" [class.chat-bubble-primary]="msg.senderId === currentUserId">
-            {{ msg.content }}
-            <div *ngIf="msg.attachments && msg.attachments.length" class="mt-2 flex flex-col gap-1">
-              <a *ngFor="let att of msg.attachments" [href]="att.fileUrl" target="_blank" class="btn btn-xs btn-outline">
-                <i class="fas fa-paperclip mr-1"></i> {{ att.fileName }}
-              </a>
-            </div>
-          </div>
-          <div class="chat-footer opacity-50 text-xs mt-1" *ngIf="msg.senderId === currentUserId">
-            {{ msg.isRead ? 'Read' : 'Delivered' }}
-          </div>
-        </div>
-      </div>
-
-      <!-- Input Area -->
-      <div class="bg-base-100 p-4 rounded-b-lg shadow-sm border-t border-base-200">
-        <form (ngSubmit)="sendMessage()" class="flex gap-2">
-          <button type="button" class="btn btn-square btn-ghost" title="Attachments coming soon">
-            <i class="fas fa-paperclip"></i>
-          </button>
-          <input 
-            type="text" 
-            [(ngModel)]="newMessage" 
-            name="newMessage"
-            placeholder="Type your message..." 
-            class="input input-bordered flex-1"
-            autocomplete="off"
-            required
-          />
-          <button type="submit" class="btn btn-primary" [disabled]="!newMessage.trim() || sending">
-            <span *ngIf="sending" class="loading loading-spinner loading-xs"></span>
-            <i *ngIf="!sending" class="fas fa-paper-plane"></i>
-          </button>
-        </form>
-      </div>
-
-    </div>
-  `,
-  styles: []
+  templateUrl: './chat-window.page.html',
+  styleUrl: './chat-window.page.css'
 })
 export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private chatService = inject(ChatService);
   private authService = inject(AuthService);
+  private cdr = inject(ChangeDetectorRef);
 
   @ViewChild('messagesContainer') private messagesContainer!: ElementRef;
 
@@ -105,19 +43,34 @@ export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
       }
     });
 
-    this.sub = this.chatService.incomingMessage$.subscribe(msg => {
-      if (msg && msg.conversationId === this.conversationId) {
-        // If we didn't send it, it might not be in the list, or it's new
-        const exists = this.messages.find(m => m.id === msg.id);
-        if (!exists) {
-          this.messages.push(msg);
-          this.scrollToBottom();
-          if (msg.senderId !== this.currentUserId) {
-             this.markAsRead();
+    this.sub = new Subscription();
+    this.sub.add(
+      this.chatService.incomingMessage$.subscribe(msg => {
+        if (msg && msg.conversationId === this.conversationId) {
+          // If we didn't send it, it might not be in the list, or it's new
+          const exists = this.messages.find(m => m.id === msg.id);
+          if (!exists) {
+            this.messages.push(msg);
+            this.scrollToBottom();
+            if (msg.senderId !== this.currentUserId) {
+               this.markAsRead();
+            }
+            this.cdr.detectChanges();
           }
         }
-      }
-    });
+      })
+    );
+
+    this.sub.add(
+      this.chatService.messagesRead$.subscribe(convId => {
+        if (convId === this.conversationId) {
+          this.messages.forEach(m => {
+            if (m.senderId === this.currentUserId) m.isRead = true;
+          });
+          this.cdr.detectChanges();
+        }
+      })
+    );
   }
 
   ngOnDestroy() {
@@ -134,11 +87,13 @@ export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
       next: (data) => {
         this.messages = data;
         this.loading = false;
+        this.cdr.detectChanges();
         setTimeout(() => this.scrollToBottom(), 100);
       },
       error: (err) => {
         console.error('Failed to load messages', err);
         this.loading = false;
+        this.cdr.detectChanges();
       }
     });
   }

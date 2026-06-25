@@ -21,9 +21,9 @@
         <p>{{ candidate.currentTitle || 'Current title not set' }}</p>
       </div>
       <div>
-        <a class="btn btn-primary" [routerLink]="['/recruiter/chat']" [queryParams]="{ receiverId: candidate.userId }">
+        <button type="button" class="btn btn-primary" (click)="openChatModal()">
           <i class="fa-solid fa-message"></i> Message
-        </a>
+        </button>
       </div>
       <div class="hero-meta">
         <span>{{ candidate.yearsOfExperience ?? 0 }} years experience</span>
@@ -99,5 +99,12 @@
         }
       </section>
     </div>
+
+    <app-chat-modal
+      [open]="showChatModal()"
+      [receiverId]="candidate.userId"
+      [receiverName]="candidate.fullName || 'Candidate'"
+      (close)="closeChatModal()"
+    ></app-chat-modal>
   }
 </section>

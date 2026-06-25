@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, OnDestroy } from '@angular/core';
+import { Component, OnInit, inject, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
 import { ChatService, ChatConversationDto } from '../../../../core/services/chat.service';
@@ -9,59 +9,15 @@ import { AuthService } from '../../../../core/auth/auth.service';
   selector: 'app-inbox-page',
   standalone: true,
   imports: [CommonModule, RouterModule],
-  template: `
-    <div class="container mx-auto p-4 max-w-4xl">
-      <h1 class="text-2xl font-bold mb-6">Inbox</h1>
-
-      <div *ngIf="loading" class="text-center py-8">
-        <span class="loading loading-spinner loading-lg"></span>
-      </div>
-
-      <div *ngIf="!loading && conversations.length === 0" class="text-center py-12 bg-base-200 rounded-lg">
-        <h3 class="text-lg font-medium">No messages yet</h3>
-        <p class="text-base-content/70 mt-2">When you connect with someone, your conversation will appear here.</p>
-      </div>
-
-      <div *ngIf="!loading && conversations.length > 0" class="flex flex-col gap-4">
-        <div 
-          *ngFor="let conv of conversations" 
-          class="card bg-base-100 shadow-sm border border-base-200 cursor-pointer hover:border-primary transition-colors"
-          (click)="openConversation(conv.id)"
-        >
-          <div class="card-body p-4 flex flex-row items-center gap-4">
-            <div class="avatar placeholder">
-              <div class="bg-neutral text-neutral-content rounded-full w-12">
-                <span class="text-xl">{{ conv.otherParticipantName.charAt(0) | uppercase }}</span>
-              </div>
-            </div>
-            
-            <div class="flex-1 min-w-0">
-              <div class="flex justify-between items-center mb-1">
-                <h3 class="font-semibold text-lg truncate">{{ conv.otherParticipantName }}</h3>
-                <span class="text-xs text-base-content/70 whitespace-nowrap ml-2">
-                  {{ conv.lastMessageAtUtc | date:'short' }}
-                </span>
-              </div>
-              <p class="text-sm text-base-content/70 truncate" [class.font-semibold]="conv.unreadCount > 0">
-                {{ conv.lastMessagePreview || 'No messages yet' }}
-              </p>
-            </div>
-
-            <div *ngIf="conv.unreadCount > 0" class="badge badge-primary">
-              {{ conv.unreadCount }}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `,
-  styles: []
+  templateUrl: './inbox.page.html',
+  styleUrl: './inbox.page.css'
 })
 export class InboxPage implements OnInit, OnDestroy {
   private chatService = inject(ChatService);
   private authService = inject(AuthService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private cdr = inject(ChangeDetectorRef);
   
   conversations: ChatConversationDto[] = [];
   loading = true;
@@ -102,10 +58,12 @@ export class InboxPage implements OnInit, OnDestroy {
       next: (data) => {
         this.conversations = data;
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: (err) => {
         console.error('Failed to load conversations', err);
         this.loading = false;
+        this.cdr.detectChanges();
       }
     });
   }

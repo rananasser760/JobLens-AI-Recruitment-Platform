@@ -2,14 +2,16 @@ using JobLens.Application.DTOs.Chat;
 using JobLens.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using JobLens.Api.Hubs;
 using System.Security.Claims;
 
 namespace JobLens.Api.Controllers;
 
 [ApiController]
-[Route("api/v1/chat")]
+[Route("api/chat")]
 [Authorize]
-public sealed class ChatController(IChatService chatService) : ControllerBase
+public sealed class ChatController(IChatService chatService, IHubContext<ChatHub> hubContext) : ControllerBase
 {
     [HttpGet("conversations")]
     public async Task<ActionResult<IReadOnlyList<ChatConversationDto>>> GetConversations(CancellationToken cancellationToken)
@@ -52,6 +54,14 @@ public sealed class ChatController(IChatService chatService) : ControllerBase
     {
         var userId = GetUserId();
         await chatService.MarkConversationAsReadAsync(userId, conversationId, cancellationToken);
+        
+        var convs = await chatService.GetConversationsForUserAsync(userId, cancellationToken);
+        var targetConv = convs.FirstOrDefault(c => c.Id == conversationId);
+        if (targetConv != null)
+        {
+            await hubContext.Clients.Group($"user_{targetConv.OtherParticipantId}").SendAsync("MessagesRead", conversationId);
+        }
+        
         return NoContent();
     }
 

@@ -1,0 +1,84 @@
+@if (open) {
+  <div class="chat-modal-backdrop" (click)="onBackdropClick($event)">
+    <div class="chat-modal-panel" (click)="$event.stopPropagation()">
+      
+      <!-- Header -->
+      <header class="chat-modal-header">
+        <div class="chat-modal-title-info">
+          <div class="avatar-placeholder">
+            <span>{{ receiverName.charAt(0) | uppercase }}</span>
+          </div>
+          <div>
+            <h3>Chat with {{ receiverName }}</h3>
+            <span class="online-indicator">
+              <span class="dot"></span> Real-time Connected
+            </span>
+          </div>
+        </div>
+        
+        <div class="chat-modal-header-actions">
+          <button type="button" class="action-btn" (click)="goToFullChat()" title="Open in Full Page">
+            <i class="fa-solid fa-expand"></i>
+          </button>
+          <button type="button" class="action-btn close-btn" (click)="onClose()" title="Close Chat">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Messages Area -->
+      <div class="chat-modal-messages" #messagesContainer>
+        @if (loading) {
+          <div class="chat-modal-spinner-container">
+            <span class="spinner"></span>
+            <p>Connecting & loading history...</p>
+          </div>
+        } @else {
+          @if (messages.length === 0) {
+            <div class="chat-modal-empty-state">
+              <i class="fa-regular fa-comments"></i>
+              <p>No messages yet. Send a message to start chatting!</p>
+            </div>
+          } @else {
+            @for (msg of messages; track msg.id) {
+              <div class="chat-msg" [class.outgoing]="msg.senderId === currentUserId" [class.incoming]="msg.senderId !== currentUserId">
+                <div class="msg-bubble">
+                  <p class="msg-text">{{ msg.content }}</p>
+                  <span class="msg-time">
+                    {{ msg.sentAtUtc | date:'shortTime' }}
+                    @if (msg.senderId === currentUserId) {
+                      · <span class="read-receipt">{{ msg.isRead ? 'Read' : 'Delivered' }}</span>
+                    }
+                  </span>
+                </div>
+              </div>
+            }
+          }
+        }
+      </div>
+
+      <!-- Input Area -->
+      <footer class="chat-modal-footer">
+        <form (ngSubmit)="sendMessage()" class="chat-modal-form">
+          <input 
+            type="text" 
+            [(ngModel)]="newMessage" 
+            name="newMessage"
+            placeholder="Type a message..." 
+            autocomplete="off"
+            required
+            [disabled]="loading || sending"
+          />
+          <button type="submit" [disabled]="!newMessage.trim() || loading || sending" title="Send Message">
+            @if (sending) {
+              <span class="btn-spinner"></span>
+            } @else {
+              <i class="fa-solid fa-paper-plane"></i>
+            }
+          </button>
+        </form>
+      </footer>
+
+    </div>
+  </div>
+}

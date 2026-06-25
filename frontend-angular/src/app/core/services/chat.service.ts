@@ -1,6 +1,6 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, NgZone } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import * as signalR from '@microsoft/signalr';
 import { TokenStoreService } from '../auth/token-store.service';
@@ -45,12 +45,16 @@ export interface SendMessageDto {
 export class ChatService {
   private http = inject(HttpClient);
   private tokenStore = inject(TokenStoreService);
+  private ngZone = inject(NgZone);
   private hubConnection: signalR.HubConnection | null = null;
   private readonly baseUrl = `${environment.apiBaseUrl}${environment.apiPrefix}/chat`;
   private readonly hubUrl = `${environment.apiBaseUrl}/hubs/chat`;
 
   private messagesSubject = new BehaviorSubject<ChatMessageDto | null>(null);
   public incomingMessage$ = this.messagesSubject.asObservable();
+  
+  private messagesReadSubject = new Subject<number>();
+  public messagesRead$ = this.messagesReadSubject.asObservable();
 
   public async startConnection(): Promise<void> {
     if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
@@ -70,7 +74,15 @@ export class ChatService {
       .build();
 
     this.hubConnection.on('ReceiveMessage', (message: ChatMessageDto) => {
-      this.messagesSubject.next(message);
+      this.ngZone.run(() => {
+        this.messagesSubject.next(message);
+      });
+    });
+
+    this.hubConnection.on('MessagesRead', (conversationId: number) => {
+      this.ngZone.run(() => {
+        this.messagesReadSubject.next(conversationId);
+      });
     });
 
     try {
