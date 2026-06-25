@@ -127,6 +127,16 @@ export const routes: Routes = [
 					import('./features/candidates/pages/jobs/candidate-jobs.page').then(
 						(m) => m.CandidateJobsPage
 					)
+			},
+			{
+				path: 'chat',
+				loadComponent: () =>
+					import('./features/chat/pages/inbox/inbox.page').then((m) => m.InboxPage)
+			},
+			{
+				path: 'chat/:conversationId',
+				loadComponent: () =>
+					import('./features/chat/pages/chat-window/chat-window.page').then((m) => m.ChatWindowPage)
 			}
 		]
 	},
@@ -238,6 +248,16 @@ export const routes: Routes = [
 					import('./features/recruiters/pages/interviews/recruiter-interviews.page').then(
 						(m) => m.RecruiterInterviewsPage
 					)
+			},
+			{
+				path: 'chat',
+				loadComponent: () =>
+					import('./features/chat/pages/inbox/inbox.page').then((m) => m.InboxPage)
+			},
+			{
+				path: 'chat/:conversationId',
+				loadComponent: () =>
+					import('./features/chat/pages/chat-window/chat-window.page').then((m) => m.ChatWindowPage)
 			}
 		]
 	},

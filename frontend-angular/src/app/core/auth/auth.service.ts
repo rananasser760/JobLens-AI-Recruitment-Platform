@@ -13,6 +13,7 @@ import {
   ResetPasswordDto
 } from '../models/auth.model';
 import { TokenStoreService } from './token-store.service';
+import { ChatService } from '../services/chat.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -22,7 +23,8 @@ export class AuthService {
 
   constructor(
     private readonly http: HttpClient,
-    private readonly tokens: TokenStoreService
+    private readonly tokens: TokenStoreService,
+    private readonly chatService: ChatService
   ) {
     this.currentUser.set(this.tokens.getAuthUser());
   }
@@ -87,11 +89,13 @@ export class AuthService {
   private setSession(session: AuthResponseDto): void {
     this.tokens.setSession(session);
     this.currentUser.set(session);
+    this.chatService.startConnection();
   }
 
   private clearSession(): void {
     this.tokens.clearSession();
     this.currentUser.set(null);
+    this.chatService.stopConnection();
   }
 
   private unwrap<T>(response: ApiResponse<T>, fallbackMessage: string): T {

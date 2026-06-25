@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("JobLens.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b7ef5c564284896fcc67df43c47935cac9622534")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+27e51e3d046ca617c56141da627e2a875b5615cb")]
 [assembly: System.Reflection.AssemblyProductAttribute("JobLens.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("JobLens.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

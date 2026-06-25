@@ -19,3 +19,15 @@ D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build\JobLens.Domai
 D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Domain.deps.json
 D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Domain.dll
 D:\GP_AI\JobLens-AI-Recruitment-Platform\.artifacts\temp-api-build-2\JobLens.Domain.pdb
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\bin\Debug\net10.0\JobLens.Domain.deps.json
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\bin\Debug\net10.0\JobLens.Domain.dll
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\bin\Debug\net10.0\JobLens.Domain.pdb
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\JobLens.Domain.GeneratedMSBuildEditorConfig.editorconfig
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\JobLens.Domain.AssemblyInfoInputs.cache
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\JobLens.Domain.AssemblyInfo.cs
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\JobLens.Domain.csproj.CoreCompileInputs.cache
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\JobLens.Domain.sourcelink.json
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\JobLens.Domain.dll
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\refint\JobLens.Domain.dll
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\JobLens.Domain.pdb
+D:\JobLens-AI-Recruitment-Platform\backend-gateway-dotnet\src\JobLens.Domain\obj\Debug\net10.0\ref\JobLens.Domain.dll

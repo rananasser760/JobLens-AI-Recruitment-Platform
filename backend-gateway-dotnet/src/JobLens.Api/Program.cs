@@ -65,7 +65,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                if (!string.IsNullOrWhiteSpace(accessToken) && path.StartsWithSegments("/hubs/interviews"))
+                if (!string.IsNullOrWhiteSpace(accessToken) && 
+                    (path.StartsWithSegments("/hubs/interviews") || path.StartsWithSegments("/hubs/chat")))
                 {
                     context.Token = accessToken;
                 }
@@ -139,6 +140,7 @@ builder.Services.AddScoped<IJobService, JobService>();
 builder.Services.AddScoped<IApplicationService, ApplicationService>();
 builder.Services.AddScoped<IInterviewService, InterviewService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddSingleton<IContentHashService, ContentHashService>();
@@ -238,6 +240,7 @@ app.MapHangfireDashboard(
         Authorization = [new AdminHangfireDashboardAuthorizationFilter()],
     });
 app.MapHub<JobLens.Api.Hubs.InterviewHub>("/hubs/interviews");
+app.MapHub<JobLens.Api.Hubs.ChatHub>("/hubs/chat");
 
 app.MapGet("/", () => Results.Ok(new
 {

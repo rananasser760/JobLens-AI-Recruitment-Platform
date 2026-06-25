@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "R7sdPudl2yQ=",
+  "dgSpecHash": "4wu74W0fjpc=",
   "success": true,
-  "projectFilePath": "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Application\\JobLens.Application.csproj",
+  "projectFilePath": "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Application\\JobLens.Application.csproj",
   "expectedPackageFiles": [],
   "logs": []
 }

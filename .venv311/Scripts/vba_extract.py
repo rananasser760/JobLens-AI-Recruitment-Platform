@@ -1,4 +1,4 @@
-#!D:\GP_AI\JobLens-AI-Recruitment-Platform\.venv311\Scripts\python.exe
+#!D:\JobLens-AI-Recruitment-Platform\.venv311\Scripts\python.exe
 
 ##############################################################################
 #

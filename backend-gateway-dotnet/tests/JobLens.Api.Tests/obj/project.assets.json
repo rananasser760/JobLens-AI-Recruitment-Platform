@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "targets": {
     "net10.0": {
       "Azure.Core/1.38.0": {
@@ -4082,23 +4082,23 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\DELL\\.nuget\\packages\\": {},
+    "C:\\Users\\net16\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\tests\\JobLens.Api.Tests\\JobLens.Api.Tests.csproj",
+      "projectUniqueName": "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\tests\\JobLens.Api.Tests\\JobLens.Api.Tests.csproj",
       "projectName": "JobLens.Api.Tests",
-      "projectPath": "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\tests\\JobLens.Api.Tests\\JobLens.Api.Tests.csproj",
-      "packagesPath": "C:\\Users\\DELL\\.nuget\\packages\\",
-      "outputPath": "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\tests\\JobLens.Api.Tests\\obj\\",
+      "projectPath": "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\tests\\JobLens.Api.Tests\\JobLens.Api.Tests.csproj",
+      "packagesPath": "C:\\Users\\net16\\.nuget\\packages\\",
+      "outputPath": "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\tests\\JobLens.Api.Tests\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\DELL\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\net16\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
@@ -4111,19 +4111,20 @@
       },
       "frameworks": {
         "net10.0": {
+          "framework": "net10.0",
           "targetAlias": "net10.0",
           "projectReferences": {
-            "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Api\\JobLens.Api.csproj": {
-              "projectPath": "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Api\\JobLens.Api.csproj"
+            "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Api\\JobLens.Api.csproj": {
+              "projectPath": "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Api\\JobLens.Api.csproj"
             },
-            "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Application\\JobLens.Application.csproj": {
-              "projectPath": "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Application\\JobLens.Application.csproj"
+            "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Application\\JobLens.Application.csproj": {
+              "projectPath": "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Application\\JobLens.Application.csproj"
             },
-            "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Domain\\JobLens.Domain.csproj": {
-              "projectPath": "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Domain\\JobLens.Domain.csproj"
+            "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Domain\\JobLens.Domain.csproj": {
+              "projectPath": "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Domain\\JobLens.Domain.csproj"
             },
-            "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Infrastructure\\JobLens.Infrastructure.csproj": {
-              "projectPath": "D:\\GP_AI\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Infrastructure\\JobLens.Infrastructure.csproj"
+            "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Infrastructure\\JobLens.Infrastructure.csproj": {
+              "projectPath": "D:\\JobLens-AI-Recruitment-Platform\\backend-gateway-dotnet\\src\\JobLens.Infrastructure\\JobLens.Infrastructure.csproj"
             }
           }
         }
@@ -4138,10 +4139,11 @@
         "auditLevel": "low",
         "auditMode": "all"
       },
-      "SdkAnalysisLevel": "10.0.100"
+      "SdkAnalysisLevel": "10.0.300"
     },
     "frameworks": {
       "net10.0": {
+        "framework": "net10.0",
         "targetAlias": "net10.0",
         "dependencies": {
           "Microsoft.NET.Test.Sdk": {
@@ -4177,7 +4179,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.104/PortableRuntimeIdentifierGraph.json",
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.301/PortableRuntimeIdentifierGraph.json",
         "packagesToPrune": {
           "Microsoft.CSharp": "(,4.7.32767]",
           "Microsoft.VisualBasic": "(,10.4.32767]",

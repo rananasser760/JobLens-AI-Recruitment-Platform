@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set VIRTUAL_ENV=D:\GP_AI\JobLens-AI-Recruitment-Platform\.venv311
+set VIRTUAL_ENV=D:\JobLens-AI-Recruitment-Platform\.venv311
 
 if not defined PROMPT set PROMPT=$P$G
 

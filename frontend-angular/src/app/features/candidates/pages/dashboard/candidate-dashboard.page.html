@@ -252,7 +252,7 @@
           <div class="interview-list">
             @for (iv of interviews(); track iv.sessionId) {
               <div class="interview-item">
-                <span class="iv-dot" [attr.data-status]="iv.status?.toLowerCase()"></span>
+                <span class="iv-dot" [attr.data-status]="iv.status.toLowerCase()"></span>
                 <div class="iv-body">
                   <span class="iv-title">{{ iv.interviewTitle || iv.jobTitle }}</span>
                   <span class="iv-date">

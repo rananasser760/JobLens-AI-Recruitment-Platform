@@ -30,7 +30,7 @@ joblens_db/
 # 6. Environment secrets
 .env
 .env.local
-
+.venv311
 # 7. Frontend build artifacts (future integration)
 dist/
 build/

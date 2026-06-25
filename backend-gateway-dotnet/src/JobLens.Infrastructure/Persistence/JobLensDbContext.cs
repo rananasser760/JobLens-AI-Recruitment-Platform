@@ -24,6 +24,10 @@ public sealed class JobLensDbContext(DbContextOptions<JobLensDbContext> options)
     public DbSet<VectorIndexEntry> VectorIndexEntries => Set<VectorIndexEntry>();
     public DbSet<BackgroundJobState> BackgroundJobStates => Set<BackgroundJobState>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    
+    public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ChatAttachment> ChatAttachments => Set<ChatAttachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -121,6 +125,40 @@ public sealed class JobLensDbContext(DbContextOptions<JobLensDbContext> options)
                 .WithMany(x => x.AuditLogs)
                 .HasForeignKey(x => x.ActorUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ChatConversation>(entity =>
+        {
+            entity.HasOne(x => x.Participant1)
+                .WithMany()
+                .HasForeignKey(x => x.Participant1Id)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(x => x.Participant2)
+                .WithMany()
+                .HasForeignKey(x => x.Participant2Id)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ChatMessage>(entity =>
+        {
+            entity.HasOne(x => x.Conversation)
+                .WithMany(x => x.Messages)
+                .HasForeignKey(x => x.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Sender)
+                .WithMany()
+                .HasForeignKey(x => x.SenderId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<ChatAttachment>(entity =>
+        {
+            entity.HasOne(x => x.Message)
+                .WithMany(x => x.Attachments)
+                .HasForeignKey(x => x.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

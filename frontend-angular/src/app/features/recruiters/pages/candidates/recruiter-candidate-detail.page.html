@@ -20,6 +20,11 @@
         <h2>{{ candidate.fullName || 'Candidate' }}</h2>
         <p>{{ candidate.currentTitle || 'Current title not set' }}</p>
       </div>
+      <div>
+        <a class="btn btn-primary" [routerLink]="['/recruiter/chat']" [queryParams]="{ receiverId: candidate.userId }">
+          <i class="fa-solid fa-message"></i> Message
+        </a>
+      </div>
       <div class="hero-meta">
         <span>{{ candidate.yearsOfExperience ?? 0 }} years experience</span>
         <span>{{ candidate.location || 'Location not set' }}</span>

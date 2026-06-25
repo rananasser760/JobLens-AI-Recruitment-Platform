@@ -18,15 +18,27 @@ class InterviewProviderError(RuntimeError):
         self.code = code
         self.retryable = retryable
 
-# Configure the OpenAI client to use OpenRouter API
-openrouter_client = (
-    openai.OpenAI(
+_openrouter_client = None
+
+def _get_openrouter_client():
+    global _openrouter_client
+    if _openrouter_client is not None:
+        return _openrouter_client
+    
+    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if api_key.startswith('"') and api_key.endswith('"'):
+        api_key = api_key[1:-1]
+    if api_key.startswith("'") and api_key.endswith("'"):
+        api_key = api_key[1:-1]
+
+    if not api_key:
+        return None
+        
+    _openrouter_client = openai.OpenAI(
         base_url="https://openrouter.ai/api/v1",
-        api_key=OPENROUTER_API_KEY,
+        api_key=api_key,
     )
-    if OPENROUTER_API_KEY
-    else None
-)
+    return _openrouter_client
 
 
 def _raise_provider_error(exc: Exception, operation: str) -> None:
@@ -107,7 +119,8 @@ def generate_interview_response(
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": current_transcript})
 
-    if openrouter_client is None:
+    client = _get_openrouter_client()
+    if client is None:
         raise InterviewProviderError(
             "ProviderNotConfigured",
             "Interview model is not configured. Please set OPENROUTER_API_KEY.",
@@ -115,7 +128,7 @@ def generate_interview_response(
         )
 
     try:
-        response = openrouter_client.chat.completions.create(
+        response = client.chat.completions.create(
             model=OPENROUTER_MODEL_NAME,
             messages=messages,
             temperature=0.7,
@@ -180,7 +193,8 @@ def generate_interview_summary(
 
     messages = [{"role": "user", "content": user_prompt}]
 
-    if openrouter_client is None:
+    client = _get_openrouter_client()
+    if client is None:
         raise InterviewProviderError(
             "ProviderNotConfigured",
             "Interview model is not configured. Please set OPENROUTER_API_KEY.",
@@ -188,7 +202,7 @@ def generate_interview_summary(
         )
 
     try:
-        response = openrouter_client.chat.completions.create(
+        response = client.chat.completions.create(
             model=OPENROUTER_MODEL_NAME,
             messages=messages,
             temperature=0.3, 
