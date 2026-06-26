@@ -161,6 +161,8 @@ class MCQResult(Base):
     weak_skills     = Column(JSON,    nullable=False, default=list)
     strong_skills   = Column(JSON,    nullable=False, default=list)
     skill_breakdown = Column(JSON,    nullable=False, default=dict)
+    tab_switches    = Column(Integer, nullable=False, default=0)
+    cam_violations  = Column(JSON,    nullable=False, default=dict)
     created_at      = Column(DateTime, default=datetime.utcnow)
 
     session = relationship("MCQSession", back_populates="result")
@@ -174,4 +176,6 @@ class MCQResult(Base):
             "weak_skills":     self.weak_skills,
             "strong_skills":   self.strong_skills,
             "skill_breakdown": self.skill_breakdown,
+            "tab_switches":    self.tab_switches,
+            "cam_violations":  self.cam_violations,
         }
