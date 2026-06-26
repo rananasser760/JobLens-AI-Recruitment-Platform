@@ -1,0 +1,2096 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JobLens — MCQ Assessment</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap"
+        rel="stylesheet" />
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --blue-50: #E8F1FB;
+            --blue-100: #BDD6F5;
+            --blue-200: #90BAF0;
+            --blue-400: #3B82D8;
+            --blue-500: #1D65BD;
+            --blue-600: #1450A0;
+            --blue-700: #0D3D80;
+            --blue-800: #062B60;
+            --blue-900: #031A40;
+
+            --gray-50: #F8F9FB;
+            --gray-100: #EEF0F4;
+            --gray-200: #DDE1E9;
+            --gray-300: #C8CDD8;
+            --gray-400: #9AA0AD;
+            --gray-500: #6B7280;
+            --gray-600: #4B5563;
+            --gray-700: #374151;
+            --gray-800: #1F2937;
+            --gray-900: #111827;
+
+            --green-50: #ECFDF5;
+            --green-100: #D1FAE5;
+            --green-400: #34D399;
+            --green-600: #059669;
+            --green-700: #047857;
+
+            --red-50: #FEF2F2;
+            --red-100: #FEE2E2;
+            --red-400: #F87171;
+            --red-600: #DC2626;
+            --red-700: #B91C1C;
+
+            --amber-50: #FFFBEB;
+            --amber-100: #FEF3C7;
+            --amber-400: #FBBF24;
+            --amber-600: #D97706;
+
+            --white: #ffffff;
+            --radius-sm: 6px;
+            --radius: 10px;
+            --radius-lg: 16px;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, .06), 0 1px 2px rgba(0, 0, 0, .04);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, .08), 0 2px 6px rgba(0, 0, 0, .04);
+            --shadow-lg: 0 12px 40px rgba(0, 0, 0, .12), 0 4px 12px rgba(0, 0, 0, .06);
+            --transition: 180ms cubic-bezier(.4, 0, .2, 1);
+        }
+
+        html {
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-900);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* ── Topbar ── */
+        .topbar {
+            background: var(--white);
+            border-bottom: 1px solid var(--gray-200);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .topbar-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .logo-mark {
+            width: 34px;
+            height: 34px;
+            background: var(--blue-500);
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-mark svg {
+            fill: white;
+            width: 18px;
+            height: 18px;
+        }
+
+        .logo-text {
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--gray-900);
+            letter-spacing: -.3px;
+        }
+
+        .logo-text span {
+            color: var(--blue-500);
+        }
+
+        .topbar-badge {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--blue-600);
+            background: var(--blue-50);
+            border: 1px solid var(--blue-100);
+            padding: 4px 10px;
+            border-radius: 20px;
+            letter-spacing: .2px;
+        }
+
+        /* ── Layout ── */
+        .page {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .col-2 {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 1.5rem;
+            align-items: start;
+        }
+
+        /* ── Cards ── */
+        .card {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1.25rem 1.5rem 1rem;
+            border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-header-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--blue-50);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .card-header-icon svg {
+            width: 16px;
+            height: 16px;
+            fill: var(--blue-500);
+        }
+
+        .card-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-800);
+            letter-spacing: -.1px;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        /* ── Sections ── */
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: .8px;
+            text-transform: uppercase;
+            color: var(--gray-400);
+            margin-bottom: 1rem;
+        }
+
+        /* ── Forms ── */
+        .form-group {
+            margin-bottom: 1.1rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-700);
+            margin-bottom: 6px;
+        }
+
+        .form-label .req {
+            color: var(--blue-500);
+            margin-left: 2px;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 9px 13px;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--gray-900);
+            background: var(--white);
+            transition: border-color var(--transition), box-shadow var(--transition);
+            outline: none;
+            appearance: none;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            border-color: var(--blue-400);
+            box-shadow: 0 0 0 3px rgba(59, 130, 216, .12);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 90px;
+            line-height: 1.6;
+        }
+
+        select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 36px;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 9px 18px;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: inherit;
+            border-radius: var(--radius-sm);
+            border: none;
+            cursor: pointer;
+            transition: all var(--transition);
+            letter-spacing: -.1px;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .btn svg {
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0;
+        }
+
+        .btn-primary {
+            background: var(--blue-500);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--blue-600);
+        }
+
+        .btn-primary:active {
+            transform: scale(.98);
+        }
+
+        .btn-secondary {
+            background: var(--white);
+            color: var(--gray-700);
+            border: 1px solid var(--gray-300);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-50);
+            border-color: var(--gray-400);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--blue-500);
+            padding: 9px 12px;
+        }
+
+        .btn-ghost:hover {
+            background: var(--blue-50);
+        }
+
+        .btn-danger {
+            background: var(--red-600);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: var(--red-700);
+        }
+
+        .btn-full {
+            width: 100%;
+        }
+
+        .btn:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        /* ── Tabs ── */
+        .tabs {
+            display: flex;
+            gap: 2px;
+            background: var(--gray-100);
+            padding: 3px;
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            background: transparent;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            color: var(--gray-500);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all var(--transition);
+            white-space: nowrap;
+        }
+
+        .tab.active {
+            background: var(--white);
+            color: var(--gray-900);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .tab:hover:not(.active) {
+            color: var(--gray-700);
+            background: rgba(255, 255, 255, .5);
+        }
+
+        /* ── Step ── */
+        .steps {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .step-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: background var(--transition);
+            border: 1px solid transparent;
+        }
+
+        .step-item:hover {
+            background: var(--gray-50);
+        }
+
+        .step-item.active {
+            background: var(--blue-50);
+            border-color: var(--blue-100);
+        }
+
+        .step-item.done .step-num {
+            background: var(--green-600);
+        }
+
+        .step-num {
+            width: 24px;
+            height: 24px;
+            background: var(--gray-300);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+            transition: background var(--transition);
+        }
+
+        .step-item.active .step-num {
+            background: var(--blue-500);
+        }
+
+        .step-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-500);
+        }
+
+        .step-item.active .step-label {
+            color: var(--blue-700);
+        }
+
+        .step-item.done .step-label {
+            color: var(--gray-600);
+        }
+
+        /* ── Section panels ── */
+        .panel {
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        /* ── API Config ── */
+        .api-url-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .api-url-row .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--gray-300);
+            display: inline-block;
+            margin-right: 6px;
+            flex-shrink: 0;
+        }
+
+        .status-dot.ok {
+            background: var(--green-400);
+        }
+
+        .status-dot.err {
+            background: var(--red-400);
+        }
+
+        .status-dot.loading {
+            background: var(--amber-400);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .4;
+            }
+        }
+
+        .health-row {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            color: var(--gray-500);
+            padding: 10px 0 0;
+        }
+
+        /* ── Job panel ── */
+        .job-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .job-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            background: var(--gray-50);
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+
+        .job-item:hover {
+            border-color: var(--blue-200);
+            background: var(--blue-50);
+        }
+
+        .job-item.selected {
+            border-color: var(--blue-400);
+            background: var(--blue-50);
+        }
+
+        .job-info {
+            min-width: 0;
+        }
+
+        .job-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-800);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .job-id {
+            font-size: 12px;
+            color: var(--gray-400);
+            margin-top: 2px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-blue {
+            background: var(--blue-50);
+            color: var(--blue-600);
+            border: 1px solid var(--blue-100);
+        }
+
+        .badge-green {
+            background: var(--green-50);
+            color: var(--green-700);
+            border: 1px solid var(--green-100);
+        }
+
+        .badge-red {
+            background: var(--red-50);
+            color: var(--red-700);
+            border: 1px solid var(--red-100);
+        }
+
+        .badge-amber {
+            background: var(--amber-50);
+            color: var(--amber-600);
+            border: 1px solid var(--amber-100);
+        }
+
+        .badge-gray {
+            background: var(--gray-100);
+            color: var(--gray-600);
+            border: 1px solid var(--gray-200);
+        }
+
+        /* ── MCQ Quiz ── */
+        .quiz-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .quiz-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .timer {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-700);
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+        }
+
+        .timer.warning {
+            color: var(--red-600);
+            border-color: var(--red-200);
+            background: var(--red-50);
+        }
+
+        .timer svg {
+            width: 15px;
+            height: 15px;
+        }
+
+        .progress-bar-wrap {
+            height: 6px;
+            background: var(--gray-100);
+            border-radius: 3px;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--blue-500);
+            border-radius: 3px;
+            transition: width .3s ease;
+        }
+
+        .question-card {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            padding: 1.75rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .question-eyebrow {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: .8px;
+            text-transform: uppercase;
+            color: var(--blue-400);
+            margin-bottom: .6rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .skill-tag {
+            background: var(--blue-50);
+            color: var(--blue-600);
+            border: 1px solid var(--blue-100);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        .question-text {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--gray-900);
+            line-height: 1.65;
+            margin-bottom: 1.25rem;
+        }
+
+        .options-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .option-btn {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 13px 16px;
+            border: 1.5px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            background: var(--white);
+            cursor: pointer;
+            transition: all var(--transition);
+            font-family: inherit;
+            text-align: left;
+            width: 100%;
+        }
+
+        .option-btn:hover {
+            border-color: var(--blue-300);
+            background: var(--blue-50);
+        }
+
+        .option-btn.selected {
+            border-color: var(--blue-500);
+            background: var(--blue-50);
+        }
+
+        .option-btn.correct {
+            border-color: var(--green-600);
+            background: var(--green-50);
+        }
+
+        .option-btn.wrong {
+            border-color: var(--red-600);
+            background: var(--red-50);
+        }
+
+        .option-letter {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--gray-100);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--gray-500);
+            flex-shrink: 0;
+            transition: all var(--transition);
+        }
+
+        .option-btn.selected .option-letter {
+            background: var(--blue-500);
+            color: white;
+        }
+
+        .option-btn.correct .option-letter {
+            background: var(--green-600);
+            color: white;
+        }
+
+        .option-btn.wrong .option-letter {
+            background: var(--red-600);
+            color: white;
+        }
+
+        .option-text {
+            font-size: 14px;
+            color: var(--gray-800);
+            line-height: 1.55;
+            padding-top: 3px;
+        }
+
+        .nav-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 1rem;
+        }
+
+        .q-dots {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+
+        .q-dot {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 1.5px solid var(--gray-200);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--gray-400);
+            cursor: pointer;
+            transition: all var(--transition);
+            background: var(--white);
+        }
+
+        .q-dot:hover {
+            border-color: var(--blue-400);
+            color: var(--blue-500);
+        }
+
+        .q-dot.current {
+            border-color: var(--blue-500);
+            background: var(--blue-500);
+            color: white;
+        }
+
+        .q-dot.answered {
+            border-color: var(--blue-200);
+            background: var(--blue-100);
+            color: var(--blue-600);
+        }
+
+        /* ── Results ── */
+        .score-hero {
+            text-align: center;
+            padding: 2rem 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
+        }
+
+        .score-ring {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 1rem;
+            position: relative;
+        }
+
+        .score-ring svg {
+            transform: rotate(-90deg);
+        }
+
+        .score-num {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        .score-label {
+            font-size: 14px;
+            color: var(--gray-500);
+            margin-top: 4px;
+        }
+
+        .result-pass {
+            color: var(--green-700);
+            font-weight: 600;
+        }
+
+        .result-fail {
+            color: var(--red-600);
+            font-weight: 600;
+        }
+
+        .skill-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 1rem;
+        }
+
+        .skill-card {
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid transparent;
+        }
+
+        .skill-card.strong {
+            background: var(--green-50);
+            border-color: var(--green-100);
+        }
+
+        .skill-card.weak {
+            background: var(--red-50);
+            border-color: var(--red-100);
+        }
+
+        .skill-card-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: .5px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .skill-card.strong .skill-card-label {
+            color: var(--green-600);
+        }
+
+        .skill-card.weak .skill-card-label {
+            color: var(--red-600);
+        }
+
+        .skill-pill {
+            display: inline-block;
+            padding: 3px 9px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin: 2px;
+        }
+
+        .skill-pill.strong {
+            background: var(--green-100);
+            color: var(--green-700);
+        }
+
+        .skill-pill.weak {
+            background: var(--red-100);
+            color: var(--red-700);
+        }
+
+        .breakdown-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-top: .5rem;
+        }
+
+        .breakdown-table th {
+            text-align: left;
+            color: var(--gray-500);
+            font-weight: 500;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--gray-100);
+        }
+
+        .breakdown-table td {
+            padding: 10px 12px;
+            color: var(--gray-700);
+            border-bottom: 1px solid var(--gray-50);
+        }
+
+        .breakdown-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .breakdown-bar {
+            height: 6px;
+            background: var(--gray-100);
+            border-radius: 3px;
+            overflow: hidden;
+            width: 80px;
+        }
+
+        .breakdown-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: var(--blue-400);
+        }
+
+        /* ── Toasts ── */
+        #toast-area {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 999;
+        }
+
+        .toast {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            background: var(--gray-900);
+            color: white;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 500;
+            box-shadow: var(--shadow-lg);
+            animation: slideUp .2s ease;
+            min-width: 240px;
+            max-width: 360px;
+        }
+
+        .toast.success {
+            background: var(--green-700);
+        }
+
+        .toast.error {
+            background: var(--red-700);
+        }
+
+        .toast.info {
+            background: var(--blue-600);
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* ── Loading spinner ── */
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, .3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        .spinner.dark {
+            border-color: rgba(59, 130, 216, .2);
+            border-top-color: var(--blue-500);
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-block {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem 1.5rem;
+            gap: 1rem;
+            color: var(--gray-500);
+            font-size: 14px;
+        }
+
+        /* ── Empty state ── */
+        .empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2.5rem 1.5rem;
+            gap: .75rem;
+            color: var(--gray-400);
+            text-align: center;
+        }
+
+        .empty-icon {
+            font-size: 32px;
+        }
+
+        .empty p {
+            font-size: 13px;
+            line-height: 1.6;
+            max-width: 220px;
+        }
+
+        /* ── Divider ── */
+        .divider {
+            height: 1px;
+            background: var(--gray-100);
+            margin: 1.25rem 0;
+        }
+
+        /* ── Info row ── */
+        .info-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 13px;
+            border-bottom: 1px solid var(--gray-50);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: var(--gray-500);
+        }
+
+        .info-val {
+            font-weight: 500;
+            color: var(--gray-800);
+        }
+
+        /* ── Submit confirm ── */
+        .confirm-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .4);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .confirm-overlay.show {
+            display: flex;
+        }
+
+        .confirm-box {
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .confirm-box h3 {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: .5rem;
+        }
+
+        .confirm-box p {
+            font-size: 14px;
+            color: var(--gray-500);
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .confirm-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .page {
+                padding: 1rem;
+            }
+
+            .col-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .skill-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .topbar-inner {
+                padding: 0 1rem;
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .text-muted {
+            color: var(--gray-400);
+            font-size: 13px;
+        }
+
+        .text-sm {
+            font-size: 13px;
+        }
+
+        .font-mono {
+            font-family: 'Courier New', monospace;
+        }
+
+        .mt-1 {
+            margin-top: .5rem;
+        }
+
+        .mt-2 {
+            margin-top: 1rem;
+        }
+
+        .mb-1 {
+            margin-bottom: .5rem;
+        }
+
+        .gap-1 {
+            gap: .5rem;
+        }
+
+        .flex {
+            display: flex;
+        }
+
+        .items-center {
+            align-items: center;
+        }
+
+        .justify-between {
+            justify-content: space-between;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Topbar -->
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a href="#" class="logo" onclick="return false;">
+                <div class="logo-mark">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
+                    </svg>
+                </div>
+                <span class="logo-text">Job<span>Lens</span></span>
+            </a>
+            <span class="topbar-badge">MCQ Assessment</span>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="page">
+        <div class="col-2">
+
+            <!-- LEFT SIDEBAR -->
+            <aside>
+                <!-- API Config card -->
+                <div class="card" style="margin-bottom:1rem;">
+                    <div class="card-header">
+                        <div class="card-header-icon">
+                            <svg viewBox="0 0 24 24">
+                                <path
+                                    d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l6 2.67V11c0 3.47-2.34 6.72-6 7.93-3.66-1.21-6-4.46-6-7.93V7.67L12 5z" />
+                            </svg>
+                        </div>
+                        <h3>API connection</h3>
+                    </div>
+                    <div class="card-body" style="padding-top:1rem;">
+                        <div class="api-url-row">
+                            <div class="form-group">
+                                <label class="form-label">Base URL</label>
+                                <input type="text" id="apiBase" value="http://localhost:8001"
+                                    placeholder="http://localhost:8001" />
+                            </div>
+                            <button class="btn btn-secondary" onclick="checkHealth()"
+                                style="flex-shrink:0;margin-bottom:0">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                    <path
+                                        d="M17.65 6.35A7.958 7.958 0 0012 4C7.58 4 4 7.58 4 12s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                                </svg>
+                                Test
+                            </button>
+                        </div>
+                        <div class="health-row">
+                            <span class="status-dot" id="healthDot"></span>
+                            <span id="healthText" style="font-size:13px;color:var(--gray-400)">Not connected</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Workflow nav -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-header-icon">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />
+                            </svg>
+                        </div>
+                        <h3>Workflow</h3>
+                    </div>
+                    <div class="steps" style="padding-top:.75rem;">
+                        <div class="step-item active" id="nav-job" onclick="goStep('job')">
+                            <div class="step-num" id="num-job">1</div>
+                            <span class="step-label">Create job</span>
+                        </div>
+                        <div class="step-item" id="nav-candidate" onclick="goStep('candidate')">
+                            <div class="step-num" id="num-candidate">2</div>
+                            <span class="step-label">Add candidate</span>
+                        </div>
+                        <div class="step-item" id="nav-generate" onclick="goStep('generate')">
+                            <div class="step-num" id="num-generate">3</div>
+                            <span class="step-label">Generate questions</span>
+                        </div>
+                        <div class="step-item" id="nav-quiz" onclick="goStep('quiz')">
+                            <div class="step-num" id="num-quiz">4</div>
+                            <span class="step-label">Take quiz</span>
+                        </div>
+                        <div class="step-item" id="nav-results" onclick="goStep('results')">
+                            <div class="step-num" id="num-results">5</div>
+                            <span class="step-label">View results</span>
+                        </div>
+                    </div>
+
+                    <!-- Session summary -->
+                    <div style="padding:0 1.5rem 1.5rem;">
+                        <div class="divider" style="margin-top:0;"></div>
+                        <div class="section-label">Current session</div>
+                        <div class="info-row"><span class="info-label">Job ID</span><span class="info-val"
+                                id="sid-job">—</span></div>
+                        <div class="info-row"><span class="info-label">Candidate ID</span><span class="info-val"
+                                id="sid-cand">—</span></div>
+                        <div class="info-row"><span class="info-label">Session ID</span><span class="info-val"
+                                id="sid-sess">—</span></div>
+                        <div class="info-row"><span class="info-label">Questions</span><span class="info-val"
+                                id="sid-q">—</span></div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- RIGHT CONTENT -->
+            <div>
+
+                <!-- ── STEP 1: JOB ── -->
+                <div class="panel active" id="panel-job">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-header-icon">
+                                <svg viewBox="0 0 24 24">
+                                    <path
+                                        d="M20 6h-2.18c.07-.44.18-.86.18-1.3C18 2.1 15.9 0 13.3 0c-1.34 0-2.5.56-3.3 1.46L9 3 7.98 1.46C7.2.56 6.04 0 4.7 0 2.1 0 0 2.1 0 4.7c0 .44.1.86.18 1.3H0v14c0 1.1.9 2 2 2h20c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zM2 20V8h8v12H2zm18 0h-8V8h8v12z" />
+                                </svg>
+                            </div>
+                            <h3>Create a job posting</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="tabs">
+                                <button class="tab active" onclick="switchJobTab('create',this)">New job</button>
+                                <button class="tab" onclick="switchJobTab('lookup',this)">Load existing</button>
+                            </div>
+
+                            <div id="job-tab-create">
+                                <div class="form-group">
+                                    <label class="form-label">Job title <span class="req">*</span></label>
+                                    <input type="text" id="jobTitle" placeholder="Senior Backend Engineer" />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Job description <span class="req">*</span></label>
+                                    <textarea id="jobDesc" rows="4"
+                                        placeholder="Describe the role, responsibilities, and what the team does…"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Requirements</label>
+                                    <textarea id="jobReq" rows="3"
+                                        placeholder="3+ years Python, FastAPI, PostgreSQL, Docker…"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Recruiter criteria</label>
+                                    <input type="text" id="jobCriteria"
+                                        placeholder="Strong OOP, system design experience" />
+                                </div>
+                                <button class="btn btn-primary btn-full" id="btnCreateJob" onclick="createJob()">
+                                    <svg viewBox="0 0 24 24" fill="white">
+                                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                                    </svg>
+                                    Create job
+                                </button>
+                            </div>
+
+                            <div id="job-tab-lookup" class="hidden">
+                                <div class="form-group">
+                                    <label class="form-label">Job ID</label>
+                                    <div class="flex gap-1" style="gap:8px;">
+                                        <input type="number" id="lookupJobId" placeholder="1" style="flex:1;" />
+                                        <button class="btn btn-secondary" onclick="loadJob()">Load</button>
+                                    </div>
+                                </div>
+                                <div id="loaded-job-info"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── STEP 2: CANDIDATE ── -->
+                <div class="panel" id="panel-candidate">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-header-icon">
+                                <svg viewBox="0 0 24 24">
+                                    <path
+                                        d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                                </svg>
+                            </div>
+                            <h3>Add a candidate</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="tabs">
+                                <button class="tab active" onclick="switchCandTab('create',this)">New candidate</button>
+                                <button class="tab" onclick="switchCandTab('existing',this)">Use ID</button>
+                            </div>
+                            <div id="cand-tab-create">
+                                <div class="form-group">
+                                    <label class="form-label">Full name <span class="req">*</span></label>
+                                    <input type="text" id="candName" placeholder="John Doe" />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" id="candEmail" placeholder="john@example.com" />
+                                </div>
+                                <button class="btn btn-primary btn-full" id="btnCreateCand" onclick="createCandidate()">
+                                    <svg viewBox="0 0 24 24" fill="white">
+                                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                                    </svg>
+                                    Add candidate
+                                </button>
+                            </div>
+                            <div id="cand-tab-existing" class="hidden">
+                                <div class="form-group">
+                                    <label class="form-label">Candidate ID</label>
+                                    <div class="flex gap-1" style="gap:8px;">
+                                        <input type="number" id="existingCandId" placeholder="1" style="flex:1;" />
+                                        <button class="btn btn-secondary" onclick="useExistingCand()">Use</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── STEP 3: GENERATE ── -->
+                <div class="panel" id="panel-generate">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-header-icon">
+                                <svg viewBox="0 0 24 24">
+                                    <path
+                                        d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
+                                </svg>
+                            </div>
+                            <h3>Generate MCQ questions</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="gen-summary" class="card"
+                                style="margin-bottom:1.25rem;border-color:var(--blue-100);background:var(--blue-50);">
+                                <div class="card-body" style="padding:1rem;">
+                                    <div class="info-row"><span class="info-label">Job</span><span class="info-val"
+                                            id="gen-job-name">—</span></div>
+                                    <div class="info-row"><span class="info-label">Candidate</span><span
+                                            class="info-val" id="gen-cand-name">—</span></div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Force regenerate?</label>
+                                <select id="forceRegen">
+                                    <option value="false">No — use cached questions if available</option>
+                                    <option value="true">Yes — generate fresh questions</option>
+                                </select>
+                            </div>
+                            <div id="gen-loading" class="loading-block hidden">
+                                <div class="spinner dark"></div>
+                                <span>Extracting skills and generating questions…</span>
+                                <span class="text-muted">This takes 10–30 seconds</span>
+                            </div>
+                            <button class="btn btn-primary btn-full" id="btnGenerate" onclick="generateQuestions()">
+                                <svg viewBox="0 0 24 24" fill="white">
+                                    <path
+                                        d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                </svg>
+                                Generate 10 questions
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── STEP 4: QUIZ ── -->
+                <div class="panel" id="panel-quiz">
+                    <div id="quiz-loading" class="loading-block hidden">
+                        <div class="spinner dark"></div>
+                        <span>Loading questions…</span>
+                    </div>
+                    <div id="quiz-content">
+                        <div class="quiz-header">
+                            <div class="quiz-meta">
+                                <span class="badge badge-blue" id="quiz-progress-badge">1 / 10</span>
+                            </div>
+                            <div class="timer" id="quiz-timer">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path
+                                        d="M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61l1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42A8.962 8.962 0 0012 4c-4.97 0-9 4.03-9 9s4.02 9 9 9a9 9 0 008.03-12.61zM12 20c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+                                </svg>
+                                <span id="timer-text">20:00</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar-wrap">
+                            <div class="progress-bar-fill" id="quiz-progress-bar" style="width:10%"></div>
+                        </div>
+                        <div id="question-area"></div>
+                        <div class="nav-row">
+                            <div class="q-dots" id="q-dots"></div>
+                            <div class="flex" style="gap:8px;">
+                                <button class="btn btn-secondary" id="btn-prev" onclick="prevQ()" disabled>←
+                                    Prev</button>
+                                <button class="btn btn-secondary" id="btn-next" onclick="nextQ()">Next →</button>
+                                <button class="btn btn-primary hidden" id="btn-submit" onclick="confirmSubmit()">Submit
+                                    quiz</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── STEP 5: RESULTS ── -->
+                <div class="panel" id="panel-results">
+                    <div id="results-loading" class="loading-block hidden">
+                        <div class="spinner dark"></div>
+                        <span>Calculating your score…</span>
+                    </div>
+                    <div id="results-content" class="hidden">
+                        <!-- Score card -->
+                        <div class="card" style="margin-bottom:1rem;">
+                            <div class="score-hero">
+                                <div class="score-ring">
+                                    <svg viewBox="0 0 100 100" width="100" height="100">
+                                        <circle cx="50" cy="50" r="42" fill="none" stroke="var(--gray-100)"
+                                            stroke-width="10" />
+                                        <circle cx="50" cy="50" r="42" fill="none" stroke="var(--blue-500)"
+                                            stroke-width="10" stroke-dasharray="263.9" id="score-ring-fill"
+                                            stroke-dashoffset="263.9" stroke-linecap="round"
+                                            style="transition:stroke-dashoffset 1s ease;" />
+                                    </svg>
+                                    <div class="score-num" id="score-num">0%</div>
+                                </div>
+                                <div id="score-pass-label" class="text-sm" style="margin-top:.5rem;"></div>
+                                <div class="score-label" id="score-detail">0 / 10 correct</div>
+                            </div>
+                            <div class="card-body">
+                                <div class="section-label">Skill breakdown</div>
+                                <div class="skill-grid" id="skill-grid"></div>
+                            </div>
+                        </div>
+
+                        <!-- Breakdown table -->
+                        <div class="card" style="margin-bottom:1rem;">
+                            <div class="card-header">
+                                <div class="card-header-icon">
+                                    <svg viewBox="0 0 24 24">
+                                        <path
+                                            d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />
+                                    </svg>
+                                </div>
+                                <h3>Per-skill breakdown</h3>
+                            </div>
+                            <div style="padding:0 .5rem .5rem;">
+                                <table class="breakdown-table" id="breakdown-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Skill</th>
+                                            <th>Correct</th>
+                                            <th>Total</th>
+                                            <th>Rate</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="breakdown-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Report actions -->
+                        <div class="card">
+                            <div class="card-body" style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button class="btn btn-secondary" onclick="fetchFullReport()">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
+                                        <path
+                                            d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
+                                    </svg>
+                                    Full HR report
+                                </button>
+                                <button class="btn btn-secondary" onclick="fetchInterviewContext()">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
+                                        <path
+                                            d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" />
+                                    </svg>
+                                    Interview context
+                                </button>
+                                <button class="btn btn-primary" onclick="startOver()" style="margin-left:auto;">
+                                    New assessment
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="report-raw" class="hidden" style="margin-top:1rem;">
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="card-header-icon">
+                                        <svg viewBox="0 0 24 24">
+                                            <path d="M9 21H5c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h4m7 14l5-5-5-5m5 5H9" />
+                                        </svg>
+                                    </div>
+                                    <h3 id="report-raw-title">Report JSON</h3>
+                                </div>
+                                <div class="card-body">
+                                    <pre id="report-json"
+                                        style="font-size:12px;line-height:1.6;overflow:auto;max-height:400px;background:var(--gray-50);padding:1rem;border-radius:var(--radius-sm);border:1px solid var(--gray-200);white-space:pre-wrap;word-break:break-word;"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- /right -->
+        </div><!-- /col-2 -->
+    </main>
+
+    <!-- Submit confirm overlay -->
+    <div class="confirm-overlay" id="confirmOverlay">
+        <div class="confirm-box">
+            <h3>Submit your answers?</h3>
+            <p id="confirm-msg">You've answered <strong id="confirm-answered">0</strong> of <strong
+                    id="confirm-total">10</strong> questions. Unanswered questions will be marked incorrect.</p>
+            <div class="confirm-actions">
+                <button class="btn btn-secondary" onclick="closeConfirm()">Go back</button>
+                <button class="btn btn-primary" onclick="submitQuiz()">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast area -->
+    <div id="toast-area"></div>
+
+    <script>
+        /* ═══════════════════════════════════════════════════════════════
+           STATE
+           ═══════════════════════════════════════════════════════════════ */
+        let state = {
+            jobId: null,
+            jobTitle: null,
+            candidateId: null,
+            candidateName: null,
+            sessionId: null,
+            questions: [],
+            answers: {},      // questionId -> selectedOption
+            currentQ: 0,
+            timerInterval: null,
+            secondsLeft: 20 * 60,
+        };
+
+        /* ═══════════════════════════════════════════════════════════════
+           HELPERS
+           ═══════════════════════════════════════════════════════════════ */
+        function api(path, opts) {
+            const base = document.getElementById('apiBase').value.replace(/\/$/, '');
+            return fetch(base + path, {
+                headers: { 'Content-Type': 'application/json' },
+                ...opts,
+            });
+        }
+
+        function toast(msg, type = '') {
+            const el = document.createElement('div');
+            el.className = `toast ${type}`;
+            const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
+            el.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+            document.getElementById('toast-area').appendChild(el);
+            setTimeout(() => el.remove(), 4000);
+        }
+
+        function setBtn(id, loading, txt) {
+            const b = document.getElementById(id);
+            if (!b) return;
+            if (loading) {
+                b.disabled = true;
+                b.innerHTML = `<div class="spinner"></div>${txt || 'Loading…'}`;
+            } else {
+                b.disabled = false;
+                b.innerHTML = txt;
+            }
+        }
+
+        function updateSidebar() {
+            document.getElementById('sid-job').textContent = state.jobId ? `#${state.jobId} — ${state.jobTitle || ''}` : '—';
+            document.getElementById('sid-cand').textContent = state.candidateId ? `#${state.candidateId} — ${state.candidateName || ''}` : '—';
+            document.getElementById('sid-sess').textContent = state.sessionId ? `#${state.sessionId}` : '—';
+            document.getElementById('sid-q').textContent = state.questions.length ? `${state.questions.length} loaded` : '—';
+            document.getElementById('gen-job-name').textContent = state.jobTitle || '—';
+            document.getElementById('gen-cand-name').textContent = state.candidateName || '—';
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           NAVIGATION
+           ═══════════════════════════════════════════════════════════════ */
+        function goStep(step) {
+            ['job', 'candidate', 'generate', 'quiz', 'results'].forEach(s => {
+                document.getElementById('panel-' + s).classList.remove('active');
+                document.getElementById('nav-' + s).classList.remove('active');
+            });
+            document.getElementById('panel-' + step).classList.add('active');
+            document.getElementById('nav-' + step).classList.add('active');
+        }
+
+        function markDone(step) {
+            const item = document.getElementById('nav-' + step);
+            item.classList.add('done');
+            item.querySelector('.step-num').textContent = '✓';
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           HEALTH CHECK
+           ═══════════════════════════════════════════════════════════════ */
+        async function checkHealth() {
+            const dot = document.getElementById('healthDot');
+            const txt = document.getElementById('healthText');
+            dot.className = 'status-dot loading';
+            txt.textContent = 'Checking…';
+            try {
+                const r = await api('/health');
+                if (r.ok) {
+                    const d = await r.json();
+                    dot.className = 'status-dot ok';
+                    txt.textContent = `Connected — ${d.service}`;
+                } else {
+                    throw new Error(r.statusText);
+                }
+            } catch (e) {
+                dot.className = 'status-dot err';
+                txt.textContent = 'Cannot reach server';
+            }
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           STEP 1: JOB
+           ═══════════════════════════════════════════════════════════════ */
+        function switchJobTab(tab, el) {
+            document.querySelectorAll('#panel-job .tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('job-tab-create').classList.toggle('hidden', tab !== 'create');
+            document.getElementById('job-tab-lookup').classList.toggle('hidden', tab !== 'lookup');
+        }
+
+        async function createJob() {
+            const title = document.getElementById('jobTitle').value.trim();
+            const desc = document.getElementById('jobDesc').value.trim();
+            const req = document.getElementById('jobReq').value.trim();
+            const crit = document.getElementById('jobCriteria').value.trim();
+            if (!title || desc.length < 10) { toast('Enter a title and description (min 10 chars)', 'error'); return; }
+
+            setBtn('btnCreateJob', true, 'Creating…');
+            try {
+                const r = await api('/api/jobs', { method: 'POST', body: JSON.stringify({ title, description: desc, requirements: req, criteria: crit }) });
+                if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+                const d = await r.json();
+                state.jobId = d.id;
+                state.jobTitle = d.title;
+                toast(`Job #${d.id} created`, 'success');
+                markDone('job');
+                updateSidebar();
+                goStep('candidate');
+            } catch (e) { toast(e.message, 'error'); }
+            setBtn('btnCreateJob', false, `<svg viewBox="0 0 24 24" fill="white" width="15" height="15"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> Create job`);
+        }
+
+        async function loadJob() {
+            const id = parseInt(document.getElementById('lookupJobId').value);
+            if (!id) { toast('Enter a job ID', 'error'); return; }
+            try {
+                const r = await api(`/api/jobs/${id}`);
+                if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+                const d = await r.json();
+                state.jobId = d.id;
+                state.jobTitle = d.title;
+                document.getElementById('loaded-job-info').innerHTML = `
+      <div class="card" style="border-color:var(--green-100);background:var(--green-50);">
+        <div class="card-body" style="padding:.75rem 1rem;">
+          <div class="flex items-center justify-between">
+            <span style="font-weight:600;font-size:14px;color:var(--gray-800)">${d.title}</span>
+            <span class="badge badge-green">Loaded</span>
+          </div>
+          <p class="text-muted mt-1" style="font-size:12px;">${d.description.substring(0, 100)}…</p>
+        </div>
+      </div>`;
+                toast(`Job #${d.id} loaded`, 'success');
+                markDone('job');
+                updateSidebar();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           STEP 2: CANDIDATE
+           ═══════════════════════════════════════════════════════════════ */
+        function switchCandTab(tab, el) {
+            document.querySelectorAll('#panel-candidate .tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('cand-tab-create').classList.toggle('hidden', tab !== 'create');
+            document.getElementById('cand-tab-existing').classList.toggle('hidden', tab !== 'existing');
+        }
+
+        async function createCandidate() {
+            const name = document.getElementById('candName').value.trim();
+            const email = document.getElementById('candEmail').value.trim();
+            if (name.length < 2) { toast('Enter a full name', 'error'); return; }
+
+            setBtn('btnCreateCand', true, 'Adding…');
+            try {
+                const r = await api('/api/candidates', { method: 'POST', body: JSON.stringify({ full_name: name, email: email || null }) });
+                if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+                const d = await r.json();
+                state.candidateId = d.id;
+                state.candidateName = d.full_name;
+                toast(`Candidate #${d.id} added`, 'success');
+                markDone('candidate');
+                updateSidebar();
+                goStep('generate');
+            } catch (e) { toast(e.message, 'error'); }
+            setBtn('btnCreateCand', false, `<svg viewBox="0 0 24 24" fill="white" width="15" height="15"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> Add candidate`);
+        }
+
+        function useExistingCand() {
+            const id = parseInt(document.getElementById('existingCandId').value);
+            if (!id) { toast('Enter a candidate ID', 'error'); return; }
+            state.candidateId = id;
+            state.candidateName = `Candidate #${id}`;
+            toast(`Using candidate #${id}`, 'info');
+            markDone('candidate');
+            updateSidebar();
+            goStep('generate');
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           STEP 3: GENERATE
+           ═══════════════════════════════════════════════════════════════ */
+        async function generateQuestions() {
+            if (!state.jobId) { toast('Create or load a job first', 'error'); return; }
+
+            document.getElementById('gen-loading').classList.remove('hidden');
+            document.getElementById('btnGenerate').disabled = true;
+
+            try {
+                const force = document.getElementById('forceRegen').value === 'true';
+                const r = await api('/api/mcq/generate', {
+                    method: 'POST',
+                    body: JSON.stringify({ job_id: state.jobId, force_regenerate: force })
+                });
+                if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+                const d = await r.json();
+                state.questions = d.questions;
+                const cached = d.generated ? 'Generated' : 'Loaded from cache';
+                toast(`${cached}: ${d.total} questions`, 'success');
+                markDone('generate');
+                updateSidebar();
+                startQuiz();
+            } catch (e) { toast(e.message, 'error'); }
+
+            document.getElementById('gen-loading').classList.add('hidden');
+            document.getElementById('btnGenerate').disabled = false;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           STEP 4: QUIZ
+           ═══════════════════════════════════════════════════════════════ */
+        function startQuiz() {
+            state.answers = {};
+            state.currentQ = 0;
+            state.secondsLeft = 20 * 60;
+            goStep('quiz');
+            buildDots();
+            renderQuestion(0);
+            startTimer();
+        }
+
+        function buildDots() {
+            const wrap = document.getElementById('q-dots');
+            wrap.innerHTML = '';
+            state.questions.forEach((q, i) => {
+                const d = document.createElement('button');
+                d.className = 'q-dot' + (i === 0 ? ' current' : '');
+                d.textContent = i + 1;
+                d.onclick = () => renderQuestion(i);
+                d.id = `dot-${i}`;
+                wrap.appendChild(d);
+            });
+        }
+
+        function renderQuestion(idx) {
+            state.currentQ = idx;
+            const q = state.questions[idx];
+            const letters = ['A', 'B', 'C', 'D'];
+            const answered = state.answers[q.id];
+
+            document.getElementById('quiz-progress-badge').textContent = `${idx + 1} / ${state.questions.length}`;
+            document.getElementById('quiz-progress-bar').style.width = `${((idx + 1) / state.questions.length) * 100}%`;
+
+            document.querySelectorAll('.q-dot').forEach((d, i) => {
+                d.className = 'q-dot' + (i === idx ? ' current' : (state.answers[state.questions[i].id] ? ' answered' : ''));
+            });
+
+            document.getElementById('btn-prev').disabled = idx === 0;
+            const isLast = idx === state.questions.length - 1;
+            document.getElementById('btn-next').classList.toggle('hidden', isLast);
+            document.getElementById('btn-submit').classList.toggle('hidden', !isLast);
+
+            document.getElementById('question-area').innerHTML = `
+    <div class="question-card">
+      <div class="question-eyebrow">
+        Question ${idx + 1}
+        <span class="skill-tag">${q.related_skill}</span>
+      </div>
+      <p class="question-text">${q.question}</p>
+      <div class="options-list">
+        ${q.options.map((opt, i) => `
+          <button class="option-btn ${answered === letters[i] ? 'selected' : ''}"
+            onclick="selectOption(${q.id}, '${letters[i]}', this.closest('.options-list'))">
+            <div class="option-letter">${letters[i]}</div>
+            <div class="option-text">${opt}</div>
+          </button>
+        `).join('')}
+      </div>
+    </div>`;
+        }
+
+        function selectOption(qId, letter, listEl) {
+            state.answers[qId] = letter;
+            const btns = listEl.querySelectorAll('.option-btn');
+            const letters = ['A', 'B', 'C', 'D'];
+            btns.forEach((b, i) => {
+                b.classList.toggle('selected', letters[i] === letter);
+                b.querySelector('.option-letter').style.background = letters[i] === letter ? 'var(--blue-500)' : '';
+                b.querySelector('.option-letter').style.color = letters[i] === letter ? 'white' : '';
+            });
+            // update dot
+            const dot = document.getElementById(`dot-${state.currentQ}`);
+            if (dot) { dot.classList.add('answered'); dot.classList.remove('current'); dot.classList.add('current'); }
+            buildDots();
+            document.getElementById(`dot-${state.currentQ}`).classList.add('current');
+        }
+
+        function nextQ() {
+            if (state.currentQ < state.questions.length - 1) renderQuestion(state.currentQ + 1);
+        }
+        function prevQ() {
+            if (state.currentQ > 0) renderQuestion(state.currentQ - 1);
+        }
+
+        function startTimer() {
+            if (state.timerInterval) clearInterval(state.timerInterval);
+            state.timerInterval = setInterval(() => {
+                state.secondsLeft--;
+                const m = Math.floor(state.secondsLeft / 60);
+                const s = state.secondsLeft % 60;
+                const el = document.getElementById('timer-text');
+                if (el) el.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                const timer = document.getElementById('quiz-timer');
+                if (timer) timer.classList.toggle('warning', state.secondsLeft < 120);
+                if (state.secondsLeft <= 0) {
+                    clearInterval(state.timerInterval);
+                    toast('Time is up! Submitting…', 'error');
+                    submitQuiz();
+                }
+            }, 1000);
+        }
+
+        function confirmSubmit() {
+            const answered = Object.keys(state.answers).length;
+            document.getElementById('confirm-answered').textContent = answered;
+            document.getElementById('confirm-total').textContent = state.questions.length;
+            document.getElementById('confirmOverlay').classList.add('show');
+        }
+        function closeConfirm() { document.getElementById('confirmOverlay').classList.remove('show'); }
+
+        async function submitQuiz() {
+            closeConfirm();
+            if (state.timerInterval) clearInterval(state.timerInterval);
+
+            document.getElementById('results-loading').classList.remove('hidden');
+            document.getElementById('results-content').classList.add('hidden');
+            goStep('results');
+
+            const answers = state.questions.map(q => ({
+                question_id: q.id,
+                selected_option: state.answers[q.id] || 'A',
+            }));
+
+            try {
+                const r = await api('/api/mcq/submit', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        candidate_id: state.candidateId,
+                        job_id: state.jobId,
+                        answers,
+                    })
+                });
+                if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+                const d = await r.json();
+                state.sessionId = d.session_id;
+                updateSidebar();
+                renderResults(d);
+                markDone('quiz');
+                markDone('results');
+                toast('Quiz submitted!', 'success');
+            } catch (e) {
+                toast(e.message, 'error');
+                goStep('quiz');
+            }
+
+            document.getElementById('results-loading').classList.add('hidden');
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           STEP 5: RESULTS
+           ═══════════════════════════════════════════════════════════════ */
+        function renderResults(d) {
+            document.getElementById('results-content').classList.remove('hidden');
+            const pct = Math.round(d.score);
+
+            // ring animation
+            const circ = 263.9;
+            document.getElementById('score-ring-fill').style.strokeDashoffset = circ - (pct / 100) * circ;
+
+            const ringColor = pct >= 50 ? (pct >= 70 ? 'var(--green-600)' : 'var(--blue-500)') : 'var(--red-600)';
+            document.getElementById('score-ring-fill').style.stroke = ringColor;
+            document.getElementById('score-num').textContent = `${pct}%`;
+            document.getElementById('score-detail').textContent = `${d.correct_answers} / ${d.total_questions} correct`;
+
+            const passEl = document.getElementById('score-pass-label');
+            passEl.innerHTML = d.passed
+                ? `<span class="result-pass">✓ Passed</span>`
+                : `<span class="result-fail">✗ Did not pass</span>`;
+
+            // Skill grid
+            const grid = document.getElementById('skill-grid');
+            grid.innerHTML = `
+    <div class="skill-card strong">
+      <div class="skill-card-label">Strong skills</div>
+      <div>${(d.strong_skills.length ? d.strong_skills : ['—']).map(s => `<span class="skill-pill strong">${s}</span>`).join('')}</div>
+    </div>
+    <div class="skill-card weak">
+      <div class="skill-card-label">Areas to improve</div>
+      <div>${(d.weak_skills.length ? d.weak_skills : ['—']).map(s => `<span class="skill-pill weak">${s}</span>`).join('')}</div>
+    </div>`;
+
+            // Breakdown table
+            const tbody = document.getElementById('breakdown-body');
+            tbody.innerHTML = Object.entries(d.skill_breakdown).map(([skill, v]) => {
+                const rate = Math.round((v.correct / v.total) * 100);
+                const color = rate >= 60 ? 'var(--green-600)' : 'var(--red-600)';
+                return `<tr>
+      <td style="font-weight:500;">${skill}</td>
+      <td>${v.correct}</td>
+      <td>${v.total}</td>
+      <td style="color:${color};font-weight:600;">${rate}%</td>
+      <td><div class="breakdown-bar"><div class="breakdown-bar-fill" style="width:${rate}%;background:${color};"></div></div></td>
+    </tr>`;
+            }).join('');
+        }
+
+        async function fetchFullReport() {
+            if (!state.sessionId) { toast('No active session', 'error'); return; }
+            try {
+                const r = await api(`/api/mcq/report/${state.sessionId}`);
+                if (!r.ok) throw new Error((await r.json()).detail);
+                const d = await r.json();
+                document.getElementById('report-raw-title').textContent = 'Full HR report';
+                document.getElementById('report-json').textContent = JSON.stringify(d, null, 2);
+                document.getElementById('report-raw').classList.remove('hidden');
+                document.getElementById('report-raw').scrollIntoView({ behavior: 'smooth' });
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        async function fetchInterviewContext() {
+            if (!state.sessionId) { toast('No active session', 'error'); return; }
+            try {
+                const r = await api(`/api/mcq/interview-context/${state.sessionId}`);
+                if (!r.ok) throw new Error((await r.json()).detail);
+                const d = await r.json();
+                document.getElementById('report-raw-title').textContent = 'Interview context (for AI agent)';
+                document.getElementById('report-json').textContent = JSON.stringify(d, null, 2);
+                document.getElementById('report-raw').classList.remove('hidden');
+                document.getElementById('report-raw').scrollIntoView({ behavior: 'smooth' });
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        function startOver() {
+            state = { jobId: null, jobTitle: null, candidateId: null, candidateName: null, sessionId: null, questions: [], answers: {}, currentQ: 0, timerInterval: null, secondsLeft: 1200 };
+            ['job', 'candidate', 'generate', 'quiz', 'results'].forEach(s => {
+                const item = document.getElementById('nav-' + s);
+                item.classList.remove('done', 'active');
+                item.querySelector('.step-num').textContent = ['job', 'candidate', 'generate', 'quiz', 'results'].indexOf(s) + 1;
+            });
+            document.getElementById('report-raw').classList.add('hidden');
+            updateSidebar();
+            goStep('job');
+        }
+
+        // Init
+        checkHealth();
+        updateSidebar();
+    </script>
+</body>
+
+</html>
