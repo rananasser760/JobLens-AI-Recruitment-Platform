@@ -69,6 +69,12 @@ Which HTTP method is typically used to update an existing resource in a REST API
 }
 ```
 
+### .ENV 
+```
+DATABASE_URL=sqlite:///joblens_mcq.db
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+```
+
 ### Interview Adaptation
 
 The generated assessment results are used to guide the AI Interview Agent.
