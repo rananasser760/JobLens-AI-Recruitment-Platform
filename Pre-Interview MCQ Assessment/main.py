@@ -234,6 +234,8 @@ async def submit_mcq_endpoint(
             job_id=body.job_id,
             answers=body.answers,
             session_id=body.session_id,
+            tab_switches=body.tab_switches,
+            cam_violations=body.cam_violations,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc))
@@ -322,6 +324,9 @@ def final_report(session_id: int, db: Session = Depends(get_db)):
         strong_skills=result.strong_skills,
         skill_breakdown={k: SkillBreakdown(**v) for k, v in result.skill_breakdown.items()},
         passed=result.score >= 50.0,
+        tab_switches=result.tab_switches,
+        cam_violations=result.cam_violations or {},
+        integrity_flag=result.tab_switches > 0 or sum((result.cam_violations or {}).values()) > 0,
         mcq_score=round(result.score, 1),
         interview_context=context,
     )
