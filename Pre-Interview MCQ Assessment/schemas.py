@@ -87,6 +87,8 @@ class MCQSubmitRequest(BaseModel):
     job_id:       int                   = Field(..., gt=0)
     session_id:   Optional[int]         = Field(None, gt=0)
     answers:      List[CandidateAnswer] = Field(..., min_length=1, max_length=10)
+    tab_switches: int                   = Field(0, ge=0)
+    cam_violations: Dict[str, int]      = Field(default_factory=dict)
 
     @field_validator("answers")
     @classmethod
@@ -106,6 +108,8 @@ class MCQSubmitResponse(BaseModel):
     strong_skills:   List[str]
     skill_breakdown: Dict[str, SkillBreakdown]
     passed:          bool
+    tab_switches:    int = 0
+    cam_violations:  Dict[str, int] = Field(default_factory=dict)
 
 
 # ── GET /api/mcq/session/{id} ────────────────────────────────────────────────
@@ -132,6 +136,9 @@ class FinalEvaluationReport(BaseModel):
     strong_skills:   List[str]
     skill_breakdown: Dict[str, SkillBreakdown]
     passed:          bool
+    tab_switches:    int = 0
+    cam_violations:  Dict[str, int] = Field(default_factory=dict)
+    integrity_flag:  bool = False   # True when any violation occurred
     # Fields ready to be merged with interview score later
     mcq_score:       float
-    interview_context: dict   # what gets passed to the AI Interview Agent
+    interview_context: dict
