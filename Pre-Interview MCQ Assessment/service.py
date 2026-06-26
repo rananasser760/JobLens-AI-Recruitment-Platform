@@ -318,6 +318,8 @@ async def submit_mcq(
     job_id: int,
     answers: List[CandidateAnswer],
     session_id: Optional[int] = None,
+    tab_switches: int = 0,
+    cam_violations: Optional[Dict[str, Any]] = None,
 ) -> MCQSubmitResponse:
     """Score submitted answers, persist result, return structured response."""
     if session_id:
@@ -353,6 +355,8 @@ async def submit_mcq(
         session_id=mcq_session.id, score=score,
         correct_answers=correct, total_questions=MCQ_COUNT,
         weak_skills=weak, strong_skills=strong, skill_breakdown=breakdown,
+        tab_switches=tab_switches,
+        cam_violations=cam_violations or {},
     )
     db.add(db_result)
     mcq_session.status       = MCQSessionStatus.COMPLETED
@@ -360,8 +364,12 @@ async def submit_mcq(
     db.commit()
     db.refresh(db_result)
 
-    logger.info("MCQ submitted  candidate=%d  job=%d  score=%.1f  %d/%d correct",
-                candidate_id, job_id, score, correct, MCQ_COUNT)
+    total_cam = sum((cam_violations or {}).values())
+    logger.info(
+        "MCQ submitted  candidate=%d  job=%d  score=%.1f  %d/%d correct"
+        "  tab_switches=%d  cam_violations=%d",
+        candidate_id, job_id, score, correct, MCQ_COUNT, tab_switches, total_cam,
+    )
 
     return MCQSubmitResponse(
         session_id=mcq_session.id, score=round(score, 1),
@@ -369,6 +377,8 @@ async def submit_mcq(
         weak_skills=weak, strong_skills=strong,
         skill_breakdown={k: SkillBreakdown(**v) for k, v in breakdown.items()},
         passed=score >= PASS_THRESHOLD,
+        tab_switches=tab_switches,
+        cam_violations=cam_violations or {},
     )
 
 
@@ -382,12 +392,16 @@ def build_interview_context(mcq_result: Optional[MCQResult]) -> Dict:
     Safe empty defaults when MCQ was not completed.
     """
     if not mcq_result:
-        return {"mcq_score": None, "weak_skills": [], "strong_skills": [], "skill_breakdown": {}}
+        return {"mcq_score": None, "weak_skills": [], "strong_skills": [], "skill_breakdown": {}, "tab_switches": 0, "cam_violations": {}, "integrity_flag": False}
+    total_cam = sum(mcq_result.cam_violations.values()) if mcq_result.cam_violations else 0
     return {
         "mcq_score":       round(mcq_result.score, 1),
         "weak_skills":     mcq_result.weak_skills,
         "strong_skills":   mcq_result.strong_skills,
         "skill_breakdown": mcq_result.skill_breakdown,
+        "tab_switches":    mcq_result.tab_switches,
+        "cam_violations":  mcq_result.cam_violations,
+        "integrity_flag":  mcq_result.tab_switches > 0 or total_cam > 0,
     }
 
 
