@@ -340,7 +340,7 @@ class JobLensScraper:
     """Scrapes Wuzzuf and LinkedIn, then stores results in the jobs collection."""
 
     def __init__(self) -> None:
-        self.collection = store.jobs_col
+        self.collection = store.scraped_jobs_col
         self.model = get_scraper_embedding_model()
         self.settings = get_recruitment_settings()
         self._llm_client = None
@@ -778,7 +778,7 @@ async def run_scraper(
         return {
             "processed_categories": 0,
             "upserted_jobs": 0,
-            "total_jobs": store.jobs_col.count(),
+            "total_jobs": store.scraped_jobs_col.count(),
             "warning": "Playwright is unavailable on the active Windows asyncio event loop (subprocess unsupported).",
         }
 
@@ -833,6 +833,7 @@ async def run_scraper(
         for category in target_categories:
             encoded = urllib.parse.quote(category)
 
+            page = None
             try:
                 page = await _new_page(context)
                 url = (
@@ -841,6 +842,7 @@ async def run_scraper(
                 )
                 if not await goto_with_retry(page, url, timeout_ms=60000, attempts=3):
                     await page.close()
+                    page = None
                     continue
 
                 try:
@@ -903,6 +905,7 @@ async def run_scraper(
                         continue
 
                 await page.close()
+                page = None
 
                 for index in range(0, len(basics), settings.concurrency_limit):
                     batch = basics[index : index + settings.concurrency_limit]
@@ -928,7 +931,14 @@ async def run_scraper(
             except Exception as exc:
                 stats["category_errors"] += 1
                 logger.warning("Wuzzuf scrape failed for category '%s': %s", category, exc)
+            finally:
+                if page:
+                    try:
+                        await page.close()
+                    except Exception:
+                        pass
 
+            page = None
             try:
                 page = await _new_page(context)
                 url = (
@@ -937,6 +947,7 @@ async def run_scraper(
                 )
                 if not await goto_with_retry(page, url, timeout_ms=60000, attempts=3):
                     await page.close()
+                    page = None
                     continue
 
                 previous_count = 0
@@ -988,6 +999,7 @@ async def run_scraper(
                         continue
 
                 await page.close()
+                page = None
 
                 for index in range(0, len(basics), settings.concurrency_limit):
                     batch = basics[index : index + settings.concurrency_limit]
@@ -1013,6 +1025,12 @@ async def run_scraper(
             except Exception as exc:
                 stats["category_errors"] += 1
                 logger.warning("LinkedIn scrape failed for category '%s': %s", category, exc)
+            finally:
+                if page:
+                    try:
+                        await page.close()
+                    except Exception:
+                        pass
 
             await asyncio.sleep(random.uniform(25, 45))
 
@@ -1021,6 +1039,6 @@ async def run_scraper(
     return {
         "processed_categories": len(target_categories),
         "upserted_jobs": total_upserted,
-        "total_jobs": store.jobs_col.count(),
+        "total_jobs": store.scraped_jobs_col.count(),
         "stats": stats,
     }
