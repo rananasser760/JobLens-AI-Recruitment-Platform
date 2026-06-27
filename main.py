@@ -4,12 +4,15 @@
 #  on a single FastAPI app / single port.
 #
 #  Start:
-#      uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+#      python main.py
 # ══════════════════════════════════════════════════════════════════════════════
 
 import asyncio
 import json
 import os
+import sys
+import subprocess
+import atexit
 import uuid
 from contextlib import asynccontextmanager
 
@@ -42,7 +45,6 @@ from recruitment.vector_store import store
 from request_context import set_request_id
 
 # ── App ───────────────────────────────────────────────────────────────────────
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -207,15 +209,6 @@ def get_logs(session_id: int):
 
 @app.get("/api/report/{session_id}")
 def unified_report(session_id: int):
-    """
-    Single endpoint the HR dashboard calls to get everything about a session.
-
-    Returns:
-        candidate        — name / id
-        integrity        — cheating score, alerts, timeline, keyframes
-        interview        — AI-generated summary, score, conversation history
-        recommendation   — combined verdict
-    """
     from session_store import INTERVIEW_SESSIONS
 
     _ensure_public_routes_enabled()
@@ -300,8 +293,6 @@ def unified_report(session_id: int):
             "ended_at":         s.ended_at.isoformat()   if s.ended_at   else None,
             "duration_seconds": s.duration_seconds,
 
-            # Backward-compatible flat fields for clients that previously
-            # consumed integrity-style report payloads directly.
             "final_score":       cheating_score,
             "recommendation":    int_rec,
             "alert_breakdown":   integrity_bd,
@@ -347,10 +338,6 @@ def _combined_recommendation(
     cheating_rec: str,
     interview_score,
 ) -> dict:
-    """
-    Simple rule-based combiner.
-    Extend this with your own business logic as needed.
-    """
     if cheating_rec == "ABANDONED":
         return {"verdict": "ABANDONED", "reason": "Candidate left the session"}
 
@@ -413,7 +400,37 @@ def serve_home():
     """Serves the main frontend UI."""
     return FileResponse("index.html")
 
-# ── Dev entry point ───────────────────────────────────────────────────────────
+# ── Dev entry point & Subprocess Launcher ─────────────────────────────────────
+
+def launch_mcq_server():
+    """Spawns the MCQ server as a background subprocess before starting uvicorn."""
+    mcq_dir = os.path.join(os.getcwd(), "Pre-Interview MCQ Assessment")
+    if not os.path.exists(mcq_dir):
+        print("[System] Warning: 'Pre-Interview MCQ Assesment' directory not found. MCQ server skipped.")
+        return
+
+    print("[System] Starting Pre-Interview MCQ server on port 8001...")
+    
+    # We use sys.executable to guarantee the MCQ server runs using your active virtual environment
+    mcq_process = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"],
+        cwd=mcq_dir
+    )
+    
+    # Cleanly terminate the subprocess when you press Ctrl+C to stop main.py
+    def cleanup():
+        print("\n[System] Shutting down MCQ server...")
+        mcq_process.terminate()
+        mcq_process.wait()
+        
+    atexit.register(cleanup)
+
+
 if __name__ == "__main__":
     import uvicorn
+    
+    # Launch the background microservice
+    launch_mcq_server()
+    
+    # Start the primary JobLens server
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)

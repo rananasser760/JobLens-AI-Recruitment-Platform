@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>JobLens AI — Unified Interview</title>
+    <title>JobLens AI — Unified Interview Pipeline</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
       body {
@@ -22,7 +22,8 @@
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         margin-bottom: 20px;
       }
-      input,
+      input[type="text"],
+      input[type="number"],
       textarea,
       button {
         width: 100%;
@@ -45,6 +46,40 @@
       }
       button:hover {
         background: #0056b3;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      /* MCQ Assessment Layout */
+      .mcq-question {
+        background: #fafafa;
+        border: 1px solid #eee;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 6px;
+      }
+      .mcq-question p {
+        margin-top: 0;
+        font-weight: 500;
+      }
+      .mcq-option {
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+        padding: 8px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .mcq-option input {
+        width: auto;
+        margin: 0 10px 0 0;
+      }
+      .mcq-option:hover {
+        background: #f0f8ff;
       }
 
       /* Active Interview Layout */
@@ -218,10 +253,11 @@
     </style>
   </head>
   <body>
+    <!-- 1. Setup View -->
     <div id="setup-view" class="card">
-      <h2>Start JobLens Interview</h2>
+      <h2>Step 1: Setup Candidate Profile</h2>
       <label>Candidate Name:</label>
-      <input type="text" id="candidateName" placeholder="Aland" />
+      <input type="text" id="candidateName" placeholder="Aland" value="Aland" />
 
       <label>Paste CV / Context:</label>
       <textarea id="cvInput" rows="4">Experienced developer.</textarea>
@@ -236,22 +272,42 @@ Senior Python Backend Engineer. Required skills: FastAPI, SQLite, WebSocket inte
 Technical accuracy, problem-solving ability, clarity of communication, and alignment with the job description.</textarea
       >
 
-      <label>Max Questions:</label>
+      <label>Max AI Interview Questions:</label>
       <input type="number" id="maxQuestions" value="3" />
 
-      <button onclick="startUnifiedSession()">Start Seamless Interview</button>
+      <button id="startPipelineBtn" onclick="startPipeline()">
+        Start Pre-Interview Assessment
+      </button>
+      <div
+        id="setup-status"
+        style="
+          text-align: center;
+          color: #007bff;
+          font-weight: bold;
+          margin-top: 10px;
+        "
+      ></div>
     </div>
 
+    <!-- 2. MCQ View -->
+    <div id="mcq-view" class="card" style="display: none">
+      <h2>Step 2: Pre-Interview MCQ Assessment</h2>
+      <p style="color: #666">Generated dynamically from the Job Description.</p>
+      <div id="mcq-container"></div>
+      <button id="submitMcqBtn" onclick="submitMCQ()">
+        Submit Answers & Proceed to Video Interview
+      </button>
+    </div>
+
+    <!-- 3. Interview View -->
     <div id="interview-view" style="display: none">
       <div id="status-bar">Initializing Engines...</div>
-
       <div class="room-container">
         <div class="video-panel card">
           <h3>Integrity Monitor</h3>
           <img id="video-feed" alt="Awaiting Camera Permission..." />
           <div id="integrity-status">Waiting for camera...</div>
         </div>
-
         <div class="chat-panel card">
           <h3>Interview Chat</h3>
           <div id="chat-log"></div>
@@ -259,6 +315,7 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
       </div>
     </div>
 
+    <!-- 4. Summary View -->
     <div id="summary-view" style="display: none">
       <h2>Final Evaluation Dashboard</h2>
 
@@ -269,7 +326,12 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
           <div id="dash-int-status" class="metric-status">--</div>
         </div>
         <div class="metric-card">
-          <h3>Technical Interview Score</h3>
+          <h3>Pre-Interview MCQ Score</h3>
+          <h1 id="dash-mcq-score">--</h1>
+          <div id="dash-mcq-status" class="metric-status">--</div>
+        </div>
+        <div class="metric-card">
+          <h3>Technical AI Interview Score</h3>
           <h1 id="dash-intv-score">--</h1>
           <div id="dash-intv-status" class="metric-status">--</div>
         </div>
@@ -293,7 +355,7 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
       </div>
 
       <div class="review-box">
-        <h3 style="margin-top: 0; color: #333">AI Interviewer Review</h3>
+        <h3 style="margin-top: 0; color: #333">Unified Feedback & Analysis</h3>
         <div id="dash-review-text" class="review-text">
           Generating review...
         </div>
@@ -318,6 +380,12 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
     <audio id="audio-player"></audio>
 
     <script>
+      const MCQ_BASE_URL = "http://localhost:8001";
+
+      let mcqCandidateId = null;
+      let mcqJobId = null;
+      let mcqResultData = null;
+
       let integrityId = null;
       let interviewId = null;
       let integrityWs = null;
@@ -336,6 +404,7 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
       const SILENCE_THRESHOLD_MS = 1500;
       const VOLUME_THRESHOLD = 5;
 
+      const setupStatusEl = document.getElementById("setup-status");
       const statusEl = document.getElementById("status-bar");
       const integrityStatusEl = document.getElementById("integrity-status");
       const chatEl = document.getElementById("chat-log");
@@ -343,18 +412,151 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
       const audioPlayer = document.getElementById("audio-player");
 
       // -------------------------------------------------------------
-      // Session Orchestration
+      // Pipeline Step 1 & 2: Generate and Display MCQ
       // -------------------------------------------------------------
+      async function startPipeline() {
+        const name = document.getElementById("candidateName").value;
+        const jd = document.getElementById("jobDescriptionInput").value;
+        const criteria = document.getElementById("evalCriteriaInput").value;
+        const btn = document.getElementById("startPipelineBtn");
+
+        btn.disabled = true;
+        setupStatusEl.innerText =
+          "Extracting skills and generating questions from Job Description... Please wait.";
+
+        try {
+          // 1. Create Candidate on MCQ Service
+          const candRes = await fetch(MCQ_BASE_URL + "/api/candidates", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ full_name: name }),
+          });
+          const candData = await candRes.json();
+          mcqCandidateId = candData.id;
+
+          // 2. Create Job on MCQ Service
+          const jobRes = await fetch(MCQ_BASE_URL + "/api/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: "Custom Job Profile",
+              description: jd,
+              criteria: criteria,
+            }),
+          });
+          const jobData = await jobRes.json();
+          mcqJobId = jobData.id;
+
+          // 3. Generate Questions
+          const mcqGenRes = await fetch(MCQ_BASE_URL + "/api/mcq/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              job_id: mcqJobId,
+              job_description: jd,
+              force_regenerate: true,
+            }),
+          });
+          const mcqData = await mcqGenRes.json();
+
+          renderMCQ(mcqData.questions);
+        } catch (error) {
+          console.error(error);
+          setupStatusEl.innerText =
+            "Error generating MCQ. Is the MCQ service running on port 8001?";
+          setupStatusEl.style.color = "red";
+          btn.disabled = false;
+        }
+      }
+
+      function renderMCQ(questions) {
+        document.getElementById("setup-view").style.display = "none";
+        document.getElementById("mcq-view").style.display = "block";
+        const container = document.getElementById("mcq-container");
+        container.innerHTML = "";
+
+        questions.forEach((q, idx) => {
+          let html = `<div class="mcq-question" data-qid="${q.id}">
+                        <p><b>Q${idx + 1}:</b> ${q.question} <br><small style="color:#007bff;">Skill Tested: ${q.related_skill}</small></p>`;
+          q.options.forEach((opt, oIdx) => {
+            const letter = ["A", "B", "C", "D"][oIdx];
+            html += `<label class="mcq-option">
+                        <input type="radio" name="q_${q.id}" value="${letter}">
+                        ${letter}. ${opt}
+                     </label>`;
+          });
+          html += `</div>`;
+          container.innerHTML += html;
+        });
+      }
+
+      // -------------------------------------------------------------
+      // Pipeline Step 3: Submit MCQ and Start Video Interview
+      // -------------------------------------------------------------
+      async function submitMCQ() {
+        const questions = document.querySelectorAll(".mcq-question");
+        let answersArray = [];
+
+        questions.forEach((qDiv) => {
+          const qId = qDiv.getAttribute("data-qid");
+          const checked = qDiv.querySelector(`input[name="q_${qId}"]:checked`);
+          // Default to "A" if user skipped to keep the demo moving
+          answersArray.push({
+            question_id: parseInt(qId),
+            selected_option: checked ? checked.value : "A",
+          });
+        });
+
+        document.getElementById("submitMcqBtn").disabled = true;
+        document.getElementById("submitMcqBtn").innerText =
+          "Scoring Assessment...";
+
+        try {
+          const res = await fetch(MCQ_BASE_URL + "/api/mcq/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              candidate_id: mcqCandidateId,
+              job_id: mcqJobId,
+              answers: answersArray,
+              tab_switches: 0,
+              cam_violations: {},
+            }),
+          });
+          mcqResultData = await res.json();
+
+          // Move to Interview UI
+          document.getElementById("mcq-view").style.display = "none";
+          document.getElementById("interview-view").style.display = "block";
+
+          startUnifiedSession();
+        } catch (err) {
+          console.error(err);
+          alert("Failed to submit MCQ. Check console.");
+        }
+      }
+
       async function startUnifiedSession() {
         const name = document.getElementById("candidateName").value;
         const cv = document.getElementById("cvInput").value;
-        const jd = document.getElementById("jobDescriptionInput").value;
+        let jd = document.getElementById("jobDescriptionInput").value;
         const criteria = document.getElementById("evalCriteriaInput").value;
         const maxQ = document.getElementById("maxQuestions").value;
 
-        document.getElementById("setup-view").style.display = "none";
-        document.getElementById("interview-view").style.display = "block";
         isInterviewStarted = false;
+
+        // INJECT MCQ Context into JD for the AI Interviewer
+        if (mcqResultData) {
+          const weakStr =
+            mcqResultData.weak_skills.length > 0
+              ? mcqResultData.weak_skills.join(", ")
+              : "None";
+          const strongStr =
+            mcqResultData.strong_skills.length > 0
+              ? mcqResultData.strong_skills.join(", ")
+              : "None";
+          jd += `\n\n## Pre-Interview Assessment Context\nCandidate Scored: ${mcqResultData.score}%.\nStrong Skills: ${strongStr}.\nWeak Skills to Probe: ${weakStr}. Focus questions heavily on validating these weak skills.`;
+        }
 
         try {
           statusEl.innerText = "Starting Camera Engine...";
@@ -391,12 +593,14 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
         }
       }
 
+      // -------------------------------------------------------------
+      // WebSockets & Camera/Audio (Unchanged Core Logic)
+      // -------------------------------------------------------------
       async function connectIntegrityWebSocket() {
         try {
           cameraStream = await navigator.mediaDevices.getUserMedia({
             video: { width: 640, height: 480 },
           });
-
           const hiddenVideo = document.createElement("video");
           hiddenVideo.autoplay = true;
           hiddenVideo.muted = true;
@@ -435,10 +639,8 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
 
           integrityWs.onmessage = (event) => {
             const state = JSON.parse(event.data);
-
-            if (state.frame_b64) {
+            if (state.frame_b64)
               videoEl.src = "data:image/jpeg;base64," + state.frame_b64;
-            }
 
             if (!state.calibrated) {
               integrityStatusEl.innerText = `Calibrating Tracking: ${Math.round(state.cal_progress * 100)}%`;
@@ -450,24 +652,19 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
                 isInterviewStarted = true;
                 connectInterviewWebSocket();
               }
-
               let activeAlerts = [];
               if (state.current_alert)
                 activeAlerts.push(state.current_alert.replace(/_/g, " "));
               if (state.yolo_alert)
                 activeAlerts.push(state.yolo_alert.replace(/_/g, " "));
-
               let alertText =
                 activeAlerts.length > 0
                   ? `⚠️ ${activeAlerts.join(" & ")}`
                   : "✅ Secure";
-
               integrityStatusEl.innerText = `Suspicion: ${Math.round(state.score)}% | ${alertText}`;
             }
 
-            if (state.abandoned) {
-              endUnifiedSession(true);
-            }
+            if (state.abandoned) endUnifiedSession(true);
           };
         } catch (err) {
           integrityStatusEl.innerText =
@@ -515,8 +712,69 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
         };
       }
 
+      async function setupMicrophone() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+
+        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+        mediaRecorder.onstop = () => {
+          if (
+            audioChunks.length > 0 &&
+            interviewWs &&
+            interviewWs.readyState === WebSocket.OPEN
+          ) {
+            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+            interviewWs.send(audioBlob);
+            audioChunks = [];
+          }
+        };
+        monitorVolume();
+      }
+
+      function monitorVolume() {
+        requestAnimationFrame(monitorVolume);
+        if (!isInterviewStarted || isProcessing) return;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        let avgVolume = sum / dataArray.length;
+
+        if (avgVolume > VOLUME_THRESHOLD) {
+          if (!isRecording) {
+            isRecording = true;
+            mediaRecorder.start();
+            statusEl.innerText = "🟢 Listening (Speak now)...";
+            statusEl.style.color = "green";
+          }
+          clearTimeout(silenceTimer);
+          silenceTimer = null;
+        } else {
+          if (isRecording && !silenceTimer) {
+            silenceTimer = setTimeout(() => {
+              isRecording = false;
+              isProcessing = true;
+              statusEl.innerText = "⏳ Processing your answer...";
+              statusEl.style.color = "orange";
+              mediaRecorder.stop();
+            }, SILENCE_THRESHOLD_MS);
+          }
+        }
+      }
+
       // -------------------------------------------------------------
-      // Final Dashboard Rendering
+      // Pipeline Step 4: Final Unified Dashboard
       // -------------------------------------------------------------
       async function endUnifiedSession(wasAbandoned) {
         if (mediaRecorder && mediaRecorder.state !== "inactive")
@@ -524,13 +782,11 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
         if (integrityWs) integrityWs.close();
         if (interviewWs) interviewWs.close();
         if (frameInterval) clearInterval(frameInterval);
-
         if (cameraStream)
           cameraStream.getTracks().forEach((track) => track.stop());
 
         if (!wasAbandoned)
           await fetch(`/api/sessions/${integrityId}/end`, { method: "POST" });
-
         const res = await fetch(`/api/sessions/${integrityId}/report`);
         const report = await res.json();
 
@@ -541,6 +797,7 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
       }
 
       function buildDashboard(report) {
+        // Integrity Box
         document.getElementById("dash-int-score").innerText = Math.round(
           report.final_score,
         );
@@ -554,11 +811,23 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
               ? "status-review"
               : "status-reject");
 
+        // MCQ Box (Injected from Step 3)
+        if (mcqResultData) {
+          document.getElementById("dash-mcq-score").innerText =
+            Math.round(mcqResultData.score) + "%";
+          const mcqStatusEl = document.getElementById("dash-mcq-status");
+          mcqStatusEl.innerText = mcqResultData.passed ? "Passed" : "Failed";
+          mcqStatusEl.className =
+            "metric-status " +
+            (mcqResultData.passed ? "status-accept" : "status-reject");
+        }
+
+        // Interview Box
         let intvScore =
           report.interview_score !== null ? report.interview_score : "--";
         document.getElementById("dash-intv-score").innerText = intvScore;
-
         const intvStatusEl = document.getElementById("dash-intv-status");
+
         if (report.interview_summary) {
           let rec = report.interview_summary.recommendation || "Completed";
           if (rec.length > 20) rec = intvScore >= 70 ? "Proceed" : "Reject";
@@ -566,12 +835,15 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
           intvStatusEl.className =
             "metric-status " +
             (intvScore >= 70 ? "status-accept" : "status-reject");
-
           document.getElementById("dash-review-text").innerText =
             report.interview_summary.review;
 
           const strList = document.getElementById("dash-strengths");
-          const strengths = report.interview_summary.strengths || [];
+          let strengths = report.interview_summary.strengths || [];
+          if (mcqResultData && mcqResultData.strong_skills)
+            strengths = strengths.concat(
+              mcqResultData.strong_skills.map((s) => `[MCQ] Excellent in ${s}`),
+            );
           if (strengths.length === 0)
             strList.innerHTML = "<li>None detected</li>";
           else
@@ -580,7 +852,13 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
             });
 
           const weakList = document.getElementById("dash-weaknesses");
-          const weaknesses = report.interview_summary.weaknesses || [];
+          let weaknesses = report.interview_summary.weaknesses || [];
+          if (mcqResultData && mcqResultData.weak_skills)
+            weaknesses = weaknesses.concat(
+              mcqResultData.weak_skills.map(
+                (s) => `[MCQ] Needs improvement in ${s}`,
+              ),
+            );
           if (weaknesses.length === 0)
             weakList.innerHTML = "<li>None detected</li>";
           else
@@ -593,21 +871,20 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
             "Interview did not complete or generated no summary.";
         }
 
+        // Charts
         const timelineCtx = document
           .getElementById("timelineChart")
           .getContext("2d");
         const historyData = report.score_history || [];
-
         const startTime =
           historyData.length > 0
             ? new Date(historyData[0].timestamp).getTime()
             : 0;
-        const labels = historyData.map((h) => {
-          let diffSecs = Math.round(
-            (new Date(h.timestamp).getTime() - startTime) / 1000,
-          );
-          return diffSecs + "s";
-        });
+        const labels = historyData.map(
+          (h) =>
+            Math.round((new Date(h.timestamp).getTime() - startTime) / 1000) +
+            "s",
+        );
         const scores = historyData.map((h) => h.score);
 
         new Chart(timelineCtx, {
@@ -642,11 +919,9 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
         const breakdownCtx = document
           .getElementById("breakdownChart")
           .getContext("2d");
-
         const alerts = report.alert_breakdown || {};
         const yoloAlerts = report.yolo_alert_breakdown || {};
         const combinedAlerts = { ...alerts };
-
         for (const [key, value] of Object.entries(yoloAlerts)) {
           combinedAlerts[key] = (combinedAlerts[key] || 0) + value;
         }
@@ -690,75 +965,6 @@ Technical accuracy, problem-solving ability, clarity of communication, and align
             cutout: "65%",
           },
         });
-      }
-
-      // -------------------------------------------------------------
-      // Microphone & VAD Logic
-      // -------------------------------------------------------------
-      async function setupMicrophone() {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const source = audioContext.createMediaStreamSource(stream);
-
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 512;
-        source.connect(analyser);
-
-        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) audioChunks.push(e.data);
-        };
-
-        mediaRecorder.onstop = () => {
-          if (
-            audioChunks.length > 0 &&
-            interviewWs &&
-            interviewWs.readyState === WebSocket.OPEN
-          ) {
-            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-            interviewWs.send(audioBlob);
-            audioChunks = [];
-          }
-        };
-
-        monitorVolume();
-      }
-
-      function monitorVolume() {
-        requestAnimationFrame(monitorVolume);
-
-        if (!isInterviewStarted || isProcessing) return;
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(dataArray);
-
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        let avgVolume = sum / dataArray.length;
-
-        if (avgVolume > VOLUME_THRESHOLD) {
-          if (!isRecording) {
-            isRecording = true;
-            mediaRecorder.start();
-            statusEl.innerText = "🟢 Listening (Speak now)...";
-            statusEl.style.color = "green";
-          }
-          clearTimeout(silenceTimer);
-          silenceTimer = null;
-        } else {
-          if (isRecording && !silenceTimer) {
-            silenceTimer = setTimeout(() => {
-              isRecording = false;
-              isProcessing = true;
-              statusEl.innerText = "⏳ Processing your answer...";
-              statusEl.style.color = "orange";
-              mediaRecorder.stop();
-            }, SILENCE_THRESHOLD_MS);
-          }
-        }
       }
     </script>
   </body>
