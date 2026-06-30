@@ -1,0 +1,8 @@
+@if (visible) {
+  <div class="error-retry" role="alert" aria-live="polite">
+    <p>{{ message }}</p>
+    <button type="button" (click)="onRetry()" [disabled]="busy">
+      {{ busy ? 'Retrying...' : actionLabel }}
+    </button>
+  </div>
+}

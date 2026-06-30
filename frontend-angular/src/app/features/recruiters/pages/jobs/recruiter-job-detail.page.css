@@ -1,0 +1,273 @@
+.job-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.top-candidates-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--jl-ink-soft);
+  text-decoration: none;
+  font-weight: 700;
+  padding: 0.62rem 0.82rem;
+}
+
+.back-link {
+  display: inline-block;
+  color: var(--jl-primary);
+  text-decoration: none;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+h1 {
+  margin: 0;
+  color: var(--jl-primary);
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+.page-header p {
+  margin: 0.35rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+.panel {
+  border: 1px solid var(--jl-border);
+  border-radius: var(--jl-radius-lg);
+  background: var(--jl-surface);
+  padding: 1rem;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.hero h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.hero p {
+  margin: 0.4rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+.hero-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hero-meta span {
+  border-radius: 999px;
+  background: #eef4ff;
+  color: var(--jl-primary);
+  font-size: 0.78rem;
+  padding: 0.28rem 0.62rem;
+  font-weight: 700;
+}
+
+.layout-grid {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr;
+  gap: 0.75rem;
+}
+
+.form h3,
+.skills-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--jl-ink-soft);
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+input,
+textarea,
+select {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #f9fbff;
+  color: var(--jl-ink);
+  padding: 0.6rem 0.7rem;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.toggle-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 1.35rem;
+}
+
+.actions {
+  margin-top: 0.35rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  background: var(--jl-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.secondary {
+  background: #fff;
+  color: var(--jl-ink-soft);
+  border: 1px solid var(--jl-border);
+}
+
+.skill-chips {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.skill-chips span {
+  border-radius: 999px;
+  background: #f1f5ff;
+  color: var(--jl-ink-soft);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.add-skill {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.hint {
+  margin: 0.75rem 0 0;
+  color: var(--jl-muted-text);
+  font-size: 0.82rem;
+}
+
+.banner {
+  margin: 0;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.banner.error {
+  background: #fff3f2;
+  color: var(--jl-danger);
+}
+
+.banner.success {
+  background: #ebfff4;
+  color: #0e7549;
+}
+
+.refresh {
+  border: 0;
+  border-radius: 10px;
+  background: var(--jl-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+  min-width: 120px;
+}
+
+.refresh:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.empty {
+  margin: 0.7rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+@media (max-width: 1050px) {
+  .layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 700px) {
+  .page-header {
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .top-candidates-link,
+  .refresh {
+    flex: 1;
+    text-align: center;
+  }
+
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+}

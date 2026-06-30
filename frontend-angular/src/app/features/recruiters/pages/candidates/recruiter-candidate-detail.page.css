@@ -1,0 +1,228 @@
+.candidate-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.back-link {
+  display: inline-block;
+  color: var(--jl-primary);
+  text-decoration: none;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+h1 {
+  margin: 0;
+  color: var(--jl-primary);
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+.page-header p {
+  margin: 0.35rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+.panel {
+  border: 1px solid var(--jl-border);
+  border-radius: var(--jl-radius-lg);
+  background: var(--jl-surface);
+  padding: 1rem;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.hero h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.hero p {
+  margin: 0.4rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+.hero-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hero-meta span {
+  border-radius: 999px;
+  background: #eef4ff;
+  color: var(--jl-primary);
+  font-size: 0.78rem;
+  padding: 0.28rem 0.62rem;
+  font-weight: 700;
+}
+
+.layout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+ul {
+  margin: 0.75rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--jl-ink-soft);
+}
+
+li + li {
+  margin-top: 0.4rem;
+}
+
+.panel p {
+  margin: 0.75rem 0 0;
+  color: var(--jl-ink-soft);
+  line-height: 1.55;
+}
+
+.skills-grid {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.skill-card {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 0.6rem;
+}
+
+.skill-card strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.skill-card small {
+  color: var(--jl-muted-text);
+}
+
+.resume-list {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.resume-card {
+  border: 1px solid var(--jl-border);
+  border-radius: 10px;
+  background: #fbfcff;
+  padding: 0.65rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.resume-card strong {
+  display: block;
+}
+
+.resume-card small {
+  color: var(--jl-muted-text);
+}
+
+.resume-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.resume-meta span {
+  font-size: 0.78rem;
+}
+
+.default {
+  border-radius: 999px;
+  background: #e4f9ee;
+  color: #0d754a;
+  padding: 0.2rem 0.55rem;
+  font-weight: 700;
+}
+
+.banner {
+  margin: 0;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.banner.error {
+  background: #fff3f2;
+  color: var(--jl-danger);
+}
+
+.refresh {
+  border: 0;
+  border-radius: 10px;
+  background: var(--jl-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+  min-width: 120px;
+}
+
+.refresh:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.empty {
+  margin: 0.75rem 0 0;
+  color: var(--jl-muted-text);
+}
+
+@media (max-width: 1000px) {
+  .layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .skills-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 700px) {
+  .skills-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .resume-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

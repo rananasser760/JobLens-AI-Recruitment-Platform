@@ -1,0 +1,147 @@
+<section class="application-detail-page">
+  <header class="page-header">
+    <div>
+      <a class="back-link" [routerLink]="[backLink]">← Back to applications</a>
+      <h1>Application Details</h1>
+      <p>Review candidate fit, interview readiness, and status progression in one place.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  <app-loading-spinner [active]="loading()" message="Loading application details"></app-loading-spinner>
+
+  @if (application(); as item) {
+    <section class="panel hero">
+      <div>
+        <h2>{{ item.candidateName }}</h2>
+        <p>{{ item.jobTitle }} · {{ item.companyName || 'Company' }}</p>
+      </div>
+      <span class="status-chip">{{ formatStatus(item.status) }}</span>
+    </section>
+
+    <div class="detail-grid">
+      <section class="panel">
+        <h3>Application summary</h3>
+        <ul>
+          <li><strong>Application ID:</strong> {{ item.id }}</li>
+          <li><strong>Candidate email:</strong> {{ item.candidateEmail }}</li>
+          <li><strong>Candidate phone:</strong> {{ item.candidatePhone || 'Not provided' }}</li>
+          <li><strong>Applied at:</strong> {{ item.appliedAt | date: 'medium' }}</li>
+          <li><strong>Applied via:</strong> {{ item.appliedVia }}</li>
+          <li><strong>ATS score:</strong> {{ item.atsScore ?? '--' }}</li>
+          <li><strong>Interview linked:</strong> {{ item.hasInterview ? 'Yes' : 'No' }}</li>
+          <li><strong>Interview score:</strong> {{ item.interviewScore ?? '--' }}</li>
+        </ul>
+
+        @if (item.coverLetter) {
+          <div class="note-block">
+            <h4>Cover letter</h4>
+            <p>{{ item.coverLetter }}</p>
+          </div>
+        }
+      </section>
+
+      <section class="panel actions-panel">
+        <h3>Actions</h3>
+
+        <div class="action-links">
+          <a [routerLink]="['/recruiter/jobs', item.jobId]">View job details</a>
+          <a [routerLink]="['/recruiter/candidates', item.candidateId]">Open candidate profile</a>
+        </div>
+
+        <div class="editor">
+          <label>
+            Status
+            <select #statusInput [value]="statusDraft()" (change)="onStatusChanged(statusInput.value)" [disabled]="savingStatus()">
+              <option value="">Select status</option>
+              @for (status of statusOptions(); track status) {
+                <option [value]="status">{{ formatStatus(status) }}</option>
+              }
+            </select>
+          </label>
+
+          <label>
+            Recruiter notes
+            <textarea
+              #notesInput
+              rows="3"
+              [value]="notesDraft()"
+              (input)="onNotesChanged(notesInput.value)"
+              [disabled]="savingStatus()"
+              placeholder="Private note about candidate progression"
+            ></textarea>
+          </label>
+
+          <button type="button" (click)="saveStatus()" [disabled]="savingStatus() || !statusDraft()">
+            {{ savingStatus() ? 'Saving status...' : 'Save status' }}
+          </button>
+        </div>
+
+        <div class="schedule-box">
+          <button
+            type="button"
+            class="secondary"
+            (click)="toggleSchedulePanel()"
+            [disabled]="item.hasInterview"
+          >
+            {{ item.hasInterview ? 'Interview already scheduled' : (showSchedulePanel() ? 'Hide scheduling' : 'Schedule interview') }}
+          </button>
+
+          @if (showSchedulePanel() && !item.hasInterview) {
+            <div class="editor">
+              <label>
+                Interview title
+                <input
+                  #scheduleTitleInput
+                  type="text"
+                  [value]="scheduleTitle()"
+                  (input)="onScheduleTitleChanged(scheduleTitleInput.value)"
+                  [disabled]="scheduling()"
+                />
+              </label>
+
+              <label>
+                Date & time
+                <input
+                  #scheduleDateInput
+                  type="datetime-local"
+                  [value]="scheduleDateTime()"
+                  (input)="onScheduleDateTimeChanged(scheduleDateInput.value)"
+                  [disabled]="scheduling()"
+                />
+              </label>
+
+              <label>
+                Agent type
+                <select
+                  #scheduleAgentInput
+                  [value]="scheduleAgentType()"
+                  (change)="onScheduleAgentTypeChanged(scheduleAgentInput.value)"
+                  [disabled]="scheduling()"
+                >
+                  @for (agent of scheduleAgentTypes(); track agent) {
+                    <option [value]="agent">{{ agent }}</option>
+                  }
+                </select>
+              </label>
+
+              <button type="button" (click)="scheduleInterview()" [disabled]="scheduling()">
+                {{ scheduling() ? 'Scheduling...' : 'Confirm schedule' }}
+              </button>
+            </div>
+          }
+        </div>
+      </section>
+    </div>
+  }
+</section>

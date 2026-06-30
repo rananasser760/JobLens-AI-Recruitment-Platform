@@ -1,0 +1,278 @@
+<section class="dashboard">
+  <!-- Header -->
+  <header class="dash-header">
+    <div>
+      <h1>
+        Good {{ greeting() }},
+        <span class="name-highlight">{{ (profile()?.fullName ?? '').split(' ')[0] || 'there' }}</span>
+      </h1>
+      <p>Here's your AI-curated snapshot — opportunities, interviews, and your progress.</p>
+    </div>
+    <button type="button" class="btn-refresh" (click)="load()" [disabled]="loading()">
+      @if (loading()) {
+        <span class="btn-spinner"></span>
+      } @else {
+        <i class="fa-solid fa-rotate"></i>
+      }
+      {{ loading() ? 'Loading…' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <div class="alert-error">
+      <i class="fa-solid fa-triangle-exclamation"></i> {{ error() }}
+    </div>
+  }
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-icon-wrap" style="background:#eef3ff">
+        <i class="fa-solid fa-file-lines fa-lg" style="color:#4059aa"></i>
+      </div>
+      <div class="stat-body">
+        <span class="stat-label">Applications</span>
+        @if (loading()) { <div class="sk-number"></div> }
+        @else {
+          <strong class="stat-value">{{ stats().totalApplications }}</strong>
+          <span class="stat-sub">{{ stats().pendingReview }} in review</span>
+        }
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon-wrap" style="background:#f0fdf4">
+        <i class="fa-solid fa-microphone fa-lg" style="color:#19b27a"></i>
+      </div>
+      <div class="stat-body">
+        <span class="stat-label">Interviews</span>
+        @if (loading()) { <div class="sk-number"></div> }
+        @else {
+          <strong class="stat-value">{{ interviews().length }}</strong>
+          <span class="stat-sub">scheduled &amp; live</span>
+        }
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon-wrap" style="background:#fef3c7">
+        <i class="fa-solid fa-star fa-lg" style="color:#d97706"></i>
+      </div>
+      <div class="stat-body">
+        <span class="stat-label">Best Match</span>
+        @if (loading()) { <div class="sk-number"></div> }
+        @else {
+          <strong class="stat-value">
+            {{ stats().strongestMatch !== null ? (stats().strongestMatch + '%') : '--' }}
+          </strong>
+          <span class="stat-sub">top AI recommendation</span>
+        }
+      </div>
+    </div>
+
+    <div class="stat-card stat-card--ats">
+      <div class="stat-icon-wrap" style="background:#f5f0ff">
+        <i class="fa-solid fa-chart-line fa-lg" style="color:#7c3aed"></i>
+      </div>
+      <div class="stat-body">
+        <span class="stat-label">Best ATS Score</span>
+        @if (loading()) { <div class="sk-number"></div> }
+        @else {
+          <strong class="stat-value">{{ atsScore() || '--' }}<span class="stat-denom">/100</span></strong>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Onboarding Checklist -->
+  @if (!onboardingComplete()) {
+    <div class="onboarding-panel">
+      <div class="ob-header">
+        <div class="ob-progress-wrap">
+          <div class="ob-title">
+            <i class="fa-solid fa-rocket ob-emoji" style="color:#4059aa;font-size:1.6rem"></i>
+            <div>
+              <h2>Complete Your Profile</h2>
+              <p>{{ onboardingCompletedCount() }}/{{ onboardingTotalCount() }} steps done — finish to unlock AI matching</p>
+            </div>
+          </div>
+          <div class="ob-progress-track">
+            <div class="ob-progress-fill"
+              [style.width.%]="onboardingTotalCount() > 0 ? (onboardingCompletedCount() / onboardingTotalCount() * 100) : 0">
+            </div>
+          </div>
+        </div>
+        <a class="ob-profile-link" routerLink="/candidate/profile">
+          <i class="fa-solid fa-arrow-right"></i> Go to Profile
+        </a>
+      </div>
+
+      <div class="ob-steps">
+        @for (step of onboardingChecklist(); track step.key) {
+          <div class="ob-step" [class.ob-step--done]="step.done">
+            <div class="ob-check">
+              @if (step.done) { <i class="fa-solid fa-check" style="font-size:.7rem;color:#fff"></i> }
+            </div>
+            <span class="ob-step-label">{{ step.label }}</span>
+            <span class="ob-step-desc">{{ step.description }}</span>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Main content -->
+  <div class="content-grid">
+    <!-- Left: AI Recs + Applications -->
+    <div class="content-left">
+      <!-- AI Recommendations -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2><i class="fa-solid fa-wand-magic-sparkles" style="color:#4059aa;margin-right:.4rem"></i> AI Job Matches</h2>
+            <p class="panel-sub">Personalized recommendations based on your profile</p>
+          </div>
+          <a class="panel-link" routerLink="/candidate/recommendations">
+            View all <i class="fa-solid fa-arrow-right"></i>
+          </a>
+        </div>
+
+        @if (recommendationsLoading()) {
+          <div class="recommendations-skeleton">
+            @for (i of [1,2]; track i) {
+              <div class="sk-job-card">
+                <div class="sk-line wide"></div>
+                <div class="sk-line med"></div>
+                <div class="sk-line short"></div>
+              </div>
+            }
+          </div>
+        } @else if (recommendedJobs().length === 0) {
+          <div class="empty-state">
+            <i class="fa-solid fa-magnifying-glass empty-icon"></i>
+            <p>{{ recommendationNote() || 'No recommendations yet. Upload your resume and let our AI find your best matches.' }}</p>
+          </div>
+        } @else {
+          <div class="jobs-grid">
+            @for (rec of recommendedJobs().slice(0, 4); track rec.jobId) {
+              <div class="job-card">
+                <div class="job-card-top">
+                  <div>
+                    <h3 class="job-title">{{ rec.title }}</h3>
+                    <p class="job-company">{{ rec.companyName || 'Company' }}</p>
+                  </div>
+                  <span class="match-badge" [attr.data-score]="getMatchTier(rec.matchScore)">
+                    {{ rec.matchScore }}%
+                  </span>
+                </div>
+                @if (rec.matchReason) {
+                  <p class="job-reason">{{ rec.matchReason }}</p>
+                }
+                <a class="btn-action btn-job" [routerLink]="['/candidate/jobs', rec.jobId]">
+                  View <i class="fa-solid fa-arrow-right"></i>
+                </a>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <!-- Recent Applications -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2><i class="fa-solid fa-file-lines" style="color:#4059aa;margin-right:.4rem"></i> Recent Applications</h2>
+          </div>
+          <a class="panel-link" routerLink="/candidate/applications">
+            View all <i class="fa-solid fa-arrow-right"></i>
+          </a>
+        </div>
+
+        @if (loading() && applications().length === 0) {
+          <div class="application-skeleton">
+            @for (i of [1,2,3]; track i) {
+              <div class="sk-app-row"><div class="sk-line wide"></div><div class="sk-line short"></div></div>
+            }
+          </div>
+        } @else if (applications().length === 0) {
+          <div class="empty-state compact">
+            <i class="fa-solid fa-inbox empty-icon"></i>
+            <p>You haven't applied to any jobs yet.</p>
+          </div>
+        } @else {
+          <div class="applications-table">
+            @for (app of applications(); track app.applicationId) {
+              <div class="app-row">
+                <div class="app-info">
+                  <span class="app-title">{{ app.jobTitle }}</span>
+                  <span class="app-company">{{ app.companyName }}</span>
+                </div>
+                <span
+                  class="app-status"
+                  [attr.data-status]="normalizeStatus(app.status)"
+                >{{ normalizeStatus(app.status) }}</span>
+                <span class="app-date">
+                  <i class="fa-solid fa-calendar-days" style="margin-right:.3rem;opacity:.6"></i>
+                  {{ app.appliedAt | date: 'MMM d' }}
+                </span>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Right: Interviews sidebar -->
+    <aside class="content-right">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2><i class="fa-solid fa-calendar-check" style="color:#4059aa;margin-right:.4rem"></i> Interviews</h2>
+          </div>
+          <a class="panel-link" routerLink="/candidate/interviews">
+            All <i class="fa-solid fa-arrow-right"></i>
+          </a>
+        </div>
+
+        @if (loading() && interviews().length === 0) {
+          <div class="side-skeleton">
+            @for (i of [1,2]; track i) {
+              <div class="sk-interview-card">
+                <div class="sk-line med"></div>
+                <div class="sk-line short"></div>
+              </div>
+            }
+          </div>
+        } @else if (interviews().length === 0) {
+          <div class="empty-state compact">
+            <i class="fa-solid fa-video empty-icon"></i>
+            <p>No upcoming interviews scheduled.</p>
+          </div>
+        } @else {
+          <div class="interview-list">
+            @for (iv of interviews(); track iv.sessionId) {
+              <div class="interview-item">
+                <span class="iv-dot" [attr.data-status]="iv.status.toLowerCase()"></span>
+                <div class="iv-body">
+                  <span class="iv-title">{{ iv.interviewTitle || iv.jobTitle }}</span>
+                  <span class="iv-date">
+                    <i class="fa-regular fa-calendar"></i>
+                    {{ iv.scheduledAt | date: 'MMM d, h:mm a' }}
+                  </span>
+                  <span class="iv-status-pill">{{ iv.status }}</span>
+                </div>
+                <a
+                  class="iv-enter"
+                  [routerLink]="['/candidate/interviews', iv.sessionId]"
+                  title="Enter session"
+                >
+                  <i class="fa-solid fa-chevron-right"></i>
+                </a>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </aside>
+  </div>
+</section>

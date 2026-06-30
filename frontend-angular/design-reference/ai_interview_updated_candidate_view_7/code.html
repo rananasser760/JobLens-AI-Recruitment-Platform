@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Candidate Session | JobLens Kinetic</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#f8f9fb",
+                        "surface-container-low": "#f3f4f6",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "surface-container-high": "#e7e8ea",
+                        "secondary-container": "#d5e3fc",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-fixed": "#002113",
+                        "surface-container-highest": "#e1e2e4",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed": "#0d1c2e",
+                        "on-primary": "#ffffff",
+                        "on-surface-variant": "#444651",
+                        "primary-fixed": "#dce1ff",
+                        "inverse-primary": "#b6c4ff",
+                        "on-secondary-fixed-variant": "#3a485b",
+                        "surface-variant": "#e1e2e4",
+                        "on-secondary": "#ffffff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "on-primary-container": "#90a8ff",
+                        "on-error": "#ffffff",
+                        "on-tertiary-container": "#27c38a",
+                        "on-primary-fixed-variant": "#264191",
+                        "on-secondary-container": "#57657a",
+                        "on-tertiary": "#ffffff",
+                        "inverse-surface": "#2e3132",
+                        "surface-container": "#edeef0",
+                        "secondary": "#515f74",
+                        "surface-dim": "#d9dadc",
+                        "error": "#ba1a1a",
+                        "surface-bright": "#f8f9fb",
+                        "tertiary": "#00311f",
+                        "error-container": "#ffdad6",
+                        "primary-fixed-dim": "#b6c4ff",
+                        "tertiary-container": "#004a31",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-surface": "#191c1e",
+                        "primary-container": "#1e3a8a",
+                        "background": "#f8f9fb",
+                        "outline": "#757682",
+                        "secondary-fixed": "#d5e3fc",
+                        "primary": "#00236f",
+                        "outline-variant": "#c5c5d3",
+                        "on-background": "#191c1e",
+                        "surface-tint": "#4059aa",
+                        "secondary-fixed-dim": "#b9c7df",
+                        "on-primary-fixed": "#00164e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "1.0rem",
+                        "xl": "1.25rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Inter", "sans-serif"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .ai-wave-container {
+            background: radial-gradient(circle at center, #1e3a8a 0%, #00164e 100%);
+        }
+        .kinetic-orbit {
+            animation: rotate 20s linear infinite;
+        }
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .pulse-soft {
+            animation: pulse 4s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.4; }
+            50% { transform: scale(1.1); opacity: 0.6; }
+        }
+        .ai-core-glow {
+            filter: blur(40px);
+            background: radial-gradient(circle, rgba(78, 222, 163, 0.4) 0%, rgba(30, 58, 138, 0) 70%);
+        }
+        .orb-layer {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(25px);
+            mix-blend-mode: screen;
+        }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface antialiased">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<!-- Unified Header -->
+<nav class="flex items-center justify-between px-8 py-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-primary-container rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white" data-icon="work">work</span>
+</div>
+<div>
+<h1 class="font-headline font-extrabold text-[#1e3a8a] text-xl leading-none">JobLens</h1>
+<p class="text-[10px] text-slate-500 font-bold tracking-widest uppercase mt-1">Enterprise Recruiting</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1.5 bg-surface-container-high rounded-full">
+<div class="size-2 rounded-full bg-error animate-pulse"></div>
+<span class="font-label text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Live Session</span>
+</div>
+</div>
+</nav>
+<main class="flex flex-1 flex-col items-center justify-center px-4 pb-12">
+<div class="w-full max-w-4xl space-y-8">
+<!-- Central AI Character Area (Complex Kinetic Animation) -->
+<div class="relative aspect-video w-full overflow-hidden rounded-xl bg-primary shadow-2xl">
+<div class="absolute inset-0 ai-wave-container flex items-center justify-center">
+<!-- Background Glows -->
+<div class="absolute inset-0 flex items-center justify-center overflow-hidden">
+<div class="orb-layer bg-[#4059aa] w-[80%] h-[80%] -top-[10%] -left-[10%] opacity-30 animate-[pulse_8s_infinite]"></div>
+<div class="orb-layer bg-[#10b981] w-[70%] h-[70%] -bottom-[10%] -right-[10%] opacity-20 animate-[pulse_10s_infinite]"></div>
+</div>
+<!-- Kinetic AI Character/Widget -->
+<div class="relative flex items-center justify-center h-full w-full">
+<!-- Outer Rings -->
+<div class="kinetic-orbit absolute w-64 h-64 border-2 border-white/5 rounded-full"></div>
+<div class="kinetic-orbit absolute w-48 h-48 border-2 border-white/10 rounded-full" style="animation-direction: reverse; animation-duration: 15s;"></div>
+<!-- Central Dynamic Core -->
+<div class="relative flex items-center justify-center">
+<div class="ai-core-glow absolute w-40 h-40 rounded-full"></div>
+<!-- Modern Kinetic Wave/Character -->
+<div class="flex items-end gap-1.5 h-16">
+<div class="w-2 bg-white rounded-full animate-[bounce_1.2s_infinite_ease-in-out]" style="animation-delay: 0.1s; height: 30%;"></div>
+<div class="w-2 bg-white/80 rounded-full animate-[bounce_1.2s_infinite_ease-in-out]" style="animation-delay: 0.2s; height: 60%;"></div>
+<div class="w-2 bg-[#4edea3] rounded-full animate-[bounce_1.2s_infinite_ease-in-out]" style="animation-delay: 0.3s; height: 90%;"></div>
+<div class="w-2 bg-white rounded-full animate-[bounce_1.2s_infinite_ease-in-out]" style="animation-delay: 0.4s; height: 100%;"></div>
+<div class="w-2 bg-white/80 rounded-full animate-[bounce_1.2s_infinite_ease-in-out]" style="animation-delay: 0.5s; height: 70%;"></div>
+<div class="w-2 bg-white/60 rounded-full animate-[bounce_1.2s_infinite_ease-in-out]" style="animation-delay: 0.6s; height: 40%;"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Candidate Picture-in-Picture -->
+<div class="absolute bottom-4 right-4 h-32 w-48 overflow-hidden rounded-lg border-2 border-white/20 bg-surface-container-highest shadow-lg backdrop-blur-md">
+<img alt="Candidate Preview" class="h-full w-full object-cover" data-alt="Young professional woman in a home office setting, smiling at camera, soft natural lighting, professional and approachable atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCbXF3t9lZVZd8VAWNV4HYBXp6rHV6fhE6XxMgM91fUF--unsnq6l313Jg-4QW-Kteh2icu5kF0OtAqwX3z19Ca8gfJAxA9mDqA_WBSiMYQtr_tFA0gvdqMvKWcXaMpgh7eHBQwltcvonAT-jpcY0yXQgG4cFRX912aj6tRnUwmBIl9--75LJKdSvSBMWJrBqAFe6oKBdXKSHFNtXDzrS1jCYgb6v3WrJyc-Z7rWS61WAbnxZI0NoHhOYwigG9h2NpDC0WZ5mk8Psk"/>
+<div class="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 bg-black/40 rounded-md backdrop-blur-sm">
+<span class="material-symbols-outlined text-[10px] text-white" data-icon="videocam">videocam</span>
+<span class="text-[9px] text-white font-medium uppercase tracking-tight">You</span>
+</div>
+<div class="absolute top-2 right-2 flex gap-1">
+<div class="size-2 rounded-full bg-primary animate-pulse"></div>
+</div>
+</div>
+</div>
+<!-- Updated Controls Bar -->
+<div class="flex items-center justify-center gap-6">
+<!-- Session Timer -->
+<div class="flex items-center gap-3 px-6 py-3 bg-surface-container-lowest border border-outline-variant/30 rounded-full shadow-sm text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]" data-icon="timer">timer</span>
+<span class="font-headline font-bold text-sm tracking-tight">14:42 remaining</span>
+</div>
+<button class="flex h-14 items-center gap-3 rounded-full bg-error px-8 text-on-error font-headline font-bold transition-transform hover:scale-105 active:scale-95 shadow-lg shadow-error/20">
+<span class="material-symbols-outlined" data-icon="call_end">call_end</span>
+<span>End Interview</span>
+</button>
+<button class="group flex size-14 items-center justify-center rounded-full bg-surface-container-lowest text-on-surface-variant shadow-sm transition-all hover:bg-surface-container-high border border-outline-variant/30">
+<span class="material-symbols-outlined text-[24px]" data-icon="settings">settings</span>
+</button>
+</div>
+<!-- Live Transcript Section -->
+<div class="w-full space-y-6 rounded-xl bg-surface-container-lowest p-8 shadow-sm">
+<div class="flex items-center justify-between border-b border-surface-container pb-4">
+<h3 class="font-headline text-sm font-bold tracking-tight text-on-surface-variant uppercase">Live Conversation</h3>
+<div class="flex items-center gap-2 text-tertiary">
+<span class="material-symbols-outlined text-sm" data-icon="auto_awesome">auto_awesome</span>
+<span class="font-label text-[11px] font-bold">AI Active</span>
+</div>
+</div>
+<div class="space-y-6">
+<!-- AI Utterance -->
+<div class="flex gap-4">
+<div class="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-container text-white">
+<span class="material-symbols-outlined text-[18px]" data-icon="smart_toy">smart_toy</span>
+</div>
+<div class="space-y-1">
+<span class="font-label text-[10px] font-bold uppercase text-outline">Interviewer</span>
+<p class="font-body text-base leading-relaxed text-on-surface">
+                                    That's a great point about team cohesion. Given the shift to remote work, how did you ensure the junior developers felt supported during that transition?
+                                </p>
+</div>
+</div>
+<!-- Candidate Utterance -->
+<div class="flex gap-4">
+<div class="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]" data-icon="person">person</span>
+</div>
+<div class="space-y-1">
+<span class="font-label text-[10px] font-bold uppercase text-outline">You</span>
+<p class="font-body text-base leading-relaxed text-on-surface italic opacity-80">
+                                    [Speaking...] We established a daily "no-agenda" sync and implemented a pair-programming rotation...
+                                </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Aesthetic Footnote -->
+<footer class="py-8 text-center">
+<p class="font-label text-[10px] text-outline uppercase tracking-widest">JobLens Kinetic • Secure Candidate Environment</p>
+</footer>
+</div>
+</body></html>

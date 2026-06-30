@@ -1,0 +1,151 @@
+<section class="candidate-jobs-page">
+  <header class="page-header">
+    <div>
+      <h1>Discover Careers</h1>
+      <p>Browse active opportunities tailored to your profile and skills.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      <i class="fa-solid fa-rotate"></i> {{ loading() ? 'Loading…' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error() }}</p>
+  }
+  @if (success()) {
+    <p class="banner success"><i class="fa-solid fa-check"></i> {{ success() }}</p>
+  }
+
+  <div class="panel filters">
+    <div class="filter-field">
+      <label class="filter-label" for="job-keyword">Keyword</label>
+      <input id="job-keyword" class="filter-input" type="text" #keywordInput
+        [value]="keyword()" (input)="onKeywordChanged(keywordInput.value)"
+        placeholder="Role, skill, or company" />
+    </div>
+    <div class="filter-field">
+      <label class="filter-label" for="job-location">Location</label>
+      <input id="job-location" class="filter-input" type="text" #locationInput
+        [value]="location()" (input)="onLocationChanged(locationInput.value)"
+        placeholder="Remote, Cairo, Dubai…" />
+    </div>
+    <div class="filter-field">
+      <label class="filter-label" for="job-employment-type">Type</label>
+      <select id="job-employment-type" class="filter-select" #employmentTypeSelect
+        [value]="employmentType()" (change)="onEmploymentTypeChanged(employmentTypeSelect.value)">
+        <option value="">All types</option>
+        @for (type of employmentTypes(); track type) { <option [value]="type">{{ type }}</option> }
+      </select>
+    </div>
+    <div class="filter-field">
+      <label class="filter-label" for="job-source">Source</label>
+      <select id="job-source" class="filter-select" #sourceSelect
+        [value]="source()" (change)="onSourceChanged(sourceSelect.value)">
+        <option value="">All sources</option>
+        @for (opt of sources(); track opt) { <option [value]="opt">{{ opt }}</option> }
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button type="button" class="btn-apply" (click)="applyFilters()" [disabled]="loading()">
+        <i class="fa-solid fa-magnifying-glass"></i> Search
+      </button>
+      <button type="button" class="btn-clear" (click)="clearFilters()" [disabled]="loading()">
+        <i class="fa-solid fa-xmark"></i> Clear
+      </button>
+    </div>
+  </div>
+
+  <div class="panel jobs-panel">
+    <div class="section-head">
+      <h2>Open Positions</h2>
+      <span class="section-meta">
+        {{ totalCount() }} results · Page {{ pageNumber() }} of {{ totalPages() }}
+      </span>
+    </div>
+
+    @if (loading() && jobs().length === 0) {
+      <div class="jobs-skeleton">
+        @for (i of [1,2,3,4,5,6]; track i) {
+          <div class="sk-job">
+            <div class="sk-line wide"></div>
+            <div class="sk-line med"></div>
+            <div class="sk-line short"></div>
+          </div>
+        }
+      </div>
+    } @else if (jobs().length === 0) {
+      <div class="empty-state">
+        <i class="fa-solid fa-magnifying-glass" style="font-size:2.5rem;opacity:.3"></i>
+        <p>No active jobs matched your current filters. Try broadening your search.</p>
+      </div>
+    } @else {
+      <div class="jobs-grid">
+        @for (job of jobs(); track job.id) {
+          <article class="job-card" [class.card--applied]="isApplied(job.id)">
+            <div class="job-card-top">
+              <div>
+                <h3 class="job-title">{{ job.title }}</h3>
+                <p class="job-company">
+                  <i class="fa-solid fa-building" style="opacity:.5;margin-right:.25rem"></i>
+                  {{ job.companyName || 'Company' }} &nbsp;·&nbsp; {{ job.location || 'Location TBD' }}
+                </p>
+              </div>
+              <span class="source-chip">{{ job.source }}</span>
+            </div>
+
+            <div class="meta-chips">
+              <span class="meta-chip">{{ job.employmentType }}</span>
+              @if (job.salaryRange) {
+                <span class="meta-chip">
+                  <i class="fa-solid fa-coins"></i> {{ job.salaryRange }}
+                </span>
+              }
+              <span class="meta-chip">
+                <i class="fa-regular fa-calendar-days"></i> {{ job.postedAt | date: 'MMM d, y' }}
+              </span>
+            </div>
+
+            <div class="skills-row">
+              @if (job.topSkills.length === 0) {
+                <span class="skill-empty">No skills tagged</span>
+              } @else {
+                @for (skill of job.topSkills; track skill) {
+                  <span class="skill-tag">{{ skill }}</span>
+                }
+              }
+            </div>
+
+            <div class="card-footer">
+              <button type="button" class="btn-apply-job" (click)="onPrimaryAction(job)" [disabled]="shouldDisableApply(job)">
+                @if (isApplying(job.id)) {
+                  <i class="fa-solid fa-circle-notch fa-spin"></i> Applying…
+                } @else {
+                  @if (isExternalJob(job)) {
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> {{ getApplyLabel(job) }}
+                  } @else {
+                    <i class="fa-solid fa-paper-plane"></i> {{ getApplyLabel(job) }}
+                  }
+                }
+              </button>
+              <a class="btn-view" [routerLink]="['/candidate/jobs', job.id]">
+                Details <i class="fa-solid fa-arrow-right"></i>
+              </a>
+            </div>
+          </article>
+        }
+      </div>
+
+      @if (totalCount() > 0) {
+        <div class="pagination">
+          <button type="button" class="btn-page" (click)="goToPreviousPage()" [disabled]="loading() || !hasPreviousPage()">
+            <i class="fa-solid fa-arrow-left"></i> Prev
+          </button>
+          <span class="pagination-info">Page {{ pageNumber() }} of {{ totalPages() }}</span>
+          <button type="button" class="btn-page" (click)="goToNextPage()" [disabled]="loading() || !hasNextPage()">
+            Next <i class="fa-solid fa-arrow-right"></i>
+          </button>
+        </div>
+      }
+    }
+  </div>
+</section>

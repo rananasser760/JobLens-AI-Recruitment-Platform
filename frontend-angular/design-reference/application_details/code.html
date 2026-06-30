@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Application Details | JobLens</title>
+<!-- Fonts & Icons -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Manrope:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-surface": "#2e3132",
+                        "surface-container-highest": "#e1e2e4",
+                        "surface-container-high": "#e7e8ea",
+                        "secondary-fixed": "#d5e3fc",
+                        "tertiary-container": "#004a31",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-tertiary-fixed": "#002113",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "surface-tint": "#4059aa",
+                        "inverse-primary": "#b6c4ff",
+                        "on-surface-variant": "#444651",
+                        "primary-fixed": "#dce1ff",
+                        "on-tertiary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "primary-container": "#1e3a8a",
+                        "on-secondary-fixed": "#0d1c2e",
+                        "background": "#f8f9fb",
+                        "on-primary-fixed-variant": "#264191",
+                        "outline": "#757682",
+                        "on-error-container": "#93000a",
+                        "primary": "#00236f",
+                        "on-surface": "#191c1e",
+                        "error": "#ba1a1a",
+                        "on-tertiary-container": "#27c38a",
+                        "surface": "#f8f9fb",
+                        "error-container": "#ffdad6",
+                        "primary-fixed-dim": "#b6c4ff",
+                        "tertiary": "#00311f",
+                        "secondary-fixed-dim": "#b9c7df",
+                        "secondary-container": "#d5e3fc",
+                        "on-background": "#191c1e",
+                        "on-primary": "#ffffff",
+                        "surface-dim": "#d9dadc",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-low": "#f3f4f6",
+                        "on-primary-container": "#90a8ff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "surface-variant": "#e1e2e4",
+                        "surface-bright": "#f8f9fb",
+                        "outline-variant": "#c5c5d3",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "surface-container": "#edeef0",
+                        "secondary": "#515f74",
+                        "on-primary-fixed": "#00164e",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-fixed-variant": "#3a485b",
+                        "on-secondary-container": "#57657a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .headline { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SideNavBar Anchor -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-slate-100 flex flex-col py-6 z-50">
+<div class="px-6 mb-10">
+<h1 class="text-2xl font-bold tracking-tighter text-blue-900">JobLens</h1>
+<p class="font-manrope text-sm font-medium tracking-tight text-slate-500">Recruiter Portal</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-6 py-3 space-x-3 text-slate-500 hover:bg-slate-200/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-manrope text-sm font-medium tracking-tight">Dashboard</span>
+</a>
+<a class="flex items-center px-6 py-3 space-x-3 text-slate-500 hover:bg-slate-200/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="work">work</span>
+<span class="font-manrope text-sm font-medium tracking-tight">Jobs</span>
+</a>
+<a class="flex items-center px-6 py-3 space-x-3 text-slate-500 hover:bg-slate-200/50 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-manrope text-sm font-medium tracking-tight">Candidates</span>
+</a>
+<a class="flex items-center px-6 py-3 space-x-3 text-blue-900 font-bold border-r-4 border-blue-900 bg-slate-200/50" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-manrope text-sm font-medium tracking-tight">Applications</span>
+</a>
+</nav>
+<div class="mt-auto px-6 space-y-4">
+<button class="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-gradient-to-r from-tertiary to-tertiary-container text-white rounded-lg shadow-lg hover:opacity-90 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="auto_awesome">auto_awesome</span>
+<span class="font-manrope text-sm font-bold tracking-tight">AI Insight</span>
+</button>
+<div class="pt-4 space-y-1">
+<a class="flex items-center space-x-3 text-slate-500 hover:text-blue-900 py-2" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="settings">settings</span>
+<span class="font-manrope text-sm font-medium">Settings</span>
+</a>
+<a class="flex items-center space-x-3 text-slate-500 hover:text-blue-900 py-2" href="#">
+<span class="material-symbols-outlined text-xl" data-icon="help">help</span>
+<span class="font-manrope text-sm font-medium">Support</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 min-h-screen">
+<!-- TopNavBar Anchor -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] z-40 flex justify-between items-center px-8 h-16 bg-white/80 backdrop-blur-md shadow-sm">
+<div class="flex items-center flex-1">
+<div class="relative w-full max-w-md">
+<span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</span>
+<input class="block w-full pl-10 pr-3 py-2 border-none bg-surface-container-low rounded-full text-sm focus:ring-2 focus:ring-primary/20" placeholder="Search application data..." type="text"/>
+</div>
+</div>
+<div class="flex items-center space-x-6">
+<button class="text-slate-600 hover:text-blue-900 transition-all">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-slate-600 hover:text-blue-900 transition-all">
+<span class="material-symbols-outlined" data-icon="bolt" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</button>
+<div class="flex items-center space-x-3 pl-4 border-l border-slate-200">
+<div class="text-right">
+<p class="text-sm font-bold text-blue-900">Sarah Jenkins</p>
+<p class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Lead Recruiter</p>
+</div>
+<img alt="Recruiter Profile" class="w-10 h-10 rounded-full border-2 border-primary-container shadow-sm" data-alt="professional portrait of a confident female recruiter with a friendly expression in a modern office setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAb7lDM1oQbsdl92ZxfmakWjbmzSKvJf0t6fpWvaqDbUX_odhWAHPrZZCTkYz2fZCya0ox_26DXfgwNdoGfF4RhHpBkuuA7nX1WEn4P2buz99F1XRvm4imu-8fBfRA7DsPVXqRrIGnXtLe7hFLa1_2_UkqLR_sGimR0bqaq2QywWJnEdDizw42ZOrZp4sFm-IvpvYLZWKfxuLjhv6heLvODO9npmN4Ap-JW9Ud3F3F0NiXgQ56VqeqFuoBa_Wd407shDnKgjYjZEN0"/>
+</div>
+</div>
+</header>
+<!-- Canvas Content -->
+<section class="pt-24 pb-12 px-8">
+<!-- Breadcrumbs / Back Action -->
+<div class="mb-8 flex items-center justify-between">
+<div class="flex items-center space-x-2 text-sm text-slate-500">
+<a class="hover:text-primary" href="#">Applications</a>
+<span class="material-symbols-outlined text-xs" data-icon="chevron_right">chevron_right</span>
+<span class="font-semibold text-blue-900">Application #APP-8842</span>
+</div>
+<div class="flex space-x-3">
+<button class="flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-slate-600 bg-surface-container hover:bg-surface-container-high rounded-lg transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="share">share</span>
+<span>Share Profile</span>
+</button>
+<button class="flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg shadow-lg hover:opacity-90 transition-all">
+<span class="material-symbols-outlined text-lg" data-icon="mail">mail</span>
+<span>Send Message</span>
+</button>
+</div>
+</div>
+<!-- Header Grid: Bento Style -->
+<div class="grid grid-cols-12 gap-6 mb-8">
+<!-- Main Profile Overview -->
+<div class="col-span-12 lg:col-span-8 bg-surface-container-lowest rounded-xl p-8 flex flex-col md:flex-row gap-8 items-start shadow-sm border border-outline-variant/10">
+<div class="relative">
+<img alt="Candidate" class="w-32 h-32 md:w-40 md:h-40 rounded-xl object-cover shadow-md" data-alt="sharp professional headshot of a male candidate wearing a navy blazer, neutral grey background, high-end photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCaY3o-RxNKlaeH-bR6-QXZ1cbf13p3VxQT8IdughJOApCH7BIiNzQyZ8bJ1Y2ck6c1GBcIkY1SPReW9ej8xVrWFIeWB0XvghLmImpsSZyhjij99Tm7caH_7DCfKK5k6HpjVZu139_vXtkYTjKOd_Hl0db-LmbCl4fnrHru_R86a9P1LQEQ81HgR5ZzUBGuG23KzI7Ls8MAr3wSM4ZEfR1ndDcBTNenXKGcCXWDJMwWxkMcd8JHBIlTFC63px0nF0VrJbdMZ-Eet1Y"/>
+<div class="absolute -bottom-3 -right-3 bg-on-tertiary-container text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-lg flex items-center space-x-1">
+<span class="material-symbols-outlined text-xs" data-icon="verified" style="font-variation-settings: 'FILL' 1;">verified</span>
+<span>98% MATCH</span>
+</div>
+</div>
+<div class="flex-1">
+<div class="flex items-start justify-between">
+<div>
+<h2 class="text-3xl font-extrabold text-blue-900 tracking-tight mb-1">Alexander Vance</h2>
+<p class="text-lg text-slate-600 font-medium mb-4">Senior UX Product Architect</p>
+</div>
+<div class="bg-secondary-container text-on-secondary-container px-4 py-1 rounded-full text-xs font-bold flex items-center">
+<span class="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
+                                INTERVIEWING
+                            </div>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+<div class="space-y-1">
+<p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Location</p>
+<p class="text-sm font-semibold text-slate-700 flex items-center">
+<span class="material-symbols-outlined text-sm mr-1" data-icon="location_on">location_on</span>
+                                    San Francisco, CA
+                                </p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Experience</p>
+<p class="text-sm font-semibold text-slate-700 flex items-center">
+<span class="material-symbols-outlined text-sm mr-1" data-icon="schedule">schedule</span>
+                                    12+ Years
+                                </p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Availability</p>
+<p class="text-sm font-semibold text-slate-700 flex items-center">
+<span class="material-symbols-outlined text-sm mr-1" data-icon="event_available">event_available</span>
+                                    2 Weeks Notice
+                                </p>
+</div>
+</div>
+<div class="flex flex-wrap gap-2">
+<span class="px-3 py-1 bg-surface-container rounded text-xs font-medium text-slate-600">Product Strategy</span>
+<span class="px-3 py-1 bg-surface-container rounded text-xs font-medium text-slate-600">SaaS Systems</span>
+<span class="px-3 py-1 bg-surface-container rounded text-xs font-medium text-slate-600">Team Leadership</span>
+<span class="px-3 py-1 bg-surface-container rounded text-xs font-medium text-slate-600">Design Systems</span>
+</div>
+</div>
+</div>
+<!-- Match Stats -->
+<div class="col-span-12 lg:col-span-4 flex flex-col gap-6">
+<div class="flex-1 bg-blue-900 rounded-xl p-6 text-white relative overflow-hidden">
+<div class="relative z-10">
+<p class="text-[10px] font-bold uppercase tracking-widest text-blue-200 mb-4">AI Score Analytics</p>
+<div class="text-5xl font-extrabold tracking-tighter mb-2">9.4<span class="text-xl text-blue-300">/10</span></div>
+<p class="text-sm text-blue-100/80 leading-relaxed mb-6">Candidate demonstrates exceptional alignment with the "Strategic Leadership" requirements of the Job ID #442.</p>
+<button class="w-full py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg text-sm font-bold hover:bg-white/20 transition-all">
+                                View Full Scorecard
+                            </button>
+</div>
+<!-- Decorative Abstract Shape -->
+<div class="absolute -right-10 -bottom-10 w-48 h-48 bg-emerald-500/20 blur-3xl rounded-full"></div>
+</div>
+<div class="h-1/3 bg-tertiary-container text-on-tertiary-container rounded-xl p-5 flex items-center justify-between shadow-lg">
+<div class="flex items-center space-x-4">
+<div class="w-12 h-12 bg-tertiary rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-on-tertiary" data-icon="assessment">assessment</span>
+</div>
+<div>
+<h4 class="font-bold text-sm">Interview Performance</h4>
+<p class="text-xs text-on-tertiary-container/70">Completed 2 of 3 Rounds</p>
+</div>
+</div>
+<a class="text-on-tertiary-container font-bold text-xs underline underline-offset-4 hover:opacity-80" href="#">View Report</a>
+</div>
+</div>
+</div>
+<!-- Content Grid: Asymmetric Layout -->
+<div class="grid grid-cols-12 gap-8">
+<!-- Timeline & History (Column 1) -->
+<div class="col-span-12 lg:col-span-7 space-y-8">
+<!-- Process Stages Stepper -->
+<div class="bg-surface-container-lowest rounded-xl p-8 shadow-sm">
+<h3 class="text-xl font-bold text-blue-900 mb-8">Application Journey</h3>
+<div class="relative">
+<!-- Stepper Line -->
+<div class="absolute left-6 top-0 bottom-0 w-px bg-slate-200"></div>
+<div class="space-y-10">
+<!-- Stage 1 -->
+<div class="relative flex items-start pl-14">
+<div class="absolute left-3 w-6 h-6 bg-primary rounded-full flex items-center justify-center ring-4 ring-white">
+<span class="material-symbols-outlined text-white text-[14px]" data-icon="check">check</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-1">
+<h4 class="text-sm font-bold text-blue-900">Applied</h4>
+<span class="text-[10px] text-slate-400 font-medium">Oct 12, 2023</span>
+</div>
+<p class="text-xs text-slate-500">Manual application received through LinkedIn referral.</p>
+</div>
+</div>
+<!-- Stage 2 -->
+<div class="relative flex items-start pl-14">
+<div class="absolute left-3 w-6 h-6 bg-primary rounded-full flex items-center justify-center ring-4 ring-white">
+<span class="material-symbols-outlined text-white text-[14px]" data-icon="check">check</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-1">
+<h4 class="text-sm font-bold text-blue-900">Initial Screening</h4>
+<span class="text-[10px] text-slate-400 font-medium">Oct 14, 2023</span>
+</div>
+<p class="text-xs text-slate-500">Completed with Talent Acquisition. Recommendation: <strong>High</strong>.</p>
+</div>
+</div>
+<!-- Stage 3 (Active) -->
+<div class="relative flex items-start pl-14">
+<div class="absolute left-3 w-6 h-6 bg-on-tertiary-container rounded-full flex items-center justify-center ring-4 ring-emerald-100">
+<span class="material-symbols-outlined text-white text-[14px]" data-icon="sync" style="font-variation-settings: 'FILL' 1;">sync</span>
+</div>
+<div class="flex-1 bg-surface-container-low p-4 rounded-lg border-l-4 border-emerald-500">
+<div class="flex justify-between items-center mb-2">
+<h4 class="text-sm font-bold text-emerald-800">Panel Interview</h4>
+<span class="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-black tracking-widest uppercase">CURRENT</span>
+</div>
+<p class="text-xs text-slate-600 mb-4">Round Robin with Design and Engineering leads scheduled.</p>
+<div class="flex items-center justify-between bg-white p-3 rounded border border-slate-200">
+<div class="flex items-center space-x-3">
+<div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+<span class="material-symbols-outlined text-lg" data-icon="description">description</span>
+</div>
+<div>
+<p class="text-[11px] font-bold text-slate-700">Interview_Feedback_Panel.pdf</p>
+<p class="text-[9px] text-slate-400">Awaiting Final Submission</p>
+</div>
+</div>
+<a class="text-[11px] font-bold text-blue-900 hover:text-emerald-600" href="#">View Draft</a>
+</div>
+</div>
+</div>
+<!-- Stage 4 (Upcoming) -->
+<div class="relative flex items-start pl-14 opacity-50">
+<div class="absolute left-3 w-6 h-6 bg-slate-200 rounded-full flex items-center justify-center ring-4 ring-white"></div>
+<div class="flex-1">
+<h4 class="text-sm font-bold text-slate-400">Executive Review</h4>
+<p class="text-xs text-slate-400">Pending panel interview completion.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Work History Summary -->
+<div class="bg-surface-container-lowest rounded-xl p-8 shadow-sm">
+<div class="flex items-center justify-between mb-8">
+<h3 class="text-xl font-bold text-blue-900">Career Trajectory</h3>
+<button class="text-sm font-bold text-primary flex items-center hover:opacity-70">
+                                Full Resume
+                                <span class="material-symbols-outlined text-sm ml-1" data-icon="open_in_new">open_in_new</span>
+</button>
+</div>
+<div class="space-y-8">
+<div class="flex space-x-4">
+<div class="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-slate-500" data-icon="apartment">apartment</span>
+</div>
+<div>
+<h4 class="text-sm font-bold text-slate-900">Principal Designer @ Linear Dynamics</h4>
+<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">2019 — PRESENT</p>
+<p class="text-xs text-slate-600 leading-relaxed">Leading core product design for enterprise analytics. Scaled design team from 4 to 18 members over 3 years.</p>
+</div>
+</div>
+<div class="flex space-x-4">
+<div class="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-slate-500" data-icon="apartment">apartment</span>
+</div>
+<div>
+<h4 class="text-sm font-bold text-slate-900">Senior UI Engineer @ CloudScale</h4>
+<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">2016 — 2019</p>
+<p class="text-xs text-slate-600 leading-relaxed">Developed high-performance component libraries and implemented design systems across 3 main business units.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Side Sidebar (Column 2) -->
+<div class="col-span-12 lg:col-span-5 space-y-8">
+<!-- AI Assessment Details -->
+<div class="bg-surface-container-low rounded-xl p-6 border border-emerald-100/50">
+<div class="flex items-center space-x-2 mb-6">
+<span class="material-symbols-outlined text-emerald-600" data-icon="bolt" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<h3 class="text-lg font-extrabold text-blue-900 tracking-tight">Recruiter Summary (AI)</h3>
+</div>
+<div class="space-y-5">
+<div class="bg-white p-4 rounded-lg shadow-sm">
+<p class="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2">Top Strength</p>
+<p class="text-sm font-bold text-slate-900 mb-1">Architectural Thinking</p>
+<p class="text-xs text-slate-500 leading-relaxed">Excels at translating high-level business goals into concrete interface architectures.</p>
+</div>
+<div class="bg-white p-4 rounded-lg shadow-sm">
+<p class="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2">Potential Risk</p>
+<p class="text-sm font-bold text-slate-900 mb-1">Salary Alignment</p>
+<p class="text-xs text-slate-500 leading-relaxed">Expected range is 12% above the listed role maximum. Negotiation may be required.</p>
+</div>
+<div class="bg-emerald-600/5 p-4 rounded-lg border border-emerald-200">
+<p class="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-2">Best For</p>
+<p class="text-xs text-slate-700 italic">"Ideally suited for complex dashboard transformations or greenfield enterprise platform launches."</p>
+</div>
+</div>
+</div>
+<!-- Internal Notes -->
+<div class="bg-surface-container-lowest rounded-xl p-8 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-lg font-bold text-blue-900">Recruiter Notes</h3>
+<button class="material-symbols-outlined text-slate-400 hover:text-primary transition-colors" data-icon="add_comment">add_comment</button>
+</div>
+<div class="space-y-4">
+<div class="pb-4 border-b border-slate-100">
+<div class="flex items-center justify-between mb-2">
+<span class="text-xs font-bold text-slate-800">Sarah Jenkins</span>
+<span class="text-[9px] text-slate-400">2 days ago</span>
+</div>
+<p class="text-xs text-slate-500 italic leading-relaxed">"Candidate showed impressive knowledge of our legacy architecture during the screening call. Very humble despite senior experience."</p>
+</div>
+<div class="pb-4">
+<div class="flex items-center justify-between mb-2">
+<span class="text-xs font-bold text-slate-800">Marcus Thorne (HM)</span>
+<span class="text-[9px] text-slate-400">Yesterday</span>
+</div>
+<p class="text-xs text-slate-500 italic leading-relaxed">"His portfolio has the exact data-density balance we're looking for in the Q4 project. Move to final panel ASAP."</p>
+</div>
+</div>
+</div>
+<!-- Application Info -->
+<div class="bg-white rounded-xl p-6 shadow-sm border border-slate-100">
+<div class="grid grid-cols-2 gap-4">
+<div class="p-4 bg-slate-50 rounded-lg">
+<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Time in Stage</p>
+<p class="text-xl font-headline font-extrabold text-blue-900">4 Days</p>
+</div>
+<div class="p-4 bg-slate-50 rounded-lg">
+<p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Referral</p>
+<p class="text-xl font-headline font-extrabold text-blue-900">Internal</p>
+</div>
+</div>
+<div class="mt-4 p-4 border border-dashed border-slate-300 rounded-lg flex items-center justify-center space-x-2 text-slate-400 hover:border-primary hover:text-primary transition-all cursor-pointer">
+<span class="material-symbols-outlined text-lg" data-icon="upload_file">upload_file</span>
+<span class="text-xs font-bold">Attach Assessment Results</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button suppressed as per rules for Details pages -->
+</body></html>

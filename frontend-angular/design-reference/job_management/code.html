@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>JobLens - Jobs Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-surface": "#2e3132",
+                        "surface-container-highest": "#e1e2e4",
+                        "surface-container-high": "#e7e8ea",
+                        "secondary-fixed": "#d5e3fc",
+                        "tertiary-container": "#004a31",
+                        "tertiary-fixed": "#6ffbbe",
+                        "on-tertiary-fixed": "#002113",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "surface-tint": "#4059aa",
+                        "inverse-primary": "#b6c4ff",
+                        "on-surface-variant": "#444651",
+                        "primary-fixed": "#dce1ff",
+                        "on-tertiary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "primary-container": "#1e3a8a",
+                        "on-secondary-fixed": "#0d1c2e",
+                        "background": "#f8f9fb",
+                        "on-primary-fixed-variant": "#264191",
+                        "outline": "#757682",
+                        "on-error-container": "#93000a",
+                        "primary": "#00236f",
+                        "on-surface": "#191c1e",
+                        "error": "#ba1a1a",
+                        "on-tertiary-container": "#27c38a",
+                        "surface": "#f8f9fb",
+                        "error-container": "#ffdad6",
+                        "primary-fixed-dim": "#b6c4ff",
+                        "tertiary": "#00311f",
+                        "secondary-fixed-dim": "#b9c7df",
+                        "secondary-container": "#d5e3fc",
+                        "on-background": "#191c1e",
+                        "on-primary": "#ffffff",
+                        "surface-dim": "#d9dadc",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-low": "#f3f4f6",
+                        "on-primary-container": "#90a8ff",
+                        "inverse-on-surface": "#f0f1f3",
+                        "surface-variant": "#e1e2e4",
+                        "surface-bright": "#f8f9fb",
+                        "outline-variant": "#c5c5d3",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "surface-container": "#edeef0",
+                        "secondary": "#515f74",
+                        "on-primary-fixed": "#00164e",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-fixed-variant": "#3a485b",
+                        "on-secondary-container": "#57657a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body">
+<!-- SideNavBar Shell -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-slate-100 dark:bg-slate-800/50 flex flex-col py-6 z-50">
+<div class="px-6 mb-10">
+<h1 class="text-2xl font-bold tracking-tighter text-blue-900 dark:text-blue-100">JobLens</h1>
+<p class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">Recruiter Portal</p>
+</div>
+<nav class="flex-1 space-y-1 px-3">
+<a class="flex items-center px-4 py-3 rounded-lg text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">dashboard</span>
+                Dashboard
+            </a>
+<!-- Active Tab: Jobs -->
+<a class="flex items-center px-4 py-3 rounded-lg text-blue-900 dark:text-blue-400 font-bold border-r-4 border-blue-900 dark:border-blue-400 bg-slate-200/50 dark:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">work</span>
+                Jobs
+            </a>
+<a class="flex items-center px-4 py-3 rounded-lg text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">group</span>
+                Candidates
+            </a>
+<a class="flex items-center px-4 py-3 rounded-lg text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">description</span>
+                Applications
+            </a>
+</nav>
+<div class="px-3 pt-6 border-t border-slate-200/50 dark:border-slate-700/50">
+<button class="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-gradient-to-r from-tertiary to-tertiary-container text-white rounded-xl shadow-lg hover:opacity-90 transition-all duration-200">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="text-sm font-semibold tracking-tight">AI Insight</span>
+</button>
+</div>
+<div class="mt-6 px-3 space-y-1">
+<a class="flex items-center px-4 py-2 rounded-lg text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">settings</span>
+                Settings
+            </a>
+<a class="flex items-center px-4 py-2 rounded-lg text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined mr-3">help</span>
+                Support
+            </a>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="pl-64 min-h-screen">
+<!-- TopNavBar Shell -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md z-40 flex justify-between items-center px-8">
+<div class="flex items-center bg-surface-container-low rounded-full px-4 py-1.5 w-96">
+<span class="material-symbols-outlined text-slate-400 text-xl mr-2">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-full placeholder:text-slate-400" placeholder="Search jobs, candidates..." type="text"/>
+</div>
+<div class="flex items-center space-x-6">
+<button class="relative text-slate-600 dark:text-slate-400 hover:text-blue-700 transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="text-slate-600 dark:text-slate-400 hover:text-blue-700 transition-colors">
+<span class="material-symbols-outlined">bolt</span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border-2 border-primary-container">
+<img alt="Recruiter Profile" data-alt="professional headshot of a recruitment manager in a minimalist office setting, warm studio lighting, clean background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDFF39KtJSlFVlLszXSe5Yy3f1e_FayB2u9bS6k2NaxY5_E-LxV4H0PN9nltRVTIaWN6JNdIme0ERSz5QjR7xV9ZiaC0piIX3mvi_ZcXAWZw4fAVGctXpCZAp6l4Tt3O361eTQdsJceAqZ3_LavvcmPhIiJrI8QyJdIa_JA21TmpOuP3L6NShtut_1WCwd28gKw9dda_bEOeH-4M4RohCnjA86PIBl32E7HT3AVHPgrWMiWPBAKmSrdE2FAHtLf09h4u8UbjnehJZk"/>
+</div>
+</div>
+</header>
+<!-- Content Area -->
+<div class="pt-24 px-10 pb-12">
+<!-- Header Section -->
+<div class="flex justify-between items-end mb-10">
+<div>
+<h2 class="text-3xl font-extrabold font-headline tracking-tight text-primary">Job Management</h2>
+<p class="text-on-surface-variant mt-1">Curate and monitor your active career opportunities.</p>
+</div>
+<button class="flex items-center px-6 py-3 bg-primary-container text-white rounded-xl shadow-md hover:scale-[0.98] transition-all duration-150">
+<span class="material-symbols-outlined mr-2">add</span>
+<span class="font-semibold text-sm">Post New Job</span>
+</button>
+</div>
+<!-- Dashboard Mini Stats (Asymmetric Bento Style) -->
+<div class="grid grid-cols-12 gap-6 mb-10">
+<div class="col-span-12 md:col-span-4 bg-surface-container-lowest p-6 rounded-xl shadow-sm border-l-4 border-emerald-500">
+<p class="text-label-sm uppercase font-bold tracking-widest text-slate-400 mb-2">Active Roles</p>
+<div class="flex items-baseline space-x-2">
+<span class="text-4xl font-headline font-bold text-primary">12</span>
+<span class="text-on-tertiary-container font-medium text-sm flex items-center">
+<span class="material-symbols-outlined text-xs mr-1">trending_up</span>
+                            +2 this week
+                        </span>
+</div>
+</div>
+<div class="col-span-12 md:col-span-8 bg-surface-container-low p-6 rounded-xl flex items-center justify-between">
+<div class="flex -space-x-3 overflow-hidden">
+<img alt="Candidate 1" class="inline-block h-10 w-10 rounded-full ring-2 ring-surface-container-low" data-alt="close-up portrait of a professional woman smiling, soft daylight, blurred urban background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDc6UMK6Asx2CUTMFeSR0WndmHtMIvAb8uH6a84JNcB5PiK8DM57qDoMGY9HbeqzQ2Qzka332Ld3G-XSWM2lgy072qNG80MT_l63b-f9-iwoaa9e3DmTTICtWRfQnIpAgIR852kmafDhEJ1agdGZf8dn3y-TQj1xEIfUJq-HmUzttjGKsUVLMjBosgVr56VGBXVwwe2R-Kfo26H7NqFlOJv29ulJsIKN7VwQRxfWqtA0_mbQjeW-6DB0w24V5_LQRXg45c0u_VazgQ"/>
+<img alt="Candidate 2" class="inline-block h-10 w-10 rounded-full ring-2 ring-surface-container-low" data-alt="portrait of a creative professional man in a modern office environment, natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBR9puxMbdbVWTsoZRJDmvjHrWmCTcrXfr1brS2J2G4qy_x_mFPOJaXUDTFCT83w2iowjasyoeaGVElQTD3Hp44AyHh74tMNX1DsF1AWQAekM_vPNRuY8ijknLHIidvHGOzYUikSXLXhhR-pAaRIw8zhHA2jH7h0ezzeKmgNs08kjTenpDwKc2TTffQvSLqyFHtvdbtQ1sv8FEVkF_t3o-9Ot_0np6bK-ROcPsZfuJGI-m7idSXPZ5fzvVkslW3ACMpsbaHv76jeY8"/>
+<img alt="Candidate 3" class="inline-block h-10 w-10 rounded-full ring-2 ring-surface-container-low" data-alt="headshot of a young professional woman with a bright smile, soft focus studio background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5qVWcB8gdydrjTK-HNNBy6fuVULfXUcT11l-1c0uBWO74VanoJAJM3LFsDk3Vr14wcwygPEmVSJRJggo1jh-ZDxKHIyi8Ij_H3NFOtpTN1ZVAb3ykEWRL2MO7bfPBWDB2hb5jtN4gATYHySjMqseGlS_pGvTok9e9TwlFnwWtQeFGf-Xpw4rqJAx8gWQAb3vIkvw1X08aW3Z0whDyZ6WW78A1PX5k3_VhfXGJcBV7lvtX8l26jl0M5EPIM-kxWTJ40ioW9yjsJfQ"/>
+<div class="flex items-center justify-center h-10 w-10 rounded-full ring-2 ring-surface-container-low bg-primary text-white text-xs font-bold">+24</div>
+</div>
+<div class="text-right">
+<p class="text-sm font-semibold text-primary">New Applicants Today</p>
+<p class="text-xs text-on-surface-variant">Review highly-matched candidates first</p>
+</div>
+</div>
+</div>
+<!-- Jobs Table Shell -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="p-6 flex items-center justify-between border-b border-surface-container">
+<div class="flex space-x-4">
+<button class="px-4 py-1.5 bg-secondary-container text-on-secondary-container rounded-full text-xs font-bold">All Jobs</button>
+<button class="px-4 py-1.5 text-on-surface-variant hover:bg-surface-container rounded-full text-xs font-bold transition-colors">Active</button>
+<button class="px-4 py-1.5 text-on-surface-variant hover:bg-surface-container rounded-full text-xs font-bold transition-colors">Closed</button>
+</div>
+<button class="text-primary text-sm font-semibold flex items-center hover:underline">
+<span class="material-symbols-outlined text-lg mr-1">filter_list</span>
+                        Advanced Filters
+                    </button>
+</div>
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low">
+<tr>
+<th class="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Job Details</th>
+<th class="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Status</th>
+<th class="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Applicants</th>
+<th class="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">AI Match</th>
+<th class="px-8 py-4 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-right">Operations</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="px-8 py-6">
+<p class="font-bold text-primary group-hover:text-blue-700 transition-colors">Senior Product Designer</p>
+<p class="text-xs text-on-surface-variant mt-0.5">Design • Full-time • London, UK</p>
+</td>
+<td class="px-6 py-6">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter bg-emerald-100 text-emerald-800">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+                                    Active
+                                </span>
+</td>
+<td class="px-6 py-6">
+<div class="flex items-center space-x-2">
+<span class="text-lg font-headline font-bold text-primary">42</span>
+<span class="text-[10px] text-on-surface-variant font-medium">Applicants</span>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="inline-flex items-center px-3 py-1 bg-tertiary-fixed text-on-tertiary-fixed rounded-lg text-xs font-bold shadow-sm">
+<span class="material-symbols-outlined text-sm mr-1" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+                                    88% Score
+                                </div>
+</td>
+<td class="px-8 py-6 text-right">
+<div class="flex items-center justify-end space-x-3">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors" title="View Applications">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-primary transition-colors" title="Edit">
+<span class="material-symbols-outlined">edit</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-error transition-colors" title="Delete">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="px-8 py-6">
+<p class="font-bold text-primary group-hover:text-blue-700 transition-colors">Staff Backend Engineer</p>
+<p class="text-xs text-on-surface-variant mt-0.5">Engineering • Remote • Europe</p>
+</td>
+<td class="px-6 py-6">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter bg-emerald-100 text-emerald-800">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+                                    Active
+                                </span>
+</td>
+<td class="px-6 py-6">
+<div class="flex items-center space-x-2">
+<span class="text-lg font-headline font-bold text-primary">128</span>
+<span class="text-[10px] text-on-surface-variant font-medium">Applicants</span>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="inline-flex items-center px-3 py-1 bg-tertiary-fixed text-on-tertiary-fixed rounded-lg text-xs font-bold shadow-sm">
+<span class="material-symbols-outlined text-sm mr-1" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+                                    94% Score
+                                </div>
+</td>
+<td class="px-8 py-6 text-right">
+<div class="flex items-center justify-end space-x-3">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-low/50 transition-colors group">
+<td class="px-8 py-6 opacity-60">
+<p class="font-bold text-primary">Marketing Director</p>
+<p class="text-xs text-on-surface-variant mt-0.5">Growth • Hybrid • New York</p>
+</td>
+<td class="px-6 py-6 opacity-60">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter bg-surface-container-highest text-slate-600">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-400 mr-1.5"></span>
+                                    Closed
+                                </span>
+</td>
+<td class="px-6 py-6 opacity-60">
+<div class="flex items-center space-x-2">
+<span class="text-lg font-headline font-bold text-primary">56</span>
+<span class="text-[10px] text-on-surface-variant font-medium">Applicants</span>
+</div>
+</td>
+<td class="px-6 py-6 opacity-60">
+<div class="inline-flex items-center px-3 py-1 bg-surface-container text-on-surface-variant rounded-lg text-xs font-bold">
+<span class="material-symbols-outlined text-sm mr-1">history</span>
+                                    Archived
+                                </div>
+</td>
+<td class="px-8 py-6 text-right">
+<div class="flex items-center justify-end space-x-3">
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">restore_from_trash</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+<!-- Pagination Footer -->
+<div class="px-8 py-4 bg-surface-container-low flex justify-between items-center text-xs font-medium text-slate-500">
+<p>Showing 1-10 of 24 Job Posts</p>
+<div class="flex space-x-1">
+<button class="p-1 hover:bg-surface-container rounded transition-colors"><span class="material-symbols-outlined">chevron_left</span></button>
+<button class="w-8 h-8 flex items-center justify-center bg-primary text-white rounded-lg">1</button>
+<button class="w-8 h-8 flex items-center justify-center hover:bg-surface-container rounded-lg">2</button>
+<button class="w-8 h-8 flex items-center justify-center hover:bg-surface-container rounded-lg">3</button>
+<button class="p-1 hover:bg-surface-container rounded transition-colors"><span class="material-symbols-outlined">chevron_right</span></button>
+</div>
+</div>
+</div>
+<!-- Floating Action Component: Quick AI Filter Hint -->
+<div class="mt-8 p-4 bg-primary text-on-primary rounded-xl flex items-center justify-between shadow-lg max-w-2xl mx-auto border border-primary-container/20">
+<div class="flex items-center space-x-4">
+<div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary-fixed" style="font-variation-settings: 'FILL' 1;">psychology</span>
+</div>
+<div>
+<p class="font-bold text-sm">Suggested: Repost 'Senior Product Designer'</p>
+<p class="text-xs text-white/70">Matching pool has grown by 15 candidates since last week.</p>
+</div>
+</div>
+<button class="px-4 py-2 bg-white text-primary text-xs font-bold rounded-lg hover:bg-blue-50 transition-colors">Optimize Now</button>
+</div>
+</div>
+</main>
+</body></html>

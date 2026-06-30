@@ -1,0 +1,452 @@
+<!-- ── Loading ── -->
+@if (interviewPhase() === 'loading') {
+  <div class="session-loading">
+    <div class="loading-spinner"></div>
+    <p>Loading your interview session…</p>
+  </div>
+}
+
+<!-- ── Error ── -->
+@if (interviewPhase() === 'error') {
+  <div class="session-error">
+    <div class="error-icon-wrap">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+    </div>
+    <h2>Session Unavailable</h2>
+    <p>{{ error() || 'This interview session could not be loaded.' }}</p>
+    <a class="btn-back" routerLink="/candidate/interviews">
+      <i class="fa-solid fa-arrow-left"></i> Back to Interviews
+    </a>
+  </div>
+}
+
+<!-- ══════════════════════════════════════════════
+     PRE-CHECK SCREEN
+══════════════════════════════════════════════ -->
+@if (interviewPhase() === 'pre-check' && session(); as s) {
+  <div class="precheck-shell">
+    <!-- Top bar -->
+    <nav class="session-nav">
+      <div class="nav-brand">
+        <div class="brand-icon-wrap">
+          <i class="fa-solid fa-briefcase"></i>
+        </div>
+        <div>
+          <span class="brand-name">JobLens</span>
+          <span class="brand-sub">Enterprise Recruiting</span>
+        </div>
+      </div>
+      <span class="nav-label">Interview Pre-Check</span>
+      <a class="btn-nav-back" routerLink="/candidate/interviews">
+        <i class="fa-solid fa-arrow-left"></i> Back
+      </a>
+    </nav>
+
+    <div class="precheck-body">
+      <!-- Title -->
+      <div class="precheck-intro">
+        <h1>{{ s.interviewTitle || s.jobTitle }}</h1>
+        <p>{{ s.jobTitle }} &nbsp;·&nbsp; {{ s.agentType }} AI Agent Interview</p>
+      </div>
+
+      <div class="precheck-cards">
+        <!-- Camera & Mic card -->
+        <div class="check-card">
+          <h3><i class="fa-solid fa-camera"></i> Camera &amp; Microphone</h3>
+
+          <div class="camera-preview-wrap">
+            @if (cameraStream()) {
+              <video #previewVideo autoplay muted playsinline class="preview-video"></video>
+            } @else {
+              <div class="no-camera-placeholder">
+                <i class="fa-solid fa-camera-slash no-cam-icon"></i>
+                <span>Camera not enabled</span>
+                <small>Grant access below to preview your camera</small>
+              </div>
+            }
+          </div>
+
+          <ul class="perm-list">
+            <li class="perm-item" [class.perm-granted]="permissionsGranted().mic" [class.perm-denied]="permChecked() && !permissionsGranted().mic">
+              <span class="perm-dot"></span>
+              <i class="fa-solid fa-microphone perm-icon"></i>
+              Microphone
+              @if (permissionsGranted().mic) {
+                <span class="perm-badge perm-ok"><i class="fa-solid fa-check"></i> Ready</span>
+              } @else if (permChecked()) {
+                <span class="perm-badge perm-fail"><i class="fa-solid fa-xmark"></i> Denied — required</span>
+              } @else {
+                <span class="perm-badge perm-pending">Not checked</span>
+              }
+            </li>
+            <li class="perm-item" [class.perm-granted]="permissionsGranted().camera" [class.perm-denied]="permChecked() && !permissionsGranted().camera">
+              <span class="perm-dot"></span>
+              <i class="fa-solid fa-camera perm-icon"></i>
+              Camera
+              @if (permissionsGranted().camera) {
+                <span class="perm-badge perm-ok"><i class="fa-solid fa-check"></i> Ready</span>
+              } @else if (permChecked()) {
+                <span class="perm-badge perm-fail"><i class="fa-solid fa-xmark"></i> Denied — required</span>
+              } @else {
+                <span class="perm-badge perm-pending">Not checked</span>
+              }
+            </li>
+          </ul>
+
+          @if (!hasRequiredPermissions()) {
+            <button class="btn-grant-perms" type="button" (click)="requestPermissions()" [disabled]="requestingPerms()">
+              @if (requestingPerms()) {
+                <span class="btn-spinner"></span> Requesting access…
+              } @else {
+                <i class="fa-solid fa-microphone"></i> Grant Mic &amp; Camera Access
+              }
+            </button>
+          }
+        </div>
+
+        <!-- Guidelines card -->
+        <div class="check-card">
+          <h3><i class="fa-solid fa-clipboard-list"></i> Interview Guidelines</h3>
+          <ul class="rules-list">
+            <li><i class="fa-solid fa-volume-high"></i> Find a quiet environment with good lighting</li>
+            <li><i class="fa-solid fa-eye"></i> Keep your camera on and look directly at the screen</li>
+            <li><i class="fa-solid fa-ban"></i> Do not switch browser tabs during the interview</li>
+            <li><i class="fa-solid fa-robot"></i> Speak clearly — the AI will transcribe your responses</li>
+            <li><i class="fa-solid fa-clock"></i> Each response has a suggested time limit</li>
+          </ul>
+
+          @if (hasBrowserEvents()) {
+            <div class="browser-events-warning">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              {{ totalBrowserEvents() }} integrity event(s) detected
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Start button -->
+      <div class="precheck-cta">
+        @if (!hasRequiredPermissions()) {
+          <p class="cta-note">
+            <i class="fa-solid fa-circle-info"></i>
+            Grant microphone and camera access before starting.
+          </p>
+        }
+        <button
+          class="btn-start-session"
+          type="button"
+          (click)="enterInterview()"
+          [disabled]="acting() || !hasRequiredPermissions()"
+        >
+          @if (acting()) {
+            <span class="btn-spinner"></span> Starting…
+          } @else {
+            <i class="fa-solid fa-play"></i> Start Interview
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ══════════════════════════════════════════════
+     LIVE SESSION
+══════════════════════════════════════════════ -->
+@if ((interviewPhase() === 'in-progress' || interviewPhase() === 'completing') && session(); as s) {
+  <div class="live-shell">
+
+    <!-- ── Top Nav ── -->
+    <nav class="session-nav">
+      <div class="nav-brand">
+        <div class="brand-icon-wrap">
+          <i class="fa-solid fa-briefcase"></i>
+        </div>
+        <div>
+          <span class="brand-name">JobLens</span>
+          <span class="brand-sub">Enterprise Recruiting</span>
+        </div>
+      </div>
+      <div class="live-badge">
+        <span class="live-dot"></span>
+        <span>Live Session</span>
+      </div>
+    </nav>
+
+    <main class="live-main">
+      <!-- ── AI Arena ── -->
+      <div class="arena-wrap">
+        <div class="ai-arena">
+          <!-- Background orb layers -->
+          <div class="orb-layer orb-blue"></div>
+          <div class="orb-layer orb-teal"></div>
+
+          <!-- Kinetic rotating rings -->
+          <div class="kinetic-orbit orbit-outer"></div>
+          <div class="kinetic-orbit orbit-inner"></div>
+
+          <!-- AI Core glow -->
+          <div class="ai-core-glow"></div>
+
+          <!-- Central waveform bars -->
+          <div class="waveform-center">
+            @for (bar of waveformBars; track bar.delay) {
+              <div
+                class="wave-bar"
+                [class.wave-bar--speaking]="audioPlaying() || liveCapturing()"
+                [style.animation-duration]="bar.dur + 's'"
+                [style.animation-delay]="bar.delay + 's'"
+                [style.height.px]="bar.h"
+              ></div>
+            }
+          </div>
+
+          <!-- AI status label -->
+          <div class="ai-status-label">
+            @if (audioPlaying()) {
+              <span><i class="fa-solid fa-robot"></i> AI Speaking</span>
+            } @else if (aiSpeechMode() === 'fallback') {
+              <span><i class="fa-solid fa-volume-high"></i> AI Voice (Fallback)</span>
+            } @else if (liveCapturing()) {
+              <span><i class="fa-solid fa-microphone"></i> Listening…</span>
+            } @else if (isRealtimeConnecting()) {
+              <span><i class="fa-solid fa-circle-notch fa-spin"></i> Connecting…</span>
+            } @else if (aiConnected()) {
+              <span><i class="fa-solid fa-plug-circle-check"></i> AI Connected</span>
+            } @else {
+              <span><i class="fa-solid fa-stars"></i> AI Ready</span>
+            }
+          </div>
+
+          <!-- PiP candidate camera -->
+          <div class="pip-container">
+            @if (cameraStream()) {
+              <video #arenaVideo autoplay muted playsinline class="pip-video"></video>
+            } @else {
+              <div class="pip-placeholder">
+                <i class="fa-solid fa-user"></i>
+              </div>
+            }
+            <div class="pip-label">
+              <i class="fa-solid fa-video"></i> You
+            </div>
+            <div class="pip-live-dot"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Controls Bar ── -->
+      <div class="controls-bar">
+        <!-- Timer -->
+        <div class="timer-pill">
+          <i class="fa-solid fa-stopwatch"></i>
+          <span>{{ formattedTimer() }}</span>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-pill">
+          <i class="fa-solid fa-list-check"></i>
+          <span>{{ answeredCount() }} / {{ totalCount() }}</span>
+        </div>
+
+        <!-- End interview -->
+        <button
+          class="btn-end-interview"
+          type="button"
+          (click)="endSession()"
+          [disabled]="acting()"
+        >
+          <i class="fa-solid fa-phone-slash"></i>
+          <span>End Interview</span>
+        </button>
+
+        <!-- Realtime status -->
+        @if (canUseRealtime()) {
+          @if (!isRealtimeConnected()) {
+            <button class="btn-control-circle" type="button" (click)="connectRealtime()" title="Reconnect AI">
+              <i class="fa-solid fa-rotate" [class.fa-spin]="isRealtimeConnecting()"></i>
+            </button>
+          } @else {
+            <button
+              class="btn-control-circle btn-control--active"
+              type="button"
+              [disabled]="true"
+              title="Microphone is locked during live interview"
+            >
+              <i class="fa-solid fa-microphone"></i>
+            </button>
+          }
+        }
+
+        <div class="progress-pill">
+          <i class="fa-solid fa-camera"></i>
+          <span>{{ cameraMonitoringActive() ? 'Camera Monitoring Active' : 'Camera Monitoring Idle' }}</span>
+        </div>
+      </div>
+
+      <!-- ── Live Transcript ── -->
+      <div class="transcript-panel">
+        <div class="transcript-header">
+          <h3 class="transcript-title">
+            <i class="fa-solid fa-comments"></i> Live Conversation
+          </h3>
+          <div class="ai-active-chip">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            AI Active
+          </div>
+        </div>
+
+        <div class="transcript-feed" #transcriptFeed>
+          @if (!hasTranscripts()) {
+            <div class="transcript-empty">
+              <i class="fa-solid fa-comment-dots transcript-empty-icon"></i>
+              <p>The conversation will appear here once the interview begins.</p>
+            </div>
+          }
+
+          @for (entry of transcriptEntries(); track entry.createdAtIso) {
+            <div class="transcript-bubble" [class.bubble--ai]="entry.role === 'assistant'" [class.bubble--candidate]="entry.role === 'candidate'" [class.bubble--system]="entry.role === 'system'">
+              <div class="bubble-avatar">
+                @if (entry.role === 'assistant') {
+                  <i class="fa-solid fa-robot"></i>
+                } @else if (entry.role === 'candidate') {
+                  <i class="fa-solid fa-user"></i>
+                } @else {
+                  <i class="fa-solid fa-circle-info"></i>
+                }
+              </div>
+              <div class="bubble-body">
+                <span class="bubble-role">
+                  @if (entry.role === 'assistant') { Interviewer }
+                  @else if (entry.role === 'candidate') { You }
+                  @else { System }
+                </span>
+                <p class="bubble-text" [class.bubble-speaking]="entry.role === 'candidate' && liveCapturing()">
+                  {{ entry.text }}
+                </p>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Integrity warning -->
+        @if (hasBrowserEvents()) {
+          <div class="integrity-bar">
+            <i class="fa-solid fa-shield-halved"></i>
+            {{ totalBrowserEvents() }} integrity event(s) logged
+          </div>
+        }
+        @if (hasProctoringEvents()) {
+          <div class="integrity-bar">
+            <i class="fa-solid fa-video"></i>
+            Live camera alerts: {{ proctoringEvents().join(' | ') }}
+          </div>
+        }
+      </div>
+    </main>
+
+    <footer class="session-footer">
+      <p>JobLens Kinetic &nbsp;•&nbsp; Secure Candidate Environment</p>
+    </footer>
+  </div>
+
+  <!-- ── End Session Confirm Dialog ── -->
+  @if (confirmEndSessionOpen()) {
+    <div class="confirm-overlay">
+      <div class="confirm-dialog">
+        <div class="confirm-icon">
+          <i class="fa-solid fa-phone-slash"></i>
+        </div>
+        <h2>End Interview?</h2>
+        <p>This will finalize your session. You cannot re-enter once ended.</p>
+        <div class="confirm-actions">
+          <button class="btn-confirm-cancel" type="button" (click)="confirmEndSessionOpen.set(false)" [disabled]="acting()">
+            <i class="fa-solid fa-arrow-left"></i> Continue Session
+          </button>
+          <button class="btn-confirm-end" type="button" (click)="confirmEndSession()" [disabled]="acting()">
+            @if (acting()) {
+              <span class="btn-spinner"></span> Ending…
+            } @else {
+              <i class="fa-solid fa-phone-slash"></i> End Now
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (leaveWarningOpen()) {
+    <div class="confirm-overlay">
+      <div class="confirm-dialog">
+        <div class="confirm-icon">
+          <i class="fa-solid fa-door-open"></i>
+        </div>
+        <h2>Leaving Is Restricted</h2>
+        <p>
+          This is your first leave attempt. If you try to leave again, the interview will end automatically and your score will be computed from captured answers.
+        </p>
+        <div class="confirm-actions">
+          <button class="btn-confirm-cancel" type="button" (click)="dismissLeaveWarning()" [disabled]="acting()">
+            <i class="fa-solid fa-arrow-left"></i> Continue Interview
+          </button>
+          <button class="btn-confirm-end" type="button" (click)="endSessionAfterLeaveWarning()" [disabled]="acting()">
+            <i class="fa-solid fa-phone-slash"></i> End Interview Now
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+}
+
+<!-- ══════════════════════════════════════════════
+     COMPLETED
+══════════════════════════════════════════════ -->
+@if (interviewPhase() === 'completed') {
+  <div class="completed-shell">
+    <nav class="session-nav">
+      <div class="nav-brand">
+        <div class="brand-icon-wrap">
+          <i class="fa-solid fa-briefcase"></i>
+        </div>
+        <div>
+          <span class="brand-name">JobLens</span>
+          <span class="brand-sub">Enterprise Recruiting</span>
+        </div>
+      </div>
+    </nav>
+
+    <div class="completed-body">
+      <div class="completed-icon">
+        <i class="fa-solid fa-trophy"></i>
+      </div>
+      <h1>Interview Complete!</h1>
+      <p>
+        Great work! Your responses have been recorded and will be reviewed by our AI.
+        You'll be notified once your report is ready.
+      </p>
+
+      <div class="completed-stats">
+        <div class="stat-chip">
+          <i class="fa-solid fa-list-check"></i>
+          {{ answeredCount() }} / {{ totalCount() }} Questions
+        </div>
+        <div class="stat-chip">
+          <i class="fa-solid fa-stopwatch"></i>
+          {{ formattedTimer() }} Elapsed
+        </div>
+      </div>
+
+      <div class="completed-actions">
+        <a class="btn-view-report" [routerLink]="['/candidate/interviews', sessionId(), 'report']">
+          <i class="fa-solid fa-chart-bar"></i> View My Report
+        </a>
+        <a class="btn-back-interviews" routerLink="/candidate/interviews">
+          <i class="fa-solid fa-arrow-left"></i> All Interviews
+        </a>
+      </div>
+    </div>
+
+    <footer class="session-footer">
+      <p>JobLens Kinetic &nbsp;•&nbsp; Secure Candidate Environment</p>
+    </footer>
+  </div>
+}

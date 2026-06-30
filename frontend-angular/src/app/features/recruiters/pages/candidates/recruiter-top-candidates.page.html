@@ -1,0 +1,87 @@
+<section class="top-candidates-shell">
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/recruiter/jobs">← Back to jobs</a>
+      <h1>Top Candidates</h1>
+      <p>AI-recommended candidates for this job based on profile and skill similarity.</p>
+    </div>
+    <button type="button" (click)="load(true)" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (recommendationMessage() && !error()) {
+    <p class="banner info">{{ recommendationMessage() }}</p>
+  }
+
+  @if (job(); as selectedJob) {
+    <article class="panel hero">
+      <h2>{{ selectedJob.title }}</h2>
+      <p>{{ selectedJob.companyName || 'Company' }} · {{ selectedJob.location || 'Location not set' }}</p>
+    </article>
+  }
+
+  <article class="panel table-panel">
+    <table>
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Candidate</th>
+          <th>Experience</th>
+          <th>Match</th>
+          <th>Skills</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (candidate of candidates(); track trackByCandidateId($index, candidate); let i = $index) {
+          <tr>
+            <td>{{ i + 1 }}</td>
+            <td>
+              <div class="candidate-name">{{ candidate.candidateName }}</div>
+              <div class="candidate-meta">
+                {{ candidate.currentTitle || 'No title provided' }}
+                @if (candidate.location) {
+                  · {{ candidate.location }}
+                }
+              </div>
+            </td>
+            <td>
+              @if (candidate.yearsOfExperience !== null && candidate.yearsOfExperience !== undefined) {
+                {{ candidate.yearsOfExperience }} yrs
+              } @else {
+                --
+              }
+            </td>
+            <td>
+              <div class="match-score">{{ candidate.matchScore }}%</div>
+              @if (candidate.matchReason) {
+                <div class="match-reason">{{ candidate.matchReason }}</div>
+              }
+            </td>
+            <td>
+              <div class="skills-list">
+                @for (skill of candidate.skills.slice(0, 4); track skill) {
+                  <span class="skill-chip">{{ skill }}</span>
+                } @empty {
+                  <span class="skill-chip muted">No skills listed</span>
+                }
+              </div>
+            </td>
+            <td class="actions">
+              <a [routerLink]="['/recruiter/candidates', candidate.candidateId]">Profile</a>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="6" class="empty">No AI-recommended candidates found for this job yet.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </article>
+</section>

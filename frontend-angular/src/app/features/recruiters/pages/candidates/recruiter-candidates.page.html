@@ -1,0 +1,106 @@
+<section class="candidates-page">
+  <header class="page-header">
+    <div>
+      <h1>Candidate Search</h1>
+      <p>Filter the candidate pool by skills, location, and experience.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  <app-error-retry [visible]="!!error()" [message]="error() || ''" [busy]="loading()" (retry)="load()"></app-error-retry>
+
+  <section class="panel filters">
+    <label>
+      Keyword
+      <input #keywordInput type="text" [value]="keyword()" (input)="onKeywordChanged(keywordInput.value)" placeholder="Name or title" />
+    </label>
+
+    <label>
+      Location
+      <input #locationInput type="text" [value]="location()" (input)="onLocationChanged(locationInput.value)" placeholder="Cairo, Dubai, Remote" />
+    </label>
+
+    <label>
+      Skills
+      <input #skillsInput type="text" [value]="skills()" (input)="onSkillsChanged(skillsInput.value)" placeholder="Angular, .NET, SQL" />
+    </label>
+
+    <label>
+      Min experience
+      <input #minExpInput type="number" [value]="minExperience()" (input)="onMinExperienceChanged(minExpInput.value)" min="0" />
+    </label>
+
+    <label>
+      Max experience
+      <input #maxExpInput type="number" [value]="maxExperience()" (input)="onMaxExperienceChanged(maxExpInput.value)" min="0" />
+    </label>
+
+    <label>
+      Page size
+      <select #pageSizeSelect [value]="pageSize()" (change)="onPageSizeChanged(pageSizeSelect.value)" [disabled]="loading()">
+        @for (size of pageSizeOptions(); track size) {
+          <option [value]="size">{{ size }} per page</option>
+        }
+      </select>
+    </label>
+
+    <div class="filter-actions">
+      <button type="button" (click)="applyFilters()" [disabled]="loading()">Apply filters</button>
+      <button type="button" class="secondary" (click)="clearFilters()" [disabled]="loading()">Clear</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-head">
+      <h2>Candidates</h2>
+      <span>{{ totalCount() }} records · Page {{ pageNumber() }} of {{ totalPages() }}</span>
+    </div>
+
+    @if (candidates().length === 0) {
+      <p class="empty">No candidates match the current search criteria.</p>
+    } @else {
+      <div class="grid">
+        @for (candidate of candidates(); track candidate.id) {
+          <article class="candidate-card">
+            <header>
+              <h3>{{ candidate.fullName || 'Candidate' }}</h3>
+              <span>{{ candidate.yearsOfExperience ?? 0 }}y</span>
+            </header>
+
+            <p>{{ candidate.currentTitle || 'Title not set' }}</p>
+            <small>{{ candidate.email }}</small>
+            <small>{{ candidate.location || 'Location not set' }}</small>
+
+            <div class="skills">
+              @if (candidate.topSkills.length === 0) {
+                <span class="empty-skill">No skills tagged</span>
+              } @else {
+                @for (skill of candidate.topSkills; track skill) {
+                  <span>{{ skill }}</span>
+                }
+              }
+            </div>
+
+            <footer class="card-actions">
+              <a [routerLink]="['/recruiter/candidates', candidate.id]">Open profile</a>
+            </footer>
+          </article>
+        }
+      </div>
+
+      @if (totalCount() > 0) {
+        <div class="pagination">
+          <button type="button" class="secondary" (click)="goToPreviousPage()" [disabled]="loading() || !hasPreviousPage()">
+            Previous
+          </button>
+          <span>Showing page {{ pageNumber() }} of {{ totalPages() }}</span>
+          <button type="button" class="secondary" (click)="goToNextPage()" [disabled]="loading() || !hasNextPage()">
+            Next
+          </button>
+        </div>
+      }
+    }
+  </section>
+</section>

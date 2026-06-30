@@ -1,0 +1,188 @@
+<section class="interviews-page">
+  <!-- Header -->
+  <header class="page-header">
+    <div class="header-text">
+      <h1>My Interviews</h1>
+      <p>Track your AI interview sessions — view upcoming, enter active sessions, and access reports.</p>
+    </div>
+    <button type="button" class="btn-refresh" (click)="load()" [disabled]="loading()">
+      @if (loading()) {
+        <span class="btn-spinner"></span>
+      } @else {
+        <i class="fa-solid fa-rotate"></i>
+      }
+      {{ loading() ? 'Loading...' : 'Refresh' }}
+    </button>
+  </header>
+
+  <!-- Error -->
+  @if (error()) {
+    <div class="alert-error">
+      <i class="fa-solid fa-triangle-exclamation"></i> {{ error() }}
+    </div>
+  }
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-chip">
+      <span class="stat-icon"><i class="fa-solid fa-clipboard-list"></i></span>
+      <div>
+        <span class="stat-label">Total</span>
+        <strong class="stat-value">{{ totalSessions() }}</strong>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <span class="stat-icon"><i class="fa-regular fa-calendar-days"></i></span>
+      <div>
+        <span class="stat-label">Scheduled</span>
+        <strong class="stat-value">{{ scheduledSessions() }}</strong>
+      </div>
+    </div>
+    <div class="stat-chip accent">
+      <span class="stat-icon"><i class="fa-solid fa-circle-check"></i></span>
+      <div>
+        <span class="stat-label">Completed</span>
+        <strong class="stat-value">{{ completedSessions() }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label class="filter-label" for="status-filter">Status</label>
+      <select
+        id="status-filter"
+        class="filter-select"
+        #statusSelect
+        [value]="statusFilter()"
+        (change)="onStatusFilterChanged(statusSelect.value)"
+        [disabled]="loading()"
+      >
+        <option value="">All statuses</option>
+        @for (status of statusOptions(); track status) {
+          <option [value]="status">{{ formatStatus(status) }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="filter-actions">
+      <button type="button" class="btn-apply" (click)="applyFilter()" [disabled]="loading()">
+        <i class="fa-solid fa-filter"></i> Apply
+      </button>
+      <button type="button" class="btn-clear" (click)="clearFilter()" [disabled]="loading()">
+        <i class="fa-solid fa-xmark"></i> Clear
+      </button>
+    </div>
+  </div>
+
+  <!-- Sessions list -->
+  <div class="sessions-container">
+    <div class="list-header">
+      <h2>Interview Sessions</h2>
+      <span class="list-count">{{ interviews().length }} sessions</span>
+    </div>
+
+    @if (loading() && interviews().length === 0) {
+      <div class="skeleton-list">
+        @for (i of [1, 2, 3]; track i) {
+          <div class="skeleton-card">
+            <div class="sk-line wide"></div>
+            <div class="sk-line med"></div>
+            <div class="sk-line short"></div>
+          </div>
+        }
+      </div>
+    } @else if (interviews().length === 0) {
+      <div class="empty-state">
+        <span class="empty-icon"><i class="fa-solid fa-microphone-lines"></i></span>
+        <h3>No interviews yet</h3>
+        <p>Your AI interview sessions will appear here once a recruiter schedules them for your applications.</p>
+      </div>
+    } @else {
+      <div class="sessions-list">
+        @for (session of interviews(); track session.id) {
+          <article class="session-card" [class.card--live]="isLive(session)" [class.card--completed]="isCompleted(session)">
+            <!-- Card top: title + status -->
+            <div class="card-top">
+              <div class="card-info">
+                <h3 class="card-title">{{ session.interviewTitle || session.jobTitle }}</h3>
+                <p class="card-subtitle">
+                  <i class="fa-solid fa-briefcase" style="opacity:.5;margin-right:.3rem"></i>
+                  {{ session.jobTitle }}
+                </p>
+              </div>
+              <div class="card-badges">
+                <span [class]="getStatusClass(session.status)">
+                  @if (isLive(session)) {
+                    <i class="fa-solid fa-circle" style="color:#ba1a1a;font-size:.55rem"></i>
+                  }
+                  {{ formatStatus(session.status) }}
+                </span>
+                @if (session.cheatingDetected) {
+                  <span class="badge-risk">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Integrity flag
+                  </span>
+                }
+              </div>
+            </div>
+
+            <!-- Card meta -->
+            <div class="card-meta">
+              @if (session.scheduledAt) {
+                <span class="meta-item">
+                  <i class="fa-regular fa-calendar-days"></i>
+                  {{ session.scheduledAt | date: 'MMM d, y · h:mm a' }}
+                </span>
+              } @else {
+                <span class="meta-item muted">
+                  <i class="fa-regular fa-calendar-xmark"></i> Schedule pending
+                </span>
+              }
+              @if (session.overallScore !== null && session.overallScore !== undefined) {
+                <span class="meta-item score-pill">
+                  <i class="fa-solid fa-trophy"></i> Score: {{ session.overallScore | number: '1.0-1' }}
+                </span>
+              }
+              <span class="meta-item muted">
+                <i class="fa-solid fa-robot"></i> {{ session.candidateName }}
+              </span>
+            </div>
+
+            <!-- Card actions -->
+            <div class="card-actions">
+              @if (isLive(session) || isScheduled(session)) {
+                <a
+                  class="btn-action btn-primary-action"
+                  [routerLink]="['/candidate/interviews', session.id]"
+                >
+                  @if (isLive(session)) {
+                    <i class="fa-solid fa-play"></i> Resume Interview
+                  } @else {
+                    <i class="fa-solid fa-door-open"></i> Enter Interview
+                  }
+                </a>
+              }
+              @if (canViewReport(session)) {
+                <a
+                  class="btn-action btn-report"
+                  [routerLink]="['/candidate/interviews', session.id, 'report']"
+                >
+                  <i class="fa-solid fa-chart-bar"></i> View Report
+                </a>
+              }
+              @if (!isLive(session) && !isScheduled(session) && !canViewReport(session)) {
+                <a
+                  class="btn-action btn-secondary-action"
+                  [routerLink]="['/candidate/interviews', session.id]"
+                >
+                  <i class="fa-solid fa-eye"></i> View Details
+                </a>
+              }
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </div>
+</section>

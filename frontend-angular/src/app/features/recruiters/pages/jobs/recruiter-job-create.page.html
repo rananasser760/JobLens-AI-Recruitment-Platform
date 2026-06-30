@@ -1,0 +1,206 @@
+<section class="job-create-page">
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/recruiter/jobs">← Back to jobs</a>
+      <h1>Create Job</h1>
+      <p>Publish a new role and define the required skills for matching and ranking.</p>
+    </div>
+    <button type="button" class="refresh" (click)="loadMetadata()" [disabled]="loadingMetadata()">
+      {{ loadingMetadata() ? 'Refreshing metadata...' : 'Refresh metadata' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  <div class="layout-grid">
+    <form class="panel form" [formGroup]="form" (ngSubmit)="save()" novalidate>
+      <h2>Role details</h2>
+
+      <label>
+        Title
+        <input type="text" formControlName="title" placeholder="Senior Frontend Engineer" />
+      </label>
+
+      <label>
+        Description
+        <textarea rows="4" formControlName="description" placeholder="Describe the role impact and expectations"></textarea>
+      </label>
+
+      <label>
+        Requirements
+        <textarea rows="3" formControlName="requirements" placeholder="Must-have qualifications"></textarea>
+      </label>
+
+      <label>
+        Responsibilities
+        <textarea rows="3" formControlName="responsibilities" placeholder="Core day-to-day responsibilities"></textarea>
+      </label>
+
+      <div class="two-col">
+        <label>
+          Location
+          <input type="text" formControlName="location" placeholder="Remote, Cairo, Dubai" />
+        </label>
+
+        <label>
+          Employment type
+          <select formControlName="employmentType">
+            @for (type of employmentTypes(); track type) {
+              <option [value]="type">{{ type }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <div class="two-col">
+        <label>
+          Salary range
+          <input type="text" formControlName="salaryRange" placeholder="e.g. 3k - 5k USD" />
+        </label>
+
+        <label>
+          Experience level
+          <input type="text" formControlName="experienceLevel" placeholder="Mid, Senior, Lead" />
+        </label>
+      </div>
+
+      <div class="three-col">
+        <label>
+          Salary min
+          <input type="number" min="0" formControlName="salaryMin" />
+        </label>
+
+        <label>
+          Salary max
+          <input type="number" min="0" formControlName="salaryMax" />
+        </label>
+
+        <label>
+          Currency
+          <input type="text" formControlName="currency" placeholder="USD" />
+        </label>
+      </div>
+
+      <label>
+        Expires at
+        <input type="datetime-local" formControlName="expiresAt" />
+      </label>
+
+      <h2>Interview defaults</h2>
+      <div class="two-col">
+        <label>
+          Interview agent type
+          <select formControlName="interviewAgentType">
+            <option value="Mixed">Mixed</option>
+            <option value="Technical">Technical</option>
+            <option value="Behavioral">Behavioral</option>
+          </select>
+        </label>
+        <label>
+          Max questions
+          <input type="number" min="1" max="20" formControlName="interviewMaxQuestions" />
+        </label>
+      </div>
+
+      <label>
+        Evaluation criteria
+        <textarea rows="3" formControlName="interviewEvaluationCriteria" placeholder="Technical depth, communication, architecture decisions"></textarea>
+      </label>
+
+      <label>
+        Focus skills/topics (comma separated)
+        <input type="text" formControlName="interviewFocusSkills" placeholder="Angular, RxJS, ASP.NET Core" />
+      </label>
+
+      <div class="three-col">
+        <label>
+          Question time limit (seconds)
+          <input type="number" min="30" formControlName="interviewQuestionTimeLimitSeconds" />
+        </label>
+        <label>
+          Total duration (minutes)
+          <input type="number" min="10" formControlName="interviewTotalDurationMinutes" />
+        </label>
+        <label>
+          Proctoring strictness
+          <select formControlName="interviewProctoringStrictness">
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="submit" [disabled]="saving() || form.invalid">{{ saving() ? 'Creating...' : 'Create job' }}</button>
+        <a class="secondary-link" routerLink="/recruiter/jobs">Cancel</a>
+      </div>
+    </form>
+
+    <section class="panel skills-panel">
+      <div class="section-head">
+        <h2>Required skills</h2>
+        <span>{{ requiredSkills().length }} skills</span>
+      </div>
+
+      <div class="skill-builder">
+        <label>
+          Skill name
+          <input
+            #skillNameInput
+            type="text"
+            [value]="newSkillName()"
+            (input)="onNewSkillNameChanged(skillNameInput.value)"
+            placeholder="TypeScript"
+          />
+        </label>
+
+        <label>
+          Importance (1-100)
+          <input
+            #importanceInput
+            type="number"
+            min="1"
+            max="100"
+            [value]="newSkillImportance()"
+            (input)="onNewSkillImportanceChanged(importanceInput.value)"
+          />
+        </label>
+
+        <label class="check">
+          <input
+            #requiredToggle
+            type="checkbox"
+            [checked]="newSkillRequired()"
+            (change)="onNewSkillRequiredChanged(requiredToggle.checked)"
+          />
+          Required skill
+        </label>
+
+        <button type="button" (click)="addSkill()" [disabled]="!newSkillName().trim()">Add skill</button>
+      </div>
+
+      @if (requiredSkills().length === 0) {
+        <p class="empty">No required skills yet. Add at least one to improve AI matching quality.</p>
+      } @else {
+        <div class="skill-list">
+          @for (skill of requiredSkills(); track skill.skillName; let i = $index) {
+            <article class="skill-card">
+              <div>
+                <strong>{{ skill.skillName }}</strong>
+                <small>Importance {{ skill.importance ?? 50 }} · {{ skill.isRequired ? 'Required' : 'Preferred' }}</small>
+              </div>
+              <button type="button" class="secondary" (click)="removeSkill(i)">Remove</button>
+            </article>
+          }
+        </div>
+      }
+    </section>
+  </div>
+</section>

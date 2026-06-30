@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Candidate Profile Management | JobLens</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-container": "#d5e3fc",
+                        "inverse-surface": "#2e3132",
+                        "surface-dim": "#d9dadc",
+                        "primary-fixed-dim": "#b6c4ff",
+                        "primary-container": "#1e3a8a",
+                        "on-primary-fixed-variant": "#264191",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "on-primary": "#ffffff",
+                        "surface-container-high": "#e7e8ea",
+                        "primary-fixed": "#dce1ff",
+                        "on-error-container": "#93000a",
+                        "error-container": "#ffdad6",
+                        "tertiary-container": "#004a31",
+                        "error": "#ba1a1a",
+                        "outline": "#757682",
+                        "on-primary-container": "#90a8ff",
+                        "surface-bright": "#f8f9fb",
+                        "background": "#f8f9fb",
+                        "surface-container": "#edeef0",
+                        "secondary": "#515f74",
+                        "on-secondary-container": "#57657a",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e1e2e4",
+                        "outline-variant": "#c5c5d3",
+                        "on-surface": "#191c1e",
+                        "tertiary": "#00311f",
+                        "surface-tint": "#4059aa",
+                        "on-tertiary-fixed": "#002113",
+                        "tertiary-fixed": "#6ffbbe",
+                        "surface": "#f8f9fb",
+                        "secondary-fixed": "#d5e3fc",
+                        "inverse-on-surface": "#f0f1f3",
+                        "on-primary-fixed": "#00164e",
+                        "on-secondary": "#ffffff",
+                        "primary": "#00236f",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-tertiary-container": "#27c38a",
+                        "on-secondary-fixed-variant": "#3a485b",
+                        "on-surface-variant": "#444651",
+                        "surface-container-low": "#f3f4f6",
+                        "on-background": "#191c1e",
+                        "inverse-primary": "#b6c4ff",
+                        "surface-variant": "#e1e2e4",
+                        "on-secondary-fixed": "#0d1c2e",
+                        "secondary-fixed-dim": "#b9c7df"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-headline { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .ai-glass {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            background-image: linear-gradient(to bottom right, rgba(30, 58, 138, 0.05), transparent);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface antialiased">
+<!-- TopNavBar -->
+<header class="w-full h-16 bg-slate-50 flex items-center justify-between px-6 sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold font-headline text-blue-900">JobLens</span>
+<div class="hidden md:flex bg-slate-100 items-center px-3 py-1.5 rounded-lg w-64">
+<span class="material-symbols-outlined text-slate-500 text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-full ml-2 text-slate-500" placeholder="Search platform..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:bg-slate-200/50 transition-colors rounded-full relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="User profile photo" class="w-full h-full object-cover" data-alt="Close up professional headshot of a smiling young woman with glasses in a bright office environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYJOw2DYY_S9cFTGQRjmgn8peIio2tnx3CPDHImODAoFBnhJRfTIp28NBn8rtz4ks6jil_nxzgCE2TsTmKNIjhsfA0C_2o5euiBfABAqkHZlOPlGTvd04pg6iHGg-W3sYyFvBVrUQ17VPrF1WSlSS9Z1uL7Amy1sWTnfsRXCX8B0IxB76s98TX6EZQCOlclohJZbJAp-TRQbOxk2pEAlIv3043bJr8FWaKlkjvM3qg4GlG8wDJ3-S2k58Q_0qEVbLqI5uslRKzmSk"/>
+</div>
+</div>
+</header>
+<div class="flex">
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col py-8 h-screen w-64 fixed left-0 top-16 bg-slate-100">
+<div class="flex-1 px-4 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-blue-800 transition-all font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-blue-800 transition-all font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="event_upcoming">event_upcoming</span>
+<span>Interviews</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-blue-800 transition-all font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="work">work</span>
+<span>Jobs</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-blue-800 transition-all font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span>Applications</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-blue-900 font-bold border-r-2 border-blue-900 translate-x-1 duration-200 text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span>Profile</span>
+</a>
+</div>
+<div class="px-4 space-y-1 pt-8 border-t border-slate-200/50">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-blue-800 transition-all font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-blue-800 transition-all font-medium text-sm" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span>Help</span>
+</a>
+</div>
+</nav>
+<!-- Main Content -->
+<main class="flex-1 md:ml-64 p-6 lg:p-10">
+<div class="max-w-5xl mx-auto space-y-10">
+<!-- Page Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div>
+<h1 class="text-4xl font-extrabold font-headline text-primary tracking-tight">Profile Settings</h1>
+<p class="text-on-surface-variant mt-2">Manage your digital identity and professional portfolio.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-6 py-2.5 rounded-lg border border-outline-variant text-primary font-medium hover:bg-surface-container-low transition-colors">Discard</button>
+<button class="px-6 py-2.5 rounded-lg bg-primary text-on-primary font-medium shadow-lg shadow-primary/10 hover:brightness-110 transition-all">Save Changes</button>
+</div>
+</div>
+<!-- Profile Core & Personal Info Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Profile Picture Card -->
+<div class="lg:col-span-4 bg-surface-container-lowest rounded-xl p-8 flex flex-col items-center justify-center text-center group">
+<div class="relative w-32 h-32 mb-6">
+<div class="w-full h-full rounded-full overflow-hidden border-4 border-surface-container shadow-sm group-hover:border-primary-container transition-colors duration-500">
+<img alt="Profile" class="w-full h-full object-cover" data-alt="Studio portrait of a professional woman with a soft blue background and warm accent lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGYtL8Isnh4D-YYX1RIVfSE7JvkyGcl15od0JvxfMPBpbNTqUlWs_Z9mOaNXF6L0NOVU3lLwC4ID1tpFskuQBdlQ6v4YhrXYrrwaKhjgGuN4vuiwuCKq93C6JIrqvu7KwZ-zlkAdqPQTfOA0Pzd5DHqTjyW7LTuobHECzY9zGDsUHvy9BdoUivTUpD42D02GSB2Eu4h1OdwrPPPAYhir5LRdavYqXlrJW2rdb59IDFrr2qN9ya4vXDjivTEdHZJt47587dAbuGndY"/>
+</div>
+<label class="absolute bottom-0 right-0 w-10 h-10 bg-primary text-on-primary rounded-full flex items-center justify-center cursor-pointer shadow-lg hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-xl">photo_camera</span>
+<input class="hidden" type="file"/>
+</label>
+</div>
+<h3 class="text-xl font-headline font-bold text-on-surface">Alex Rivera</h3>
+<p class="text-sm text-on-surface-variant mt-1">Senior UX Designer</p>
+<div class="mt-6 w-full flex flex-col gap-2">
+<div class="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+<span>Profile Strength</span>
+<span class="text-on-tertiary-container">85%</span>
+</div>
+<div class="w-full h-2 bg-surface-container-high rounded-full overflow-hidden">
+<div class="bg-on-tertiary-container h-full w-[85%] rounded-full"></div>
+</div>
+</div>
+</div>
+<!-- Personal Information Card -->
+<div class="lg:col-span-8 bg-surface-container-lowest rounded-xl p-8">
+<div class="flex items-center gap-2 mb-6 text-primary">
+<span class="material-symbols-outlined">badge</span>
+<h2 class="text-lg font-headline font-bold">Personal Information</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="space-y-1.5">
+<label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Full Name</label>
+<input class="w-full px-4 py-3 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/40 transition-all text-on-surface" type="text" value="Alex Rivera"/>
+</div>
+<div class="space-y-1.5">
+<label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Email Address</label>
+<input class="w-full px-4 py-3 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/40 transition-all text-on-surface" type="email" value="alex.rivera@design.com"/>
+</div>
+<div class="space-y-1.5">
+<label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Job Title</label>
+<input class="w-full px-4 py-3 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/40 transition-all text-on-surface" type="text" value="Senior UX Designer"/>
+</div>
+<div class="space-y-1.5">
+<label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Location</label>
+<input class="w-full px-4 py-3 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/40 transition-all text-on-surface" type="text" value="San Francisco, CA"/>
+</div>
+</div>
+<div class="mt-6 space-y-1.5">
+<label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Bio</label>
+<textarea class="w-full px-4 py-3 bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/40 transition-all text-on-surface resize-none" rows="3">Product-focused UX Designer with 8+ years of experience in fintech and enterprise SaaS. Passionate about building intelligent design systems.</textarea>
+</div>
+</div>
+</div>
+<!-- Experience & Education Split -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Work Experience -->
+<div class="bg-surface-container-lowest rounded-xl p-8">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined">work</span>
+<h2 class="text-lg font-headline font-bold">Work Experience</h2>
+</div>
+<button class="text-on-tertiary-container flex items-center gap-1 font-bold text-sm hover:underline">
+<span class="material-symbols-outlined text-sm">add_circle</span> Add New
+                            </button>
+</div>
+<div class="space-y-8">
+<div class="relative pl-8 before:content-[''] before:absolute before:left-0 before:top-2 before:w-0.5 before:h-full before:bg-surface-container-high">
+<div class="absolute left-[-4px] top-1.5 w-2.5 h-2.5 rounded-full bg-on-tertiary-container ring-4 ring-white"></div>
+<div class="flex justify-between items-start">
+<div>
+<h4 class="font-bold text-on-surface">Lead Product Designer</h4>
+<p class="text-sm text-primary font-medium mt-0.5">FintechFlow • Full-time</p>
+<p class="text-xs text-slate-400 mt-1 uppercase tracking-tight">Jan 2021 — Present</p>
+</div>
+<button class="p-1.5 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</div>
+<div class="relative pl-8">
+<div class="absolute left-[-4px] top-1.5 w-2.5 h-2.5 rounded-full bg-slate-300 ring-4 ring-white"></div>
+<div class="flex justify-between items-start">
+<div>
+<h4 class="font-bold text-on-surface">UX Designer</h4>
+<p class="text-sm text-primary font-medium mt-0.5">ScaleUp SaaS • Contract</p>
+<p class="text-xs text-slate-400 mt-1 uppercase tracking-tight">Aug 2018 — Dec 2020</p>
+</div>
+<button class="p-1.5 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Education -->
+<div class="bg-surface-container-lowest rounded-xl p-8">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined">school</span>
+<h2 class="text-lg font-headline font-bold">Education</h2>
+</div>
+<button class="text-on-tertiary-container flex items-center gap-1 font-bold text-sm hover:underline">
+<span class="material-symbols-outlined text-sm">add_circle</span> Add New
+                            </button>
+</div>
+<div class="space-y-8">
+<div class="flex justify-between items-start p-4 bg-surface-container-low rounded-lg border-l-4 border-primary/20">
+<div>
+<h4 class="font-bold text-on-surface">M.A. Interaction Design</h4>
+<p class="text-sm text-on-surface-variant font-medium mt-0.5">Royal College of Art</p>
+<p class="text-xs text-slate-400 mt-1 uppercase tracking-tight">Graduated 2018</p>
+</div>
+<button class="p-1.5 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+<div class="flex justify-between items-start p-4 bg-surface-container-low rounded-lg border-l-4 border-primary/20">
+<div>
+<h4 class="font-bold text-on-surface">B.S. Computer Science</h4>
+<p class="text-sm text-on-surface-variant font-medium mt-0.5">Stanford University</p>
+<p class="text-xs text-slate-400 mt-1 uppercase tracking-tight">Graduated 2016</p>
+</div>
+<button class="p-1.5 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Skills & Documents Section -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Skills Management -->
+<div class="lg:col-span-7 bg-surface-container-lowest rounded-xl p-8">
+<div class="flex items-center gap-2 mb-6 text-primary">
+<span class="material-symbols-outlined">psychology</span>
+<h2 class="text-lg font-headline font-bold">Skills &amp; Expertise</h2>
+</div>
+<div class="flex flex-wrap gap-2 mb-8">
+<span class="px-4 py-1.5 bg-on-tertiary-container/10 text-on-tertiary-container text-xs font-bold uppercase tracking-wider rounded-full flex items-center gap-2">
+                                Figma <button class="material-symbols-outlined text-sm">close</button>
+</span>
+<span class="px-4 py-1.5 bg-on-tertiary-container/10 text-on-tertiary-container text-xs font-bold uppercase tracking-wider rounded-full flex items-center gap-2">
+                                React <button class="material-symbols-outlined text-sm">close</button>
+</span>
+<span class="px-4 py-1.5 bg-on-tertiary-container/10 text-on-tertiary-container text-xs font-bold uppercase tracking-wider rounded-full flex items-center gap-2">
+                                Design Systems <button class="material-symbols-outlined text-sm">close</button>
+</span>
+<span class="px-4 py-1.5 bg-on-tertiary-container/10 text-on-tertiary-container text-xs font-bold uppercase tracking-wider rounded-full flex items-center gap-2">
+                                UX Strategy <button class="material-symbols-outlined text-sm">close</button>
+</span>
+<span class="px-4 py-1.5 bg-on-tertiary-container/10 text-on-tertiary-container text-xs font-bold uppercase tracking-wider rounded-full flex items-center gap-2">
+                                Framer <button class="material-symbols-outlined text-sm">close</button>
+</span>
+<button class="px-4 py-1.5 border border-dashed border-outline-variant text-slate-400 text-xs font-bold uppercase tracking-wider rounded-full hover:bg-surface-container-low transition-all">
+                                + Add Skill
+                            </button>
+</div>
+<!-- AI Match Feature (Design System Style) -->
+<div class="ai-glass p-6 rounded-xl border border-on-tertiary-container/10">
+<div class="flex items-center gap-3 mb-3">
+<div class="w-8 h-8 rounded-lg bg-tertiary-container flex items-center justify-center text-on-tertiary-container">
+<span class="material-symbols-outlined text-xl">auto_awesome</span>
+</div>
+<span class="text-sm font-bold text-on-tertiary-container font-headline">AI Suggestion</span>
+</div>
+<p class="text-sm text-slate-600 leading-relaxed mb-4">Based on your experience at FintechFlow, adding <strong class="text-on-surface">"API Integration"</strong> and <strong class="text-on-surface">"Agile Methodology"</strong> would increase your match score by 14%.</p>
+<button class="text-xs font-bold text-on-tertiary-container uppercase tracking-widest hover:brightness-75 transition-all">Apply Suggestions</button>
+</div>
+</div>
+<!-- Documents/Resume -->
+<div class="lg:col-span-5 bg-surface-container-lowest rounded-xl p-8">
+<div class="flex items-center gap-2 mb-6 text-primary">
+<span class="material-symbols-outlined">attachment</span>
+<h2 class="text-lg font-headline font-bold">Documents</h2>
+</div>
+<div class="space-y-4">
+<div class="group p-4 bg-surface-container-low rounded-xl flex items-center justify-between border-2 border-transparent hover:border-primary/10 transition-all cursor-pointer">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center text-red-600">
+<span class="material-symbols-outlined">picture_as_pdf</span>
+</div>
+<div>
+<h5 class="text-sm font-bold text-on-surface">Alex_Rivera_CV.pdf</h5>
+<p class="text-xs text-slate-400">Updated 2 days ago • 1.2 MB</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">download</span>
+</div>
+<div class="group p-4 bg-surface-container-low rounded-xl flex items-center justify-between border-2 border-transparent hover:border-primary/10 transition-all cursor-pointer">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+<span class="material-symbols-outlined">description</span>
+</div>
+<div>
+<h5 class="text-sm font-bold text-on-surface">Portfolio_2024.pdf</h5>
+<p class="text-xs text-slate-400">Updated 1 month ago • 4.8 MB</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">download</span>
+</div>
+<label class="block border-2 border-dashed border-outline-variant rounded-xl p-8 text-center hover:bg-surface-container-low transition-all cursor-pointer">
+<span class="material-symbols-outlined text-slate-400 text-3xl mb-2">upload_file</span>
+<p class="text-sm font-bold text-slate-500 uppercase tracking-wider">Upload New Document</p>
+<p class="text-xs text-slate-400 mt-1">PDF, DOCX up to 10MB</p>
+<input class="hidden" type="file"/>
+</label>
+</div>
+</div>
+</div>
+<!-- Footer Spacer -->
+<div class="pt-10"></div>
+</div>
+</main>
+</div>
+<!-- Mobile Navigation -->
+<nav class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-50 flex items-center justify-around border-t border-slate-200 z-50">
+<a class="flex flex-col items-center justify-center text-slate-500" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] uppercase font-bold tracking-tighter mt-0.5">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500" href="#">
+<span class="material-symbols-outlined">work</span>
+<span class="text-[10px] uppercase font-bold tracking-tighter mt-0.5">Jobs</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary font-bold" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] uppercase font-bold tracking-tighter mt-0.5">Profile</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-500" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] uppercase font-bold tracking-tighter mt-0.5">Settings</span>
+</a>
+</nav>
+</body></html>

@@ -1,0 +1,67 @@
+:host {
+  display: contents;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(10, 16, 34, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.dialog-panel {
+  width: min(460px, 100%);
+  border-radius: 14px;
+  border: 1px solid var(--jl-border);
+  background: var(--jl-surface);
+  box-shadow: 0 24px 45px -24px rgba(11, 24, 58, 0.55);
+  padding: 1rem;
+}
+
+header h3 {
+  margin: 0;
+  color: var(--jl-primary);
+  font-size: 1.1rem;
+}
+
+p {
+  margin: 0.75rem 0 0;
+  color: var(--jl-ink-soft);
+  line-height: 1.5;
+}
+
+footer {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--jl-primary);
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.secondary {
+  border: 1px solid var(--jl-border);
+  background: #fff;
+  color: var(--jl-ink-soft);
+}
+
+.danger {
+  background: var(--jl-danger);
+}

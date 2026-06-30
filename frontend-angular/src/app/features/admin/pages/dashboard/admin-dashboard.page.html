@@ -1,0 +1,223 @@
+<section class="admin-shell">
+  <header>
+    <h2>Admin Operations</h2>
+    <p>Control scraping and cleanup workflows and inspect recent background activity.</p>
+    <div class="status-line">
+      <span class="chip" [class.fail]="!isScrapeRunning()">{{ scrapingStateLabel() }}</span>
+      <span class="meta">Live monitor: {{ isScrapeRunning() ? 'Running' : 'Idle' }}</span>
+      <span class="meta">Last sync: {{ lastSyncAt() ? (lastSyncAt() | date: 'MMM d, y, h:mm:ss a') : '-' }}</span>
+      <button type="button" class="ghost" (click)="refresh(true)" [disabled]="loading() || acting()">
+        {{ loading() ? 'Refreshing...' : 'Refresh monitor' }}
+      </button>
+    </div>
+  </header>
+
+  @if (error()) {
+    <p class="error-banner">{{ error() }}</p>
+  }
+  @if (monitorError()) {
+    <p class="error-banner">{{ monitorError() }}</p>
+  }
+  @if (success()) {
+    <p class="success-banner">{{ success() }}</p>
+  }
+
+  <div class="controls-grid">
+    <article class="panel">
+      <h3>Scraping Control Center</h3>
+      <p>Queue a manual scrape run with category limit.</p>
+
+      <form [formGroup]="scrapeForm" (ngSubmit)="triggerScrape()" novalidate>
+        <label>
+          Max categories
+          <input type="number" formControlName="maxCategories" min="1" max="50" />
+        </label>
+        <button type="submit" [disabled]="acting()">Start scraping now</button>
+      </form>
+
+      <div class="scrape-progress">
+        <div class="progress-head">
+          <span class="chip" [class.fail]="scrapingStateLabel().toLowerCase() === 'failed'">{{ scrapingStateLabel() }}</span>
+          <strong>{{ scrapingProgressPercent() }}%</strong>
+        </div>
+        <div class="progress-track" role="progressbar" [attr.aria-valuenow]="scrapingProgressPercent()" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" [style.width.%]="scrapingProgressPercent()"></div>
+        </div>
+        <p class="progress-message">{{ scrapingProgressMessage() }}</p>
+        <p class="progress-meta">{{ scrapingProgressCounters() }}</p>
+      </div>
+    </article>
+
+    <article class="panel">
+      <h3>Cleanup Queue</h3>
+      <p>Queue stale job cleanup with a retention window in days.</p>
+
+      <form [formGroup]="cleanupForm" (ngSubmit)="cleanupStaleJobs()" novalidate>
+        <label>
+          Stale after days
+          <input type="number" formControlName="staleAfterDays" min="1" max="365" />
+        </label>
+        <button type="submit" [disabled]="acting()">Queue cleanup</button>
+      </form>
+    </article>
+
+    <article class="panel">
+      <h3>Recommendation Refresh</h3>
+      <p>Queue a full recommendation cache refresh for candidates and jobs.</p>
+      <button type="button" (click)="refreshRecommendations()" [disabled]="acting()">
+        Queue refresh
+      </button>
+    </article>
+  </div>
+
+  <article class="panel table-panel">
+    <div class="panel-head">
+      <h3>Scraping Quality KPIs</h3>
+      <span class="sub">One-click diagnostics from persisted scraped jobs.</span>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <span>Total external jobs</span>
+        <strong>{{ diagnostics()?.totalExternalJobs ?? 0 }}</strong>
+      </div>
+      <div class="kpi-card">
+        <span>Egypt-only ratio</span>
+        <strong>{{ asPercent(diagnostics()?.coverage?.egyptOnlyRatioPct) }}</strong>
+      </div>
+      <div class="kpi-card">
+        <span>Apply link coverage</span>
+        <strong>{{ asPercent(diagnostics()?.coverage?.applyLinkCoveragePct) }}</strong>
+      </div>
+      <div class="kpi-card">
+        <span>External apply links</span>
+        <strong>{{ asPercent(diagnostics()?.coverage?.externalApplyLinkCoveragePct) }}</strong>
+      </div>
+      <div class="kpi-card">
+        <span>Enrichment tagged</span>
+        <strong>{{ asPercent(diagnostics()?.enrichment?.withTagPct) }}</strong>
+      </div>
+      <div class="kpi-card">
+        <span>LLM-enriched</span>
+        <strong>{{ asPercent(diagnostics()?.enrichment?.llmPct) }}</strong>
+      </div>
+    </div>
+
+    <div class="kpi-grid kpi-grid--secondary">
+      <div class="kpi-card small"><span>Description</span><strong>{{ asPercent(diagnostics()?.fillRates?.descriptionPct) }}</strong></div>
+      <div class="kpi-card small"><span>Requirements</span><strong>{{ asPercent(diagnostics()?.fillRates?.requirementsPct) }}</strong></div>
+      <div class="kpi-card small"><span>Responsibilities</span><strong>{{ asPercent(diagnostics()?.fillRates?.responsibilitiesPct) }}</strong></div>
+      <div class="kpi-card small"><span>Skills</span><strong>{{ asPercent(diagnostics()?.fillRates?.skillsPct) }}</strong></div>
+      <div class="kpi-card small"><span>Employment type</span><strong>{{ asPercent(diagnostics()?.fillRates?.employmentTypePct) }}</strong></div>
+      <div class="kpi-card small"><span>Experience level</span><strong>{{ asPercent(diagnostics()?.fillRates?.experienceLevelPct) }}</strong></div>
+      <div class="kpi-card small"><span>City</span><strong>{{ asPercent(diagnostics()?.fillRates?.cityPct) }}</strong></div>
+      <div class="kpi-card small"><span>Country</span><strong>{{ asPercent(diagnostics()?.fillRates?.countryPct) }}</strong></div>
+    </div>
+
+    <div class="outliers">
+      <h4>Top Non-Egypt Location Outliers</h4>
+      @if (nonEgyptOutliers().length > 0) {
+        <ul>
+          @for (row of nonEgyptOutliers(); track row.location) {
+            <li>
+              <span>{{ row.location }}</span>
+              <strong>{{ row.count }}</strong>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="empty">No non-Egypt outliers detected in current persisted jobs.</p>
+      }
+    </div>
+  </article>
+
+  <article class="panel table-panel">
+    <div class="panel-head">
+      <h3>Recent Scraped Jobs</h3>
+      <span class="sub">Preview latest external jobs and apply-link availability.</span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Company</th>
+            <th>Location</th>
+            <th>Source</th>
+            <th>Skills</th>
+            <th>Apply</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (job of scrapedJobs(); track trackByScrapedId($index, job)) {
+            <tr>
+              <td>{{ job.title }}</td>
+              <td>{{ job.companyName || '-' }}</td>
+              <td>{{ formatLocation(job) }}</td>
+              <td>{{ job.externalSource }}</td>
+              <td>{{ job.skills?.length || 0 }}</td>
+              <td>
+                @if (job.externalUrl) {
+                  <a class="ext-link" [href]="job.externalUrl" target="_blank" rel="noopener noreferrer">
+                    Open
+                  </a>
+                } @else {
+                  <span>-</span>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6" class="empty">No scraped jobs available yet.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel table-panel">
+    <div class="panel-head">
+      <h3>Background Jobs</h3>
+      <button type="button" class="ghost" (click)="refresh(true)" [disabled]="loading()">
+        {{ loading() ? 'Refreshing...' : 'Refresh' }}
+      </button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Attempts</th>
+            <th>Last Run</th>
+            <th>Next Run</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (job of jobs(); track trackByJobId($index, job)) {
+            <tr>
+              <td>{{ job.jobId }}</td>
+              <td>{{ job.jobType }}</td>
+              <td>
+                <span class="chip" [class.fail]="job.status === 'Failed'">{{ job.status }}</span>
+              </td>
+              <td>{{ job.attempts }}</td>
+              <td>{{ job.lastRunAtUtc || '-' }}</td>
+              <td>{{ job.nextRunAtUtc || '-' }}</td>
+              <td>{{ job.error || '-' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="empty">No background jobs tracked yet.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>

@@ -1,0 +1,49 @@
+<div class="inbox-container">
+  <div class="inbox-header">
+    <h1 class="inbox-title">Messages</h1>
+  </div>
+
+  <div *ngIf="loading" class="loading-state">
+    <div class="spinner"></div>
+    <p>Loading conversations...</p>
+  </div>
+
+  <div *ngIf="!loading && conversations.length === 0" class="empty-state">
+    <div class="empty-icon-wrapper">
+      <i class="fas fa-inbox empty-icon"></i>
+    </div>
+    <h3>No messages yet</h3>
+    <p>When you connect with someone, your conversation will appear here.</p>
+  </div>
+
+  <div *ngIf="!loading && conversations.length > 0" class="conversations-list">
+    <div 
+      *ngFor="let conv of conversations" 
+      class="conversation-card"
+      (click)="openConversation(conv.id)"
+    >
+      <div class="card-content">
+        <div class="avatar-container">
+          <div class="avatar-placeholder">
+            <span>{{ conv.otherParticipantName.charAt(0) | uppercase }}</span>
+          </div>
+        </div>
+        
+        <div class="conversation-details">
+          <div class="conversation-header">
+            <h3 class="participant-name" [class.unread-name]="conv.unreadCount > 0">{{ conv.otherParticipantName }}</h3>
+            <span class="last-message-time" [class.unread-time]="conv.unreadCount > 0">{{ conv.lastMessageAtUtc | date:'shortTime' }}</span>
+          </div>
+          <div class="message-preview-container">
+            <p class="message-preview" [class.unread-preview]="conv.unreadCount > 0">
+              {{ conv.lastMessagePreview || 'No messages yet' }}
+            </p>
+            <div *ngIf="conv.unreadCount > 0" class="unread-badge">
+              {{ conv.unreadCount }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

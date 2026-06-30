@@ -1,0 +1,49 @@
+# Core API and app server
+fastapi
+uvicorn
+python-multipart
+requests
+websockets
+python-dotenv
+
+# Database and ORM
+sqlalchemy
+pyodbc
+
+# LLM providers
+openai
+
+# Speech-to-text and text-to-speech
+nemo_toolkit[asr]
+coqui-tts
+torch
+torchaudio
+torchvision
+
+# Audio processing
+pydub
+ffmpeg-python
+imageio-ffmpeg
+scipy
+gTTS
+
+# Integrity and computer vision
+opencv-python
+mediapipe
+ultralytics
+numpy
+
+# Recruitment notebook stack (now API modules)
+chromadb
+playwright
+playwright-stealth
+sentence-transformers
+scikit-learn
+PyMuPDF
+python-docx
+pillow
+docling
+textstat
+transformers
+apscheduler
+pyngrok

@@ -1,0 +1,75 @@
+<section class="auth-card">
+  <header>
+    <h2>Create your account</h2>
+    <p>Start your journey in JobLens AI today.</p>
+  </header>
+
+  @if (error()) {
+    <p class="error-banner">{{ error() }}</p>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    <fieldset>
+      <legend>Select role</legend>
+      <div class="role-grid">
+        <label>
+          <input type="radio" value="Candidate" formControlName="role" />
+          Candidate
+        </label>
+        <label>
+          <input type="radio" value="Recruiter" formControlName="role" />
+          Recruiter
+        </label>
+      </div>
+    </fieldset>
+
+    <label>
+      Full name
+      <input type="text" formControlName="fullName" placeholder="John Doe" autocomplete="name" />
+    </label>
+
+    <label>
+      Username
+      <input type="text" formControlName="username" placeholder="john.doe" autocomplete="username" />
+    </label>
+
+    <label>
+      Work email
+      <input type="email" formControlName="email" placeholder="name@company.com" autocomplete="email" />
+    </label>
+
+    <label>
+      Password
+      <input type="password" formControlName="password" placeholder="Create password" autocomplete="new-password" />
+    </label>
+
+    <label>
+      Confirm password
+      <input
+        type="password"
+        formControlName="confirmPassword"
+        placeholder="Repeat password"
+        autocomplete="new-password"
+      />
+    </label>
+
+    @if (form.value.role === 'Recruiter') {
+      <label>
+        Company ID (optional)
+        <input type="number" formControlName="companyId" placeholder="123" />
+      </label>
+    }
+
+    @if (form.touched && form.hasError('passwordMismatch')) {
+      <small class="error">Passwords do not match.</small>
+    }
+
+    <button type="submit" [disabled]="submitting()">
+      {{ submitting() ? 'Creating account...' : 'Create account' }}
+    </button>
+  </form>
+
+  <footer>
+    <span>Already registered? <a routerLink="/auth/login">Sign in</a></span>
+  </footer>
+</section>

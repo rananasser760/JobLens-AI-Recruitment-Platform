@@ -1,0 +1,187 @@
+<section class="job-detail-page">
+  <header class="page-header">
+    <a class="back-link" routerLink="/candidate/jobs">
+      <i class="fa-solid fa-arrow-left"></i> Back to Jobs
+    </a>
+    <button type="button" class="btn-refresh" (click)="load()" [disabled]="loading() || applying()">
+      <i class="fa-solid fa-rotate"></i> {{ loading() ? 'Loading…' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <div class="alert alert-error">
+      <i class="fa-solid fa-triangle-exclamation"></i> {{ error() }}
+    </div>
+  }
+  @if (success()) {
+    <div class="alert alert-success">
+      <i class="fa-solid fa-check"></i> {{ success() }}
+    </div>
+  }
+
+  @if (loading() && !job()) {
+    <div class="job-skeleton">
+      <div class="sk-hero">
+        <div class="sk-line xl"></div>
+        <div class="sk-line wide"></div>
+        <div class="sk-pill"></div>
+      </div>
+      <div class="sk-body">
+        <div class="sk-card tall"></div>
+        <div class="sk-card short"></div>
+      </div>
+    </div>
+  }
+
+  @if (job(); as j) {
+    <div class="job-hero">
+      <div class="hero-content">
+        <div class="hero-top">
+          <div>
+            <h1 class="hero-title">{{ j.title }}</h1>
+            <p class="hero-company">
+              <i class="fa-solid fa-building" style="opacity:.6;margin-right:.3rem"></i>
+              {{ j.companyName || 'Company' }} &nbsp;·&nbsp; {{ j.location || 'Location TBD' }}
+            </p>
+          </div>
+          @if (hasApplied()) {
+            <span class="applied-badge">
+              <i class="fa-solid fa-check"></i> Applied
+            </span>
+          }
+        </div>
+
+        <div class="hero-chips">
+          <span class="chip chip--type">
+            <i class="fa-solid fa-briefcase"></i> {{ j.employmentType }}
+          </span>
+          @if (j.salaryRange) {
+            <span class="chip chip--salary">
+              <i class="fa-solid fa-coins"></i> {{ j.salaryRange }}
+            </span>
+          }
+          @if (j.experienceLevel) {
+            <span class="chip">
+              <i class="fa-solid fa-user-graduate"></i> {{ j.experienceLevel }}
+            </span>
+          }
+          <span class="chip">
+            <i class="fa-regular fa-calendar-days"></i> Posted {{ j.postedAt | date: 'MMM d, y' }}
+          </span>
+          @if (j.expiresAt) {
+            <span class="chip chip--deadline">
+              <i class="fa-solid fa-hourglass-half"></i> Closes {{ j.expiresAt | date: 'MMM d, y' }}
+            </span>
+          }
+          <span class="chip">
+            <i class="fa-solid fa-users"></i> {{ j.applicationCount }} applicants
+          </span>
+          <span class="chip chip--source">{{ j.source }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-main">
+        @if (j.description) {
+          <div class="content-section">
+            <h2 class="section-title">
+              <i class="fa-solid fa-file-lines"></i> Job Description
+            </h2>
+            <p class="multiline-text">{{ j.description }}</p>
+          </div>
+        }
+        @if (j.responsibilities) {
+          <div class="content-section">
+            <h2 class="section-title">
+              <i class="fa-solid fa-bullseye"></i> Responsibilities
+            </h2>
+            <p class="multiline-text">{{ j.responsibilities }}</p>
+          </div>
+        }
+        @if (j.requirements) {
+          <div class="content-section">
+            <h2 class="section-title">
+              <i class="fa-solid fa-list-check"></i> Requirements
+            </h2>
+            <p class="multiline-text">{{ j.requirements }}</p>
+          </div>
+        }
+      </div>
+
+      <aside class="detail-sidebar">
+        <div class="sidebar-card">
+          <h3 class="sidebar-title">
+            <i class="fa-solid fa-code" style="color:#4059aa;margin-right:.4rem"></i> Required Skills
+          </h3>
+          @if (j.requiredSkills.length === 0) {
+            <p class="sidebar-empty">No required skills listed.</p>
+          } @else {
+            <div class="skills-grid">
+              @for (skill of j.requiredSkills; track skill) {
+                <span class="skill-chip">{{ skill }}</span>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="sidebar-card apply-card">
+          @if (j.source === 'Scraped') {
+            <div class="external-notice">
+              <i class="fa-solid fa-globe external-icon"></i>
+              <p>This role was sourced externally. Apply directly on the company's website.</p>
+            </div>
+
+            @if (j.externalUrl) {
+              <a class="btn-apply-external" [href]="j.externalUrl" target="_blank" rel="noopener noreferrer">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> Apply on Source Website
+              </a>
+            } @else {
+              <p class="sidebar-empty">Application link is not available for this external listing yet.</p>
+            }
+          } @else {
+            <h3 class="sidebar-title">
+              <i class="fa-solid fa-paper-plane" style="color:#4059aa;margin-right:.4rem"></i> Apply to this Role
+            </h3>
+
+            @if (!defaultResumeId()) {
+              <div class="resume-warning">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                No resume found. Please upload one first.
+                <a routerLink="/candidate/profile" class="resume-link">
+                  <i class="fa-solid fa-upload"></i> Upload Resume
+                </a>
+              </div>
+            }
+
+            <div class="cover-field">
+              <label class="cover-label" for="cover-letter-input">
+                Cover Letter <span class="optional">(optional)</span>
+              </label>
+              <textarea
+                id="cover-letter-input"
+                class="cover-textarea"
+                #coverInput
+                rows="4"
+                [value]="coverLetter()"
+                (input)="onCoverLetterChanged(coverInput.value)"
+                [disabled]="applying() || hasApplied()"
+                placeholder="Add a short note to support your application…"
+              ></textarea>
+            </div>
+
+            <button type="button" class="btn-apply-now" (click)="applyNow()" [disabled]="hasApplied() || applying() || !defaultResumeId()">
+              @if (applying()) {
+                <span class="btn-spinner"></span> Submitting…
+              } @else if (hasApplied()) {
+                <i class="fa-solid fa-check"></i> Already Applied
+              } @else {
+                <i class="fa-solid fa-paper-plane"></i> Apply Now
+              }
+            </button>
+          }
+        </div>
+      </aside>
+    </div>
+  }
+</section>

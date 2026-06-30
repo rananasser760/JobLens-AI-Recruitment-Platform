@@ -1,0 +1,319 @@
+<section class="candidate-profile-page">
+  <header class="page-header">
+    <div>
+      <h1>Profile & Settings</h1>
+      <p>Update your candidate profile, manage skills, and maintain your resumes/documents.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success"><i class="fa-solid fa-check"></i> {{ success() }}</p>
+  }
+
+  @if (profile(); as currentProfile) {
+    <div class="layout-grid">
+      <section class="panel">
+        <h2>Profile information</h2>
+
+        <form [formGroup]="profileForm" (ngSubmit)="saveProfile()" class="profile-form" novalidate>
+          <label>
+            Full name
+            <input type="text" formControlName="fullName" />
+          </label>
+
+          <label>
+            Phone
+            <input type="text" formControlName="phone" />
+          </label>
+
+          <label>
+            Location
+            <input type="text" formControlName="location" />
+          </label>
+
+          <label>
+            Current title
+            <input type="text" formControlName="currentTitle" />
+          </label>
+
+          <label>
+            Years of experience
+            <input type="number" min="0" formControlName="yearsOfExperience" />
+          </label>
+
+          <label>
+            LinkedIn URL
+            <input type="text" formControlName="linkedInUrl" />
+          </label>
+
+          <label>
+            Portfolio URL
+            <input type="text" formControlName="portfolioUrl" />
+          </label>
+
+          <label>
+            Summary
+            <textarea rows="4" formControlName="summary"></textarea>
+          </label>
+
+          <button type="submit" [disabled]="savingProfile()">
+            {{ savingProfile() ? 'Saving...' : 'Save profile' }}
+          </button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2><i class="fa-solid fa-camera" style="color:#4059aa;margin-right:.4rem"></i> Profile image</h2>
+
+        @if (profileImageUrl()) {
+          <img class="profile-image"
+            [src]="profileImageUrl()"
+            alt="Candidate profile"
+            (error)="$event.target.style.display='none'"
+          />
+        } @else {
+          <div class="img-placeholder">
+            <i class="fa-solid fa-user-circle fa-3x" style="color:#c5c5d3"></i>
+            <p class="empty">No profile image uploaded yet.</p>
+          </div>
+        }
+
+        <div class="inline-actions">
+          <input
+            #profileImageInput
+            type="file"
+            accept="image/*"
+            (change)="onProfileImageSelected(profileImageInput.files)"
+          />
+          <button
+            type="button"
+            (click)="uploadProfileImage(); profileImageInput.value = ''"
+            [disabled]="uploadingImage() || !selectedImageFile()"
+          >
+            <i class="fa-solid fa-upload"></i>
+            {{ uploadingImage() ? 'Uploading...' : 'Upload image' }}
+          </button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>Skills</h2>
+          <span>{{ currentProfile.skills.length }} skills</span>
+        </div>
+
+        @if (currentProfile.skills.length === 0) {
+          <p class="empty">No skills added yet.</p>
+        } @else {
+          <div class="skill-list">
+            @for (skill of currentProfile.skills; track skill.id) {
+              <article class="skill-card">
+                <div>
+                  <strong>{{ skill.skillName }}</strong>
+                  <small>
+                    {{ skill.experienceYears ?? 0 }} year(s)
+                    @if (skill.proficiencyLevel) {
+                      · {{ skill.proficiencyLevel }}
+                    }
+                  </small>
+                </div>
+                <button type="button" class="secondary" (click)="removeSkill(skill.id)" [disabled]="isSkillRemoving(skill.id)">
+                  {{ isSkillRemoving(skill.id) ? 'Removing...' : 'Remove' }}
+                </button>
+              </article>
+            }
+          </div>
+        }
+
+        <form [formGroup]="skillForm" (ngSubmit)="addSkill()" class="skill-form" novalidate>
+          <label>
+            Skill name
+            <input type="text" formControlName="skillName" placeholder="TypeScript" />
+          </label>
+
+          <label>
+            Experience years
+            <input type="number" min="0" formControlName="experienceYears" />
+          </label>
+
+          <label>
+            Proficiency level
+            <input type="text" formControlName="proficiencyLevel" placeholder="Intermediate" />
+          </label>
+
+          <button type="submit" [disabled]="submittingSkill() || skillForm.invalid">
+            {{ submittingSkill() ? 'Adding...' : 'Add skill' }}
+          </button>
+        </form>
+      </section>
+
+      <section class="panel resume-panel">
+        <div class="section-head">
+          <h2>Documents & Resumes</h2>
+          <span>{{ resumes().length }} files</span>
+        </div>
+
+        <div class="resume-upload">
+          <input #resumeInput type="file" accept=".pdf,.doc,.docx" (change)="onResumeFileSelected(resumeInput.files)" />
+
+          <label class="checkbox">
+            <input #defaultToggle type="checkbox" [checked]="uploadAsDefault()" (change)="onUploadAsDefaultChanged(defaultToggle.checked)" />
+            Set as default
+          </label>
+
+          <label class="checkbox">
+            <input #parseToggle type="checkbox" [checked]="uploadParseNow()" (change)="onUploadParseNowChanged(parseToggle.checked)" />
+            Parse after upload
+          </label>
+
+          <button type="button" (click)="uploadResume()" [disabled]="uploadingResume() || !selectedResumeFile()">
+            {{ uploadingResume() ? 'Uploading...' : 'Upload resume' }}
+          </button>
+        </div>
+
+        @if (resumes().length === 0) {
+          <p class="empty">No resumes uploaded yet.</p>
+        } @else {
+          <div class="resume-list">
+            @for (resume of resumes(); track resume.id) {
+              <article class="resume-card">
+                <header>
+                  <div>
+                    <h3>{{ resume.fileName }}</h3>
+                    <small>
+                      {{ resume.uploadedAt | date: 'mediumDate' }}
+                      @if (resume.fileType) {
+                        · {{ resume.fileType }}
+                      }
+                    </small>
+                  </div>
+
+                  <div class="resume-meta">
+                    @if (resume.isDefault) {
+                      <span class="chip default">Default</span>
+                    }
+                    <span class="chip">{{ resume.isParsed ? 'Parsed' : 'Raw' }}</span>
+                    <span class="chip">ATS: {{ getDisplayedAtsScore(resume) ?? '--' }}</span>
+                  </div>
+                </header>
+
+                <div class="resume-actions">
+                  <button type="button" class="secondary" (click)="viewResumeInsights(resume.id)" [disabled]="isResumeBusy(resume.id)">
+                    {{ isResumeSelected(resume.id) ? 'Inspecting' : 'Inspect' }}
+                  </button>
+                  <button type="button" class="secondary" (click)="setDefaultResume(resume.id)" [disabled]="isResumeBusy(resume.id) || resume.isDefault">Set default</button>
+                  <button type="button" class="secondary" (click)="parseResume(resume.id)" [disabled]="isResumeBusy(resume.id)">Parse</button>
+                  <button type="button" class="secondary" (click)="fetchResumeScore(resume.id)" [disabled]="isResumeBusy(resume.id)">ATS</button>
+                  <button type="button" class="secondary" (click)="fillProfileFromResume(resume.id)" [disabled]="isResumeBusy(resume.id)">Fill profile</button>
+                  <button type="button" class="secondary" (click)="downloadResume(resume)" [disabled]="isResumeBusy(resume.id)">Download</button>
+                  <button type="button" class="danger" (click)="requestDeleteResume(resume)" [disabled]="isResumeBusy(resume.id)">Delete</button>
+                </div>
+              </article>
+            }
+          </div>
+
+          @if (selectedResume(); as inspectedResume) {
+            <article class="resume-insights">
+              <div class="section-head">
+                <h3>Resume insights: {{ inspectedResume.fileName }}</h3>
+                <button type="button" class="secondary" (click)="closeResumeInsights()">Close</button>
+              </div>
+
+              <div class="insight-grid">
+                <section class="insight-block">
+                  <h4>Parsing details</h4>
+
+                  @if (inspectedResume.parsingResult) {
+                    <p><strong>Name:</strong> {{ inspectedResume.parsingResult.extractedName || '--' }}</p>
+                    <p><strong>Email:</strong> {{ inspectedResume.parsingResult.extractedEmail || '--' }}</p>
+                    <p><strong>Phone:</strong> {{ inspectedResume.parsingResult.extractedPhone || '--' }}</p>
+
+                    @if (inspectedResume.parsingResult.summary) {
+                      <p>{{ inspectedResume.parsingResult.summary }}</p>
+                    }
+
+                    @if (inspectedResume.parsingResult.extractedSkills.length > 0) {
+                      <div class="skills-inline">
+                        @for (skill of inspectedResume.parsingResult.extractedSkills; track skill) {
+                          <span>{{ skill }}</span>
+                        }
+                      </div>
+                    }
+
+                    @if (inspectedResume.parsingResult.extractedExperience.length > 0) {
+                      <ul>
+                        @for (item of inspectedResume.parsingResult.extractedExperience; track $index) {
+                          <li>
+                            <strong>{{ item.title || 'Role' }}</strong>
+                            {{ item.company || '' }}
+                            @if (item.duration) {
+                              · {{ item.duration }}
+                            }
+                          </li>
+                        }
+                      </ul>
+                    }
+                  } @else {
+                    <p>No parsed resume output yet. Run Parse to generate structured insights.</p>
+                  }
+                </section>
+
+                <section class="insight-block">
+                  <h4>ATS breakdown</h4>
+
+                  @if (selectedAtsReport(); as report) {
+                    <div class="ats-score">
+                      <strong>{{ report.score }}</strong>
+                      <span>/ 100</span>
+                      <small>{{ report.isFriendly ? 'ATS friendly' : 'Needs improvement' }}</small>
+                    </div>
+
+                    @if (selectedAtsRows().length > 0) {
+                      <div class="ats-grid">
+                        @for (row of selectedAtsRows(); track row[0]) {
+                          <article>
+                            <span>{{ row[0] }}</span>
+                            <strong>{{ row[1] }}</strong>
+                          </article>
+                        }
+                      </div>
+                    }
+
+                    @if (report.recommendations.length > 0) {
+                      <ul>
+                        @for (note of report.recommendations; track note) {
+                          <li>{{ note }}</li>
+                        }
+                      </ul>
+                    }
+                  } @else {
+                    <p>No ATS analysis cached for this resume yet. Use the ATS action to fetch category scores and recommendations.</p>
+                  }
+                </section>
+              </div>
+            </article>
+          }
+        }
+      </section>
+    </div>
+  }
+
+  <app-confirm-dialog
+    [open]="confirmDeleteResumeOpen()"
+    title="Delete resume"
+    [message]="'Delete resume ' + (pendingResumeDelete()?.fileName || 'selected file') + '?'"
+    confirmLabel="Delete"
+    cancelLabel="Cancel"
+    [danger]="true"
+    [busy]="pendingDeleteBusy()"
+    (cancel)="cancelDeleteResume()"
+    (confirm)="confirmDeleteResume()"
+  ></app-confirm-dialog>
+</section>

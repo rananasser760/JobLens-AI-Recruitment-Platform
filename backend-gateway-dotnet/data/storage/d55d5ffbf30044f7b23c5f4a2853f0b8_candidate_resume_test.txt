@@ -1,0 +1,1 @@
+﻿Experienced backend engineer with C#, ASP.NET Core, SQL Server, and REST APIs.

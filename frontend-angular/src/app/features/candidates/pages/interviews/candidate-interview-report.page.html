@@ -1,0 +1,267 @@
+<section class="report-page">
+  <!-- Header -->
+  <header class="page-header">
+    <div class="breadcrumb">
+      <a routerLink="/candidate/interviews" class="breadcrumb-link">← Interviews</a>
+      @if (sessionId()) {
+        <span class="breadcrumb-sep">/</span>
+        <a [routerLink]="['/candidate/interviews', sessionId()]" class="breadcrumb-link">
+          Session
+        </a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">Report</span>
+      }
+    </div>
+    <div class="header-main">
+      <div>
+        <h1>Interview Report</h1>
+        <p>AI-generated evaluation of your interview session performance</p>
+      </div>
+      <button type="button" class="btn-refresh" (click)="load()" [disabled]="loading()">
+        @if (loading()) {
+          <span class="btn-spinner"></span>
+        }
+        {{ loading() ? 'Loading...' : '🔄 Refresh' }}
+      </button>
+    </div>
+  </header>
+
+  <!-- Loading -->
+  @if (loading() && !report()) {
+    <div class="report-skeleton">
+      <div class="sk-hero"></div>
+      <div class="sk-grid">
+        <div class="sk-card"></div>
+        <div class="sk-card"></div>
+        <div class="sk-card"></div>
+        <div class="sk-card"></div>
+      </div>
+    </div>
+  }
+
+  <!-- Error -->
+  @if (error() && !loading()) {
+    <div class="report-error">
+      <span class="error-icon">📋</span>
+      <h2>Report Unavailable</h2>
+      <p>{{ error() }}</p>
+      <button type="button" class="btn-retry" (click)="load()">Try Again</button>
+    </div>
+  }
+
+  @if (report(); as r) {
+    <!-- Hero: Score + Summary -->
+    <div class="report-hero">
+      <!-- Score ring -->
+      <div class="score-section">
+        @if (r.overallScore !== null && r.overallScore !== undefined) {
+          <div class="score-ring">
+            <svg viewBox="0 0 140 140" width="140" height="140">
+              <defs>
+                <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#0d2d8a" />
+                  <stop offset="100%" stop-color="#19b27a" />
+                </linearGradient>
+              </defs>
+              <circle class="ring-track" cx="70" cy="70" r="60" />
+              <circle
+                class="ring-fill"
+                cx="70"
+                cy="70"
+                r="60"
+                [attr.stroke-dasharray]="377"
+                [attr.stroke-dashoffset]="377 - 377 * (r.overallScore / 100)"
+              />
+            </svg>
+            <div class="ring-inner">
+              <span class="ring-number">{{ r.overallScore | number: '1.0-0' }}</span>
+              <span class="ring-100">/100</span>
+              <span class="ring-label">Overall Score</span>
+            </div>
+          </div>
+        } @else {
+          <div class="score-pending">
+            <span class="score-pending-icon">⏳</span>
+            <p>Score pending</p>
+          </div>
+        }
+      </div>
+
+      <!-- Session meta -->
+      <div class="hero-info">
+        <h2 class="hero-job">{{ r.jobTitle }}</h2>
+        <p class="hero-candidate">🧑 {{ r.candidateName }}</p>
+
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <span class="hs-label">Duration</span>
+            <span class="hs-value">{{ r.durationMinutes }} min</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hs-label">Questions</span>
+            <span class="hs-value">{{ r.questionScores.length }}</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hs-label">Integrity</span>
+            <span class="hs-value" [class.flag-red]="r.cheatingReport.cheatingDetected">
+              {{ r.cheatingReport.cheatingDetected ? '⚠️ Flagged' : '✅ Clean' }}
+            </span>
+          </div>
+          <div class="hero-stat">
+            <span class="hs-label">Events</span>
+            <span class="hs-value">{{ r.cheatingReport.totalEvents }}</span>
+          </div>
+        </div>
+
+        <div class="timing-row">
+          @if (r.startedAt) {
+            <span class="timing-chip">▶ Started {{ r.startedAt | date: 'MMM d, h:mm a' }}</span>
+          }
+          @if (r.endedAt) {
+            <span class="timing-chip">⏹ Ended {{ r.endedAt | date: 'h:mm a' }}</span>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Feedback -->
+    @if (r.aiFeedback || r.recommendation) {
+      <div class="feedback-grid">
+        @if (r.aiFeedback) {
+          <div class="feedback-card feedback-ai">
+            <div class="fc-header">
+              <span class="fc-icon">🤖</span>
+              <h3>AI Feedback</h3>
+            </div>
+            <p>{{ r.aiFeedback }}</p>
+          </div>
+        }
+        @if (r.recommendation) {
+          <div class="feedback-card feedback-rec">
+            <div class="fc-header">
+              <span class="fc-icon">💡</span>
+              <h3>Recommendation</h3>
+            </div>
+            <p>{{ r.recommendation }}</p>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Question breakdown -->
+    <div class="section-card">
+      <div class="section-head">
+        <div>
+          <h3>Question-by-Question Breakdown</h3>
+          <p class="section-sub">AI scores and feedback for each interview question</p>
+        </div>
+        <span class="count-badge">{{ r.questionScores.length }} questions</span>
+      </div>
+
+      @if (r.questionScores.length === 0) {
+        <div class="empty-section">
+          <span>No question scores available yet.</span>
+        </div>
+      } @else {
+        <div class="questions-list">
+          @for (q of r.questionScores; track q.questionText; let i = $index) {
+            <article class="q-card" [class.q-card--high]="(q.score ?? 0) >= 75" [class.q-card--low]="(q.score ?? 100) < 50">
+              <div class="q-header">
+                <div class="q-num">Q{{ i + 1 }}</div>
+                <div class="q-meta">
+                  @if (q.category) {
+                    <span class="q-category">{{ q.category }}</span>
+                  }
+                </div>
+                @if (q.score !== null && q.score !== undefined) {
+                  <div class="q-score-wrap">
+                    <div
+                      class="q-score-bar-bg"
+                      [attr.title]="'Score: ' + q.score"
+                    >
+                      <div
+                        class="q-score-bar-fill"
+                        [style.width.%]="q.score"
+                        [class.fill-high]="q.score >= 75"
+                        [class.fill-mid]="q.score >= 50 && q.score < 75"
+                        [class.fill-low]="q.score < 50"
+                      ></div>
+                    </div>
+                    <span class="q-score-num">{{ q.score | number: '1.0-0' }}</span>
+                  </div>
+                } @else {
+                  <span class="q-score-pending">—</span>
+                }
+              </div>
+              <p class="q-text">{{ q.questionText }}</p>
+              @if (q.feedback) {
+                <div class="q-feedback">
+                  <span class="q-feedback-icon">💬</span>
+                  <span>{{ q.feedback }}</span>
+                </div>
+              }
+            </article>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Integrity report -->
+    <div class="integrity-report">
+      <div class="section-head">
+        <div>
+          <h3>Integrity Report</h3>
+          <p class="section-sub">Browser activity and proctoring signals captured during the session</p>
+        </div>
+        <span
+          class="integrity-badge"
+          [class.integrity-clean]="!r.cheatingReport.cheatingDetected"
+          [class.integrity-flagged]="r.cheatingReport.cheatingDetected"
+        >
+          {{ r.cheatingReport.cheatingDetected ? '⚠️ Issues Detected' : '✅ Clean Session' }}
+        </span>
+      </div>
+
+      <div class="integrity-stats">
+        <div class="int-stat">
+          <span class="int-label">Tab Switches</span>
+          <strong class="int-val" [class.int-flag]="r.cheatingReport.totalTabSwitches > 0">
+            {{ r.cheatingReport.totalTabSwitches }}
+          </strong>
+        </div>
+        <div class="int-stat">
+          <span class="int-label">Focus Losses</span>
+          <strong class="int-val" [class.int-flag]="r.cheatingReport.totalFocusLosses > 2">
+            {{ r.cheatingReport.totalFocusLosses }}
+          </strong>
+        </div>
+        <div class="int-stat">
+          <span class="int-label">Total Events</span>
+          <strong class="int-val" [class.int-flag]="r.cheatingReport.totalEvents > 0">
+            {{ r.cheatingReport.totalEvents }}
+          </strong>
+        </div>
+        <div class="int-stat">
+          <span class="int-label">Verdict</span>
+          <strong class="int-val" [class.int-flag]="r.cheatingReport.cheatingDetected">
+            {{ r.cheatingReport.cheatingDetected ? 'Flagged' : 'Clear' }}
+          </strong>
+        </div>
+      </div>
+
+      @if (eventRows().length > 0) {
+        <div class="event-breakdown">
+          <h4>Events by type</h4>
+          <div class="event-chips">
+            @for (row of eventRows(); track row[0]) {
+              <div class="event-chip">
+                <span class="ec-name">{{ row[0] }}</span>
+                <span class="ec-count">{{ row[1] }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</section>

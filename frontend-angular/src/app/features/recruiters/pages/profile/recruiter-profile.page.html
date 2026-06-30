@@ -1,0 +1,196 @@
+<section class="recruiter-profile-page">
+  <header class="page-header">
+    <div>
+      <h1>Recruiter Settings</h1>
+      <p>Manage your recruiter profile and company identity used across JobLens hiring flows.</p>
+    </div>
+    <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="banner error">{{ error() }}</p>
+  }
+
+  @if (success()) {
+    <p class="banner success">{{ success() }}</p>
+  }
+
+  <div class="grid-layout">
+    <section class="panel profile-panel">
+      <h2>Personal Information</h2>
+
+      <label>
+        Full name
+        <input
+          #fullNameInput
+          type="text"
+          [value]="fullName()"
+          (input)="onFullNameChanged(fullNameInput.value)"
+          [disabled]="savingProfile()"
+          placeholder="Your full name"
+        />
+      </label>
+
+      <label>
+        Phone
+        <input
+          #phoneInput
+          type="tel"
+          [value]="phone()"
+          (input)="onPhoneChanged(phoneInput.value)"
+          [disabled]="savingProfile()"
+          placeholder="Optional phone number"
+        />
+      </label>
+
+      <label>
+        Position
+        <input
+          #positionInput
+          type="text"
+          [value]="position()"
+          (input)="onPositionChanged(positionInput.value)"
+          [disabled]="savingProfile()"
+          placeholder="Your role (e.g. Senior Recruiter)"
+        />
+      </label>
+
+      <label>
+        Linked company
+        <select
+          #companySelect
+          [value]="selectedCompanyId() || ''"
+          (change)="onCompanySelectionChanged(companySelect.value)"
+          [disabled]="savingProfile()"
+        >
+          <option value="">No company linked</option>
+          @for (company of companies(); track company.id) {
+            <option [value]="company.id">{{ company.name }}</option>
+          }
+        </select>
+      </label>
+
+      <button type="button" (click)="saveProfile()" [disabled]="savingProfile()">
+        {{ savingProfile() ? 'Saving profile...' : 'Save profile' }}
+      </button>
+    </section>
+
+    <section class="panel company-panel">
+      <div class="panel-head">
+        <h2>Company Identity</h2>
+        @if (selectedCompany()) {
+          <span>ID {{ selectedCompany()?.id }}</span>
+        }
+      </div>
+
+      <label>
+        Company name
+        <input
+          #companyNameInput
+          type="text"
+          [value]="companyName()"
+          (input)="onCompanyNameChanged(companyNameInput.value)"
+          [disabled]="savingCompany()"
+          placeholder="Company legal name"
+        />
+      </label>
+
+      <div class="inline-grid">
+        <label>
+          Website
+          <input
+            #companyWebsiteInput
+            type="url"
+            [value]="companyWebsite()"
+            (input)="onCompanyWebsiteChanged(companyWebsiteInput.value)"
+            [disabled]="savingCompany()"
+            placeholder="https://example.com"
+          />
+        </label>
+
+        <label>
+          Industry
+          <input
+            #companyIndustryInput
+            type="text"
+            [value]="companyIndustry()"
+            (input)="onCompanyIndustryChanged(companyIndustryInput.value)"
+            [disabled]="savingCompany()"
+            placeholder="Software, Finance, Healthcare..."
+          />
+        </label>
+      </div>
+
+      <div class="inline-grid">
+        <label>
+          Team size
+          <input
+            #companySizeInput
+            type="number"
+            min="1"
+            [value]="companySize()"
+            (input)="onCompanySizeChanged(companySizeInput.value)"
+            [disabled]="savingCompany()"
+            placeholder="e.g. 120"
+          />
+        </label>
+
+        <label>
+          Location
+          <input
+            #companyLocationInput
+            type="text"
+            [value]="companyLocation()"
+            (input)="onCompanyLocationChanged(companyLocationInput.value)"
+            [disabled]="savingCompany()"
+            placeholder="City, Country"
+          />
+        </label>
+      </div>
+
+      <label>
+        Description
+        <textarea
+          #companyDescriptionInput
+          rows="4"
+          [value]="companyDescription()"
+          (input)="onCompanyDescriptionChanged(companyDescriptionInput.value)"
+          [disabled]="savingCompany()"
+          placeholder="Describe your company for candidates"
+        ></textarea>
+      </label>
+
+      <button type="button" (click)="saveCompany()" [disabled]="savingCompany()">
+        {{ savingCompany() ? 'Saving company...' : 'Save company details' }}
+      </button>
+
+      <div class="logo-block">
+        <label>
+          Company logo
+          <input
+            #logoInput
+            type="file"
+            accept="image/*"
+            (change)="onLogoFileSelected(logoInput.files)"
+            [disabled]="uploadingLogo() || !selectedCompanyId()"
+          />
+        </label>
+
+        @if (selectedLogoFile()) {
+          <small>Selected: {{ selectedLogoFile()?.name }}</small>
+        }
+
+        <button
+          type="button"
+          class="secondary"
+          (click)="uploadLogo()"
+          [disabled]="uploadingLogo() || !selectedCompanyId() || !selectedLogoFile()"
+        >
+          {{ uploadingLogo() ? 'Uploading logo...' : 'Upload logo' }}
+        </button>
+      </div>
+    </section>
+  </div>
+</section>
