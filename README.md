@@ -28,7 +28,7 @@ Recruitment today suffers from inefficiency and unfair filtering:
 - Text-to-Speech (TTS) for conversational interviews  
 
 ### 🛡️ Integrity Monitoring
-- Computer vision-based gaze and behavior analysis  
+- Computer vision-based gaze, behavior analysis and object detection
 - Browser activity monitoring during assessments  
 - Fair and secure remote evaluation  
 
