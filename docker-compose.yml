@@ -1,0 +1,47 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "JobLens!Password123"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+
+  frontend:
+    build: ./frontend-angular
+    ports:
+      - "4200:80"
+    depends_on:
+      - gateway
+
+  gateway:
+    build: ./backend-gateway-dotnet
+    ports:
+      - "5245:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Jwt__SigningKey=JobLens_Super_Secret_Secure_JWT_Key_2026!
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=JobLensDB;User Id=sa;Password=JobLens!Password123;TrustServerCertificate=True;
+      - AIBackend__BaseUrl=http://ai-backend:8000
+    depends_on:
+      - sqlserver
+      - ai-backend
+
+  ai-backend:
+    build: ./ai-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - AI_DATABASE_URL=mssql+pyodbc://sa:%7BJobLens!Password123%7D@sqlserver/JobLensDB?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+      - PYTHONPATH=/app
+    volumes:
+      - ./ai-backend:/app
+    working_dir: /app
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - sqlserver
+
+volumes:
+  sqlserver_data:

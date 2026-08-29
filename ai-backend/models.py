@@ -117,7 +117,7 @@ def _ensure_sql_server_database_exists(database_url: str) -> None:
 
 
 DATABASE_URL = _build_database_url()
-_ensure_sql_server_database_exists(DATABASE_URL)
+# _ensure_sql_server_database_exists(DATABASE_URL)
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 DBSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

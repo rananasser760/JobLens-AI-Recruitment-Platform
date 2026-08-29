@@ -1,11 +1,11 @@
 export const environment = {
   production: true,
-  apiBaseUrl: 'https://api.joblens.local',
+  apiBaseUrl: 'http://localhost:4200',
   apiPrefix: '/api',
-  realtimeHubUrl: 'https://api.joblens.local/hubs/interviews',
+  realtimeHubUrl: 'http://localhost:4200/hubs/interviews',
   authStorageKeys: {
     accessToken: 'joblens.accessToken',
     refreshToken: 'joblens.refreshToken',
-    authUser: 'joblens.authUser'
-  }
+    authUser: 'joblens.authUser',
+  },
 } as const;

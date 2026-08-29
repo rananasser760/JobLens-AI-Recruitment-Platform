@@ -24,10 +24,11 @@ if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
 import cv2
-import mediapipe as mp
 import numpy as np
 
-# Pre-load MediaPipe solutions in the main thread
+# CORRECT MEDIAPIPE INITIALIZATION
+import mediapipe as mp
+
 mp_face_mesh = mp.solutions.face_mesh
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
