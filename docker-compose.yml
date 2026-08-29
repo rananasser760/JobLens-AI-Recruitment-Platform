@@ -1,6 +1,15 @@
 version: "3.8"
 
 services:
+  sql-server:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=SuperStrong!Passw0rd
+    restart: unless-stopped
+
   ai-backend:
     build:
       context: ./ai-backend-python
@@ -10,6 +19,9 @@ services:
       - "8001:8001"
     environment:
       - JOBLENS_ENV=production
+      - AI_SQLSERVER_CONNECTION_STRING=Server=sql-server;Database=GPAi;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
+    depends_on:
+      - sql-server
     restart: unless-stopped
 
   dotnet-gateway:
@@ -21,7 +33,10 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - AIBackend__BaseUrl=http://ai-backend:8000
+      - ConnectionStrings__DefaultConnection=Server=sql-server;Database=GPDot;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
+      - JWT_SIGNING_KEY=your_super_secret_secure_jwt_signing_key_for_production_min_32_chars
     depends_on:
+      - sql-server
       - ai-backend
     restart: unless-stopped
 
