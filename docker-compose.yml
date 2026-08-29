@@ -20,8 +20,12 @@ services:
     environment:
       - JOBLENS_ENV=production
       - AI_SQLSERVER_CONNECTION_STRING=Server=sql-server;Database=GPAi;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
+      - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
     depends_on:
       - sql-server
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+      - torch_cache:/root/.cache/torch
     restart: unless-stopped
 
   dotnet-gateway:
@@ -33,6 +37,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - AIBackend__BaseUrl=http://ai-backend:8000
+      - AIBackend__ApiKey=super_secure_internal_shared_key_123
       - ConnectionStrings__DefaultConnection=Server=sql-server;Database=GPDot;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
       - JWT_SIGNING_KEY=your_super_secret_secure_jwt_signing_key_for_production_min_32_chars
       - Jwt__SigningKey=your_super_secret_secure_jwt_signing_key_for_production_min_32_chars
@@ -52,3 +57,7 @@ services:
     depends_on:
       - dotnet-gateway
     restart: unless-stopped
+
+volumes:
+  huggingface_cache:
+  torch_cache:
