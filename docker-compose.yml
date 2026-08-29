@@ -35,6 +35,7 @@ services:
       - AIBackend__BaseUrl=http://ai-backend:8000
       - ConnectionStrings__DefaultConnection=Server=sql-server;Database=GPDot;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
       - JWT_SIGNING_KEY=your_super_secret_secure_jwt_signing_key_for_production_min_32_chars
+      - Jwt__SigningKey=your_super_secret_secure_jwt_signing_key_for_production_min_32_chars
     depends_on:
       - sql-server
       - ai-backend
