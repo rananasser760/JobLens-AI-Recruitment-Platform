@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  ai-backend:
+    build:
+      context: ./ai-backend-python
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    environment:
+      - JOBLENS_ENV=production
+    restart: unless-stopped
+
+  dotnet-gateway:
+    build:
+      context: ./backend-gateway-dotnet
+      dockerfile: Dockerfile
+    ports:
+      - "5245:5245"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - AIBackend__BaseUrl=http://ai-backend:8000
+    depends_on:
+      - ai-backend
+    restart: unless-stopped
+
+  angular-frontend:
+    build:
+      context: ./frontend-angular
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - dotnet-gateway
+    restart: unless-stopped
