@@ -2,10 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install MS ODBC Driver 17, ffmpeg, and espeak-ng
 RUN apt-get update && apt-get install -y \
-    libgl1 \
-    libglib2.0-0 \
+    build-essential \
     curl \
     gnupg \
     unixodbc-dev \
@@ -18,10 +16,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Force downgrade transformers to resolve Coqui-TTS incompatibility
-RUN pip install --no-cache-dir transformers==4.40.2
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-build-isolation uv "cython<3.0" setuptools wheel
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --no-build-isolation -r requirements.txt
 
 COPY . .
 

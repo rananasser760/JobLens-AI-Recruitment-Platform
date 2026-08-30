@@ -21,11 +21,13 @@ services:
       - JOBLENS_ENV=production
       - AI_SQLSERVER_CONNECTION_STRING=Server=sql-server;Database=GPAi;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
       - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
+      - JOBLENS_INTERVIEW_MODEL=google/gemini-2.5-flash:free
     depends_on:
       - sql-server
     volumes:
       - huggingface_cache:/root/.cache/huggingface
       - torch_cache:/root/.cache/torch
+      - chroma_cache:/root/.cache/chroma
     restart: unless-stopped
 
   dotnet-gateway:
@@ -61,3 +63,4 @@ services:
 volumes:
   huggingface_cache:
   torch_cache:
+  chroma_cache:

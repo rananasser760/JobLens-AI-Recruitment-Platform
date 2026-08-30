@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+requests
+websockets
+python-dotenv
+sqlalchemy
+pyodbc
+opencv-python-headless
+mediapipe==0.10.9
+protobuf==3.20.3
+ultralytics
+numpy<2.0
+PyYAML>=6.0.1
