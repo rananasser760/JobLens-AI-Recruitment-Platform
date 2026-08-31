@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -10,7 +12,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from recruitment.ats_service import analyze_ats_with_llm
-from recruitment.cv_service import parse_cv_with_llm
+from recruitment.cv_service import parse_cv_with_llm, process_file
 from recruitment.matcher_service import JobMatcher, recommend_candidates_for_job, recommend_jobs_for_candidate
 from recruitment.scraper_service import run_scraper
 from recruitment.vector_store import store
@@ -109,7 +111,7 @@ def _normalize_iso_datetime(value: Any) -> str | None:
 
 def _decode_data_uri_base64(value: str) -> bytes:
     payload = value.split(",", 1)[1] if "," in value else value
-    return base64.b64decode(payload)
+    return base64.b64decode(payload.strip())
 
 @router.post("/resumes/parse-text")
 async def parse_resume_text(request: ParseResumeTextRequest):
@@ -127,12 +129,11 @@ async def parse_resume_text(request: ParseResumeTextRequest):
 
 @router.post("/resumes/extract-text")
 async def extract_resume_text(request: ExtractResumeTextRequest):
-    import os, tempfile
     try:
-        from recruitment.cv_service import process_file
         ext = "." + request.fileName.rsplit(".", 1)[1].lower() if "." in (request.fileName or "") else ".bin"
         if not request.base64Content.strip(): return _envelope_ok({"text": ""})
         
+        temp_path = None
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as handle:
             handle.write(_decode_data_uri_base64(request.base64Content))
             temp_path = handle.name
@@ -140,7 +141,7 @@ async def extract_resume_text(request: ExtractResumeTextRequest):
         try:
             text, _ = process_file(temp_path)
         finally:
-            if os.path.exists(temp_path): os.remove(temp_path)
+            if temp_path and os.path.exists(temp_path): os.remove(temp_path)
             
         return _envelope_ok({"text": text or ""})
     except Exception as exc:
@@ -253,7 +254,6 @@ async def scrape_jobs(request: ScrapeJobsRequest):
     try:
         scrape_result = await run_scraper(max_categories=request.maxCategories)
         stored = store.scraped_jobs_col.get()
-        import uuid
         ids, metadatas = stored.get("ids", []), stored.get("metadatas", [])
         
         jobs = []

@@ -68,7 +68,10 @@ public sealed class AiBackendClient(HttpClient httpClient) : IAiBackendClient
         PostAsync<AudioAnalysisRequest, AudioAnalysisResponseDto>("/internal/v1/interviews/analyze-audio", request, cancellationToken);
 
     public Task<InternalApiEnvelope<VideoAnalysisResponseDto>> AnalyzeVideoAsync(VideoAnalysisRequest request, CancellationToken cancellationToken) =>
-        PostAsync<VideoAnalysisRequest, VideoAnalysisResponseDto>("/internal/v1/interviews/analyze-video", request, cancellationToken);
+        PostAsync<VideoAnalysisRequest, VideoAnalysisResponseDto>(
+            "/internal/v1/integrity/analyze-video", // <-- Updated to route to ai-integrity-service via Nginx
+            request,
+            cancellationToken);
 
     public Task<InternalApiEnvelope<InterviewFinalizationResponseDto>> FinalizeInterviewAsync(FinalizeInterviewRequest request, CancellationToken cancellationToken) =>
         PostAsync<FinalizeInterviewRequest, InterviewFinalizationResponseDto>("/internal/v1/interviews/finalize", request, cancellationToken);

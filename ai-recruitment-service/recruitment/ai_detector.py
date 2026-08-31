@@ -19,7 +19,8 @@ class AIDetector:
         self.tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
 
     def calculate_perplexity(self, text: str) -> float:
-        encoded = self.tokenizer(text, return_tensors="pt")
+        # Prevent crash on long text blocks by explicitly truncating to GPT-2's max limit
+        encoded = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=1024)
         input_ids = encoded.input_ids.to(self.device)
         with torch.no_grad():
             output = self.model(input_ids, labels=input_ids)

@@ -2,9 +2,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Removed heavy SQL and OpenCV OS dependencies
+# Added curl and ca-certificates for Playwright binary downloads
 RUN apt-get update && apt-get install -y \
     build-essential \
+    curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -15,6 +17,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system --no-build-isolation -r requirements.txt
 
+# Playwright can now safely fetch its dependencies
 RUN playwright install chromium --with-deps
 
 COPY . .

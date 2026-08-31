@@ -8,26 +8,66 @@ services:
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=SuperStrong!Passw0rd
+    volumes:
+      - mssql_data:/var/opt/mssql
     restart: unless-stopped
 
-  ai-backend:
+  ai-integrity-service:
     build:
-      context: ./ai-backend-python
+      context: ./ai-integrity-service
       dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-      - "8001:8001"
     environment:
       - JOBLENS_ENV=production
       - AI_SQLSERVER_CONNECTION_STRING=Server=sql-server;Database=GPAi;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
       - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
-      - JOBLENS_INTERVIEW_MODEL=google/gemini-2.5-flash:free
+      - PORT=8000
     depends_on:
       - sql-server
     volumes:
       - huggingface_cache:/root/.cache/huggingface
       - torch_cache:/root/.cache/torch
       - chroma_cache:/root/.cache/chroma
+    restart: unless-stopped
+
+  ai-interview-service:
+    build:
+      context: ./ai-interview-service
+      dockerfile: Dockerfile
+    environment:
+      - JOBLENS_ENV=production
+      - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
+      - JOBLENS_INTERVIEW_MODEL=mistralai/mistral-small-3.2-24b-instruct
+      - PORT=8000
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+      - torch_cache:/root/.cache/torch
+    restart: unless-stopped
+
+  ai-recruitment-service:
+    build:
+      context: ./ai-recruitment-service
+      dockerfile: Dockerfile
+    environment:
+      - JOBLENS_ENV=production
+      - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
+      - JOBLENS_CHROMA_PATH=/root/.cache/chroma
+      - PORT=8000
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+      - torch_cache:/root/.cache/torch
+      - chroma_cache:/root/.cache/chroma
+    restart: unless-stopped
+
+  ai-gateway:
+    image: nginx:alpine
+    ports:
+      - "8000:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - ai-integrity-service
+      - ai-interview-service
+      - ai-recruitment-service
     restart: unless-stopped
 
   dotnet-gateway:
@@ -38,14 +78,16 @@ services:
       - "5245:5245"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - AIBackend__BaseUrl=http://ai-backend:8000
+      - AIBackend__BaseUrl=http://ai-gateway:80
       - AIBackend__ApiKey=super_secure_internal_shared_key_123
       - ConnectionStrings__DefaultConnection=Server=sql-server;Database=GPDot;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
       - JWT_SIGNING_KEY=your_super_secret_secure_jwt_signing_key_for_production_min_32_chars
-      - Jwt__SigningKey=your_super_secret_secure_jwt_signing_key_for_production_min_32_chars
+      - Storage__RootPath=/app/data/storage
     depends_on:
       - sql-server
-      - ai-backend
+      - ai-gateway
+    volumes:
+      - dotnet_storage:/app/data/storage
     restart: unless-stopped
 
   angular-frontend:
@@ -61,6 +103,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  mssql_data:
   huggingface_cache:
   torch_cache:
   chroma_cache:
+  dotnet_storage:

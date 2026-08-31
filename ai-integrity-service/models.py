@@ -54,7 +54,7 @@ def _build_database_url() -> str:
     if "encrypt" not in normalized_connection_string.lower():
         normalized_connection_string = f"{normalized_connection_string.rstrip(';')};Encrypt=no;"
 
-    odbc_driver = os.getenv("AI_SQLSERVER_ODBC_DRIVER", "ODBC Driver 17 for SQL Server")
+    odbc_driver = os.getenv("AI_SQLSERVER_ODBC_DRIVER", "ODBC Driver 18 for SQL Server")
     odbc_connection = f"Driver={{{odbc_driver}}};{normalized_connection_string}"
     return f"mssql+pyodbc:///?odbc_connect={quote_plus(odbc_connection)}"
 
@@ -117,7 +117,6 @@ def _ensure_sql_server_database_exists(database_url: str) -> None:
 
 
 DATABASE_URL = _build_database_url()
-_ensure_sql_server_database_exists(DATABASE_URL)
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 DBSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -213,13 +212,6 @@ class DBKeyframe(Base):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  Create all tables
-# ══════════════════════════════════════════════════════════════════════════════
-
-Base.metadata.create_all(bind=engine)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 #  Auto-migration  (adds columns that older DB files are missing)
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -259,4 +251,7 @@ def run_migrations() -> None:
         print(f"[migration] warning: {exc}")
 
 
-run_migrations()
+def init_db() -> None:
+    _ensure_sql_server_database_exists(DATABASE_URL)
+    Base.metadata.create_all(bind=engine)
+    run_migrations()

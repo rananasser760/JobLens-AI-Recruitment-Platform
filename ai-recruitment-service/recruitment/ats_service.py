@@ -8,7 +8,7 @@ from .cv_service import _clean_json
 from .llm_client import get_llm_client
 
 
-def analyze_ats_with_llm(parsed_cv: Dict, cv_text: str) -> Dict:
+def analyze_ats_with_llm(parsed_cv: Dict, target_description: str) -> Dict:
     settings = get_recruitment_settings()
     llm_client = get_llm_client()
 
@@ -19,13 +19,16 @@ Most CVs score 50-75. Only exceptional CVs exceed 85.
 Score each category 0-100 using these benchmarks:
 - formatting:              100=perfect ATS-friendly, 60-79=readable with issues, <60=ATS may fail
 - content_quality:         100=every bullet has action verb + metric, 60-79=generic descriptions
-- keyword_optimization:    100=15+ industry keywords, 60-79=4-7 keywords
+- keyword_optimization:    100=15+ required keywords (from Target Context), 60-79=4-7 keywords
 - experience_presentation: 100=clear progression + quantified achievements
-- skills_relevance:        100=15+ in-demand skills, 60-79=5-9 skills
+- skills_relevance:        100=15+ in-demand skills (from Target Context), 60-79=5-9 skills
 - completeness:            100=all sections present, deduct for each missing section
 - professionalism:         100=zero errors, professional email/LinkedIn
 
 overall_score = average of all 7 categories.
+
+TARGET JOB DESCRIPTION / CONTEXT:
+{target_description}
 
 CV DATA:
 {cv_summary}

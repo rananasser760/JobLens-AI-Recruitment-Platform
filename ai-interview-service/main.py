@@ -1,7 +1,4 @@
 import os
-import sys
-import subprocess
-import atexit
 import uuid
 from contextlib import asynccontextmanager
 
@@ -96,20 +93,7 @@ def health():
 def serve_home():
     return FileResponse("index.html")
 
-def launch_mcq_server():
-    mcq_dir = os.path.join(os.getcwd(), "Pre-Interview MCQ Assessment")
-    if not os.path.exists(mcq_dir):
-        return
-    mcq_process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"],
-        cwd=mcq_dir
-    )
-    def cleanup():
-        mcq_process.terminate()
-        mcq_process.wait()
-    atexit.register(cleanup)
-
 if __name__ == "__main__":
     import uvicorn
-    launch_mcq_server()
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

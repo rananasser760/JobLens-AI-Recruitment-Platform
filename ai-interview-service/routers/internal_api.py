@@ -1,7 +1,9 @@
-import asyncio
+from __future__ import annotations
+
 import base64
 import json
 import os
+import subprocess
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -78,6 +80,7 @@ async def start_interview_session(request: StartInterviewSessionRequest):
         }
         return _envelope_ok({
             "interviewSessionId": interview_session_id,
+            "integritySessionId": interview_session_id,  # <-- Added to satisfy .NET non-null requirement
             "maxQuestions": request.maxQuestions,
             "welcomeMessage": f"Welcome {request.candidateName.strip() or 'candidate'}. Let's start the interview.",
         })

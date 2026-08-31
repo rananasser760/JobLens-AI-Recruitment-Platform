@@ -5,7 +5,7 @@ requests
 websockets
 python-dotenv
 openai
-nemo_toolkit[asr]<2.0.0
+nemo_toolkit[asr]
 coqui-tts>=0.24.0
 torch
 torchaudio
@@ -15,5 +15,5 @@ ffmpeg-python
 imageio-ffmpeg
 scipy
 gTTS
-transformers==4.40.2
-huggingface-hub<0.23.0
+transformers
+huggingface-hub

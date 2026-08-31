@@ -5,12 +5,8 @@ import json
 import re
 
 # --- CONFIGURATION ---
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL_NAME = os.getenv(
-    "JOBLENS_INTERVIEW_MODEL",
-    "google/gemini-2.5-flash:free",
-)
-
+LLM_PROVIDER = os.getenv("JOBLENS_LLM_PROVIDER", "openrouter").strip().lower()
+LLM_MODEL_NAME = os.getenv("JOBLENS_INTERVIEW_MODEL", "google/gemini-2.5-flash:free")
 
 class InterviewProviderError(RuntimeError):
     def __init__(self, code: str, message: str, retryable: bool) -> None:
@@ -18,14 +14,20 @@ class InterviewProviderError(RuntimeError):
         self.code = code
         self.retryable = retryable
 
-_openrouter_client = None
+_llm_client = None
 
-def _get_openrouter_client():
-    global _openrouter_client
-    if _openrouter_client is not None:
-        return _openrouter_client
+def _get_llm_client():
+    global _llm_client
+    if _llm_client is not None:
+        return _llm_client
     
-    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if LLM_PROVIDER == "groq":
+        api_key = os.getenv("GROQ_API_KEY", "").strip()
+        base_url = "https://api.groq.com/openai/v1"
+    else:
+        api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+        base_url = "https://openrouter.ai/api/v1"
+
     if api_key.startswith('"') and api_key.endswith('"'):
         api_key = api_key[1:-1]
     if api_key.startswith("'") and api_key.endswith("'"):
@@ -34,11 +36,11 @@ def _get_openrouter_client():
     if not api_key:
         return None
         
-    _openrouter_client = openai.OpenAI(
-        base_url="https://openrouter.ai/api/v1",
+    _llm_client = openai.OpenAI(
+        base_url=base_url,
         api_key=api_key,
     )
-    return _openrouter_client
+    return _llm_client
 
 
 def _raise_provider_error(exc: Exception, operation: str) -> None:
@@ -119,17 +121,17 @@ def generate_interview_response(
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": current_transcript})
 
-    client = _get_openrouter_client()
+    client = _get_llm_client()
     if client is None:
         raise InterviewProviderError(
             "ProviderNotConfigured",
-            "Interview model is not configured. Please set OPENROUTER_API_KEY.",
+            f"Interview model is not configured. Please set {LLM_PROVIDER.upper()}_API_KEY.",
             False,
         )
 
     try:
         response = client.chat.completions.create(
-            model=OPENROUTER_MODEL_NAME,
+            model=LLM_MODEL_NAME,
             messages=messages,
             temperature=0.7,
             max_tokens=100,
@@ -142,7 +144,7 @@ def generate_interview_response(
         return clean_content
 
     except Exception as e:
-        print(f"Error generating response with OpenRouter: {e}")
+        print(f"Error generating response with LLM: {e}")
         _raise_provider_error(e, "generate interview response")
 
 def generate_interview_summary(
@@ -193,17 +195,17 @@ def generate_interview_summary(
 
     messages = [{"role": "user", "content": user_prompt}]
 
-    client = _get_openrouter_client()
+    client = _get_llm_client()
     if client is None:
         raise InterviewProviderError(
             "ProviderNotConfigured",
-            "Interview model is not configured. Please set OPENROUTER_API_KEY.",
+            f"Interview model is not configured. Please set {LLM_PROVIDER.upper()}_API_KEY.",
             False,
         )
 
     try:
         response = client.chat.completions.create(
-            model=OPENROUTER_MODEL_NAME,
+            model=LLM_MODEL_NAME,
             messages=messages,
             temperature=0.3, 
             max_tokens=600,

@@ -25,7 +25,7 @@ def _float_env(name: str, default: float) -> float:
 
 
 class RecruitmentSettings(BaseModel):
-    chroma_path: str = Field(default_factory=lambda: os.getenv("JOBLENS_CHROMA_PATH", "./joblens_db"))
+    chroma_path: str = Field(default_factory=lambda: os.getenv("JOBLENS_CHROMA_PATH", "/root/.cache/chroma"))
     provider: str = Field(default_factory=lambda: os.getenv("JOBLENS_LLM_PROVIDER", "openrouter"))
 
     openrouter_api_key: str = Field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY", ""))
@@ -51,7 +51,7 @@ class RecruitmentSettings(BaseModel):
     strict_egypt_only: bool = Field(default_factory=lambda: _bool_env("JOBLENS_SCRAPER_STRICT_EGYPT_ONLY", False))
 
     target_categories: list[str] = Field(
-        default=[
+        default_factory=lambda: [
             "Data Science",
             "Engineering",
             "Information Technology",

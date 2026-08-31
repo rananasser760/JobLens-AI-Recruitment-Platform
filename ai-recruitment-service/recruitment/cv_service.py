@@ -112,7 +112,7 @@ def extract_text_from_image(image_path: str) -> str:
 
     settings = get_recruitment_settings()
     llm_client = get_llm_client()
-    for model in [settings.ocr_model, "google/gemini-flash-1.5"]:
+    for model in [settings.ocr_model, "google/gemini-1.5-flash"]:
         try:
             response = llm_client.chat.completions.create(
                 model=model,
@@ -300,17 +300,20 @@ Return EXACTLY this JSON (no markdown):
 CV TEXT:
 {cv_text}"""
 
-    try:
-        response = llm_client.chat.completions.create(
-            model=settings.parsing_model,
-            messages=[
-                {"role": "system", "content": "Professional CV parser. Return only valid JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=4000,
-            temperature=0.1,
-        )
-        result = response.choices[0].message.content.strip()
-        return json.loads(_clean_json(result))
-    except Exception:
-        return _empty_cv_full()
+    for model in [settings.parsing_model, settings.parsing_fallback_model]:
+        try:
+            response = llm_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "Professional CV parser. Return only valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=4000,
+                temperature=0.1,
+            )
+            result = response.choices[0].message.content.strip()
+            return json.loads(_clean_json(result))
+        except Exception:
+            continue
+            
+    return _empty_cv_full()

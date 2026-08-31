@@ -27,7 +27,7 @@ else:
 
 from routers.integrity import router as integrity_router
 from routers.internal_api import router as internal_router
-from models             import DBSession, DBSessionLocal
+from models             import DBSession, DBSessionLocal, init_db
 from session_store      import LOG_BUFFERS, LOG_SUBSCRIBERS
 from request_context import set_request_id
 
@@ -36,6 +36,7 @@ from request_context import set_request_id
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _validate_internal_key_configuration()
+    init_db()
     yield
 
 def _docs_enabled() -> bool:
@@ -278,4 +279,5 @@ def serve_home():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

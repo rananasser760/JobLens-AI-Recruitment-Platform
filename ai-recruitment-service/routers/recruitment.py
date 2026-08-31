@@ -65,14 +65,26 @@ async def get_scraped_jobs(
     limit: int = 50,
 ):
     try:
+        total_count = store.scraped_jobs_col.count()
+        if total_count == 0:
+            return {"success": True, "count": 0, "data": []}
+
+        fetch_limit = min(limit, total_count)
         where = {"location": location} if location else None
+
         if keyword:
             query_vector = get_scraper_embedding_model().encode(keyword).tolist()
-            result = store.scraped_jobs_col.query(query_embeddings=[query_vector], n_results=limit, where=where)
-            ids = result["ids"][0]
-            metadatas = result["metadatas"][0]
+            query_kwargs = {"query_embeddings": [query_vector], "n_results": fetch_limit}
+            if where:
+                query_kwargs["where"] = where
+            result = store.scraped_jobs_col.query(**query_kwargs)
+            ids = result.get("ids", [[]])[0]
+            metadatas = result.get("metadatas", [[]])[0]
         else:
-            result = store.scraped_jobs_col.get(limit=limit, where=where)
+            get_kwargs = {"limit": fetch_limit}
+            if where:
+                get_kwargs["where"] = where
+            result = store.scraped_jobs_col.get(**get_kwargs)
             ids = result.get("ids", [])
             metadatas = result.get("metadatas", [])
 
@@ -86,16 +98,16 @@ async def get_scraped_jobs(
 
             source_url = str(metadata.get("job_page_link", "") or detail.get("job_page_link", "") or "")
             apply_link = str(metadata.get("apply_link", "") or detail.get("apply_link", "") or source_url)
-            location = str(detail.get("location", "") or metadata.get("location", "") or "")
+            loc = str(detail.get("location", "") or metadata.get("location", "") or "")
             city = str(detail.get("city", "") or metadata.get("city", "") or "")
             country = str(detail.get("country", "") or metadata.get("country", "") or "")
 
             data.append(
                 {
-                    "db_id": ids[index],
+                    "db_id": ids[index] if index < len(ids) else "",
                     "company": metadata.get("company"),
                     "title": metadata.get("title"),
-                    "location": location,
+                    "location": loc,
                     "city": city,
                     "country": country,
                     "source": metadata.get("source"),
@@ -147,7 +159,8 @@ async def trigger_scrape(
 async def parse_cv_file(file: UploadFile = File(...), mode: str = Query("llm")):
     temp_path = None
     try:
-        extension = file.filename.split(".")[-1]
+        filename = file.filename or "uploaded_resume.pdf"
+        extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "pdf"
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{extension}") as handle:
             handle.write(await file.read())
             temp_path = handle.name
@@ -181,7 +194,7 @@ async def parse_cv_text(req: CVParseTextRequest):
 async def ats_score(req: ATSRequest):
     try:
         parsed = parse_cv_with_llm(req.resume_text)
-        ats_result = analyze_ats_with_llm(parsed, req.resume_text)
+        ats_result = analyze_ats_with_llm(parsed, req.job_description or req.resume_text)
         return StandardResponse(success=True, data=ats_result)
     except Exception as exc:
         return StandardResponse(success=False, message=str(exc))
@@ -241,7 +254,7 @@ async def create_candidate_embedding(req: CandidateEmbeddingRequest):
 @router.put("/embeddings/candidate/{candidate_id}", response_model=StandardResponse)
 async def update_candidate_embedding(candidate_id: str, req: CandidateEmbeddingRequest):
     try:
-        store.candidates_col.update(
+        store.candidates_col.upsert(
             ids=[candidate_id],
             documents=[json.dumps(req.profile_data)],
             metadatas=[{"candidate_id": req.candidate_id}],
@@ -287,7 +300,7 @@ async def create_job_embedding(req: JobEmbeddingRequest):
 async def update_job_embedding(job_id: str, req: JobEmbeddingRequest):
     try:
         normalized_job_id = _normalize_job_embedding_id(job_id)
-        store.internal_jobs_col.update(
+        store.internal_jobs_col.upsert(
             ids=[normalized_job_id],
             documents=[json.dumps(req.job_data)],
             metadatas=[{"job_id": req.job_id, "json_detailed": json.dumps(req.job_data)}],

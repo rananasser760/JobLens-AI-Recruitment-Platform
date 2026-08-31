@@ -279,22 +279,28 @@ def recommend_jobs_for_candidate(candidate_id: int, limit: int = 10) -> List[Dic
     if not candidate.get("documents"):
         return []
 
-    result = store.internal_jobs_col.query(query_texts=[candidate["documents"][0]], n_results=limit)
+    total_jobs = store.internal_jobs_col.count()
+    if total_jobs == 0:
+        return []
+
+    fetch_limit = min(limit, total_jobs)
+    result = store.internal_jobs_col.query(query_texts=[candidate["documents"][0]], n_results=fetch_limit)
 
     matches = []
-    for index in range(len(result["ids"][0])):
-        vector_id = str(result["ids"][0][index])
-        metadata = result.get("metadatas", [[{}]])[0][index] if result.get("metadatas") else {}
-        db_id = _extract_numeric_id(metadata.get("job_id")) or _extract_numeric_id(vector_id)
-        raw_preview = result["documents"][0][index]
-        matches.append(
-            {
-                "job_id": vector_id,
-                "db_id": db_id,
-                "match_score": float(round(max(0.0, 1.0 - result["distances"][0][index]), 2)),
-                "job_preview": _safe_json_load(raw_preview),
-            }
-        )
+    if result.get("ids") and result["ids"][0]:
+        for index in range(len(result["ids"][0])):
+            vector_id = str(result["ids"][0][index])
+            metadata = result.get("metadatas", [[{}]])[0][index] if result.get("metadatas") else {}
+            db_id = _extract_numeric_id(metadata.get("job_id")) or _extract_numeric_id(vector_id)
+            raw_preview = result["documents"][0][index]
+            matches.append(
+                {
+                    "job_id": vector_id,
+                    "db_id": db_id,
+                    "match_score": float(round(max(0.0, 1.0 - result["distances"][0][index]), 2)),
+                    "job_preview": _safe_json_load(raw_preview),
+                }
+            )
 
     return matches
 
@@ -309,10 +315,15 @@ def recommend_candidates_for_job(job_id: str, limit: int = 50, min_score: float 
     if not job.get("documents"):
         return []
 
-    result = store.candidates_col.query(query_texts=[job["documents"][0]], n_results=limit)
+    total_candidates = store.candidates_col.count()
+    if total_candidates == 0:
+        return []
+
+    fetch_limit = min(limit, total_candidates)
+    result = store.candidates_col.query(query_texts=[job["documents"][0]], n_results=fetch_limit)
 
     matches = []
-    if result.get("distances"):
+    if result.get("distances") and result.get("ids") and result["ids"][0]:
         for index in range(len(result["ids"][0])):
             score = max(0.0, 1.0 - result["distances"][0][index])
             if score < min_score:
