@@ -1,6 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+# Copy project files first to maximize NuGet package layer caching
 COPY src/JobLens.Api/JobLens.Api.csproj src/JobLens.Api/
 COPY src/JobLens.Application/JobLens.Application.csproj src/JobLens.Application/
 COPY src/JobLens.Domain/JobLens.Domain.csproj src/JobLens.Domain/
@@ -8,10 +9,14 @@ COPY src/JobLens.Infrastructure/JobLens.Infrastructure.csproj src/JobLens.Infras
 RUN dotnet restore src/JobLens.Api/JobLens.Api.csproj
 
 COPY . .
-RUN dotnet publish src/JobLens.Api/JobLens.Api.csproj -c Release -o /app/publish
+RUN dotnet publish src/JobLens.Api/JobLens.Api.csproj -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
+
+# Ensure local file storage directory exists
+RUN mkdir -p /app/data/storage
+
 COPY --from=build /app/publish .
 
 ENV ASPNETCORE_HTTP_PORTS=5245

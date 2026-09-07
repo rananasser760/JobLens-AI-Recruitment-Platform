@@ -10,7 +10,7 @@ import { JobsService } from '../../../jobs/jobs.service';
   selector: 'app-candidate-recommendations-page',
   imports: [CommonModule, RouterLink, DatePipe],
   templateUrl: './candidate-recommendations.page.html',
-  styleUrl: './candidate-recommendations.page.css'
+  styleUrl: './candidate-recommendations.page.css',
 })
 export class CandidateRecommendationsPage {
   private readonly jobsService = inject(JobsService);
@@ -43,7 +43,7 @@ export class CandidateRecommendationsPage {
         finalize(() => {
           this.loading.set(false);
           this.refreshing.set(false);
-        })
+        }),
       )
       .subscribe({
         next: (res) => {
@@ -54,7 +54,7 @@ export class CandidateRecommendationsPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to load recommendations right now.'));
-        }
+        },
       });
   }
 
@@ -74,7 +74,7 @@ export class CandidateRecommendationsPage {
   }
 
   trackByJobId(_: number, item: JobRecommendationDto): number {
-    return item.jobId;
+    return item.jobId ?? 0;
   }
 
   private mapError(err: unknown, fallback: string): string {

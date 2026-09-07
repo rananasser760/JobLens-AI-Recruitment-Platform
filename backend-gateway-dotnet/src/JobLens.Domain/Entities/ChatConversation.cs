@@ -10,5 +10,7 @@ public sealed class ChatConversation : BaseEntity
     public long Participant2Id { get; set; }
     public User Participant2 { get; set; } = null!;
 
+    public DateTime? LastMessageAtUtc { get; set; }
+
     public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
 }

@@ -1,12 +1,19 @@
-import os
-import openai
-from typing import List, Dict
-import json
-import re
+from __future__ import annotations
 
-# --- CONFIGURATION ---
+import json
+import logging
+import os
+import re
+import threading
+from typing import Any, Dict, List
+
+import openai
+
+logger = logging.getLogger("joblens.response")
+
 LLM_PROVIDER = os.getenv("JOBLENS_LLM_PROVIDER", "openrouter").strip().lower()
 LLM_MODEL_NAME = os.getenv("JOBLENS_INTERVIEW_MODEL", "google/gemini-2.5-flash:free")
+
 
 class InterviewProviderError(RuntimeError):
     def __init__(self, code: str, message: str, retryable: bool) -> None:
@@ -14,33 +21,40 @@ class InterviewProviderError(RuntimeError):
         self.code = code
         self.retryable = retryable
 
-_llm_client = None
 
-def _get_llm_client():
+_llm_client: openai.OpenAI | None = None
+_client_lock = threading.Lock()
+
+
+def _get_llm_client() -> openai.OpenAI | None:
     global _llm_client
     if _llm_client is not None:
         return _llm_client
-    
-    if LLM_PROVIDER == "groq":
-        api_key = os.getenv("GROQ_API_KEY", "").strip()
-        base_url = "https://api.groq.com/openai/v1"
-    else:
-        api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
-        base_url = "https://openrouter.ai/api/v1"
 
-    if api_key.startswith('"') and api_key.endswith('"'):
-        api_key = api_key[1:-1]
-    if api_key.startswith("'") and api_key.endswith("'"):
-        api_key = api_key[1:-1]
+    with _client_lock:
+        if _llm_client is not None:
+            return _llm_client
 
-    if not api_key:
-        return None
-        
-    _llm_client = openai.OpenAI(
-        base_url=base_url,
-        api_key=api_key,
-    )
-    return _llm_client
+        if LLM_PROVIDER == "groq":
+            api_key = os.getenv("GROQ_API_KEY", "").strip()
+            base_url = "https://api.groq.com/openai/v1"
+        else:
+            api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+            base_url = "https://openrouter.ai/api/v1"
+
+        if (api_key.startswith('"') and api_key.endswith('"')) or (
+            api_key.startswith("'") and api_key.endswith("'")
+        ):
+            api_key = api_key[1:-1]
+
+        if not api_key:
+            return None
+
+        _llm_client = openai.OpenAI(
+            base_url=base_url,
+            api_key=api_key,
+        )
+        return _llm_client
 
 
 def _raise_provider_error(exc: Exception, operation: str) -> None:
@@ -87,38 +101,39 @@ def _raise_provider_error(exc: Exception, operation: str) -> None:
         False,
     )
 
+
 def generate_interview_response(
     current_transcript: str,
     chat_history: List[Dict[str, str]],
     cv_text: str,
-    job_description: str
+    job_description: str,
 ) -> str:
     """
-    Generates a follow-up interview question using OpenRouter compatible LLM.
-    Now dynamically uses the Job Description to steer the questions.
+    Generates a concise follow-up interview question using the configured LLM.
+    chat_history must not already include the current_transcript.
     """
-
     system_prompt = f"""
-    You are a professional, encouraging, yet thorough technical recruiter.
-    You are interviewing a candidate for a specific role.
+You are a professional, encouraging, yet thorough technical recruiter.
+You are interviewing a candidate for a specific role.
 
-    Job Description / Role Requirements:
-    {job_description}
+Job Description / Role Requirements:
+{job_description}
 
-    Context from Candidate's CV:
-    {cv_text}
+Context from Candidate's CV:
+{cv_text}
 
-    Your Goal:
-    1. Analyze the candidate's last response.
-    2. If the response is vague, ask for clarification.
-    3. If the response is good, move to the next relevant topic based on the Job Description and CV. Ensure your questions evaluate if they are a good fit for this specific role.
-    4. Keep your responses concise (under 2-3 sentences) so they are easy to listen to via audio.
-    5. CRITICAL: Do NOT use markdown formatting (like **bold** or *italics*). Do not use asterisks. Output plain text only.
-    """
+Your Goal:
+1. Analyze the candidate's last response.
+2. If the response is vague, ask for clarification.
+3. If the response is satisfactory, move to the next relevant topic based on the Job Description and CV.
+4. Keep your responses concise (under 2-3 sentences) so they are easy to listen to via audio.
+5. CRITICAL: Do NOT use markdown formatting (such as **bold**, *italics*, bullet points, or headers). Output plain text only.
+""".strip()
 
-    messages = [{"role": "system", "content": system_prompt}]
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
     for msg in chat_history:
         messages.append({"role": msg["role"], "content": msg["content"]})
+
     messages.append({"role": "user", "content": current_transcript})
 
     client = _get_llm_client()
@@ -134,66 +149,64 @@ def generate_interview_response(
             model=LLM_MODEL_NAME,
             messages=messages,
             temperature=0.7,
-            max_tokens=100,
+            max_tokens=150,
         )
-        
-        # Keep semantic content intact while removing markdown-only wrappers.
+
         raw_content = response.choices[0].message.content or ""
         clean_content = re.sub(r"^\s*[#]+\s*", "", raw_content, flags=re.MULTILINE)
-        clean_content = clean_content.replace("**", "").strip()
+        clean_content = clean_content.replace("**", "").replace("*", "").strip()
         return clean_content
 
     except Exception as e:
-        print(f"Error generating response with LLM: {e}")
+        logger.error(f"Error generating interview response: {e}")
         _raise_provider_error(e, "generate interview response")
+
 
 def generate_interview_summary(
     chat_history: List[Dict[str, str]],
     cv_text: str,
     job_description: str,
-    criteria: str 
-) -> dict: 
+    criteria: str,
+) -> dict[str, Any]:
     """
-    Evaluates the completed interview based on custom criteria and job description.
+    Evaluates the completed interview transcript against evaluation criteria and job requirements.
+    Guarantees structured dict output conforming to expected report format.
     """
-    
     transcript_lines = []
     for msg in chat_history:
         role = "Interviewer" if msg["role"] == "assistant" else "Candidate"
         transcript_lines.append(f"{role}: {msg['content']}")
-    
+
     full_transcript = "\n\n".join(transcript_lines)
 
     user_prompt = f"""
-    You are an expert technical recruiter evaluating a candidate after a brief audio interview.
+You are an expert technical recruiter evaluating a candidate after an interview.
 
-    Job Description:
-    {job_description}
+Job Description:
+{job_description}
 
-    Context from Candidate's CV:
-    {cv_text}
+Context from Candidate's CV:
+{cv_text}
 
-    Below is the full transcript of the interview:
-    --------------------------------------------------
-    {full_transcript}
-    --------------------------------------------------
+Below is the full transcript of the interview:
+--------------------------------------------------
+{full_transcript}
+--------------------------------------------------
 
-    Your Goal: Review the transcript and evaluate the candidate strictly based on these criteria provided by the hiring manager, factoring in how well they fit the Job Description:
-    "{criteria}"
+Your Goal: Evaluate the candidate strictly based on these criteria provided by the hiring manager, factoring in their fit for the Job Description:
+"{criteria}"
 
-    CRITICAL INSTRUCTION:
-    You MUST output your evaluation strictly as a raw JSON object. Do not use Markdown formatting, do not use asterisks, and do not add any conversational filler text. 
-    Use the exact following JSON structure:
-    {{
-        "review": "A brief paragraph summarizing their performance against the job description and criteria.",
-        "strengths": ["strength 1", "strength 2"],
-        "weaknesses": ["weakness 1", "weakness 2"],
-        "score": <integer between 0 and 100>,
-        "recommendation": "A brief final recommendation."
-    }}
-    """
-
-    messages = [{"role": "user", "content": user_prompt}]
+CRITICAL INSTRUCTION:
+Output your evaluation strictly as a valid JSON object. Do not wrap with conversational text.
+Use this exact JSON schema:
+{{
+    "review": "A concise paragraph summarizing performance against requirements and criteria.",
+    "strengths": ["strength 1", "strength 2"],
+    "weaknesses": ["weakness 1", "weakness 2"],
+    "score": <integer between 0 and 100>,
+    "recommendation": "ACCEPT, REVIEW, or REJECT with a brief reason."
+}}
+""".strip()
 
     client = _get_llm_client()
     if client is None:
@@ -206,28 +219,37 @@ def generate_interview_summary(
     try:
         response = client.chat.completions.create(
             model=LLM_MODEL_NAME,
-            messages=messages,
-            temperature=0.3, 
-            max_tokens=600,
-            response_format={"type": "json_object"}
+            messages=[{"role": "user", "content": user_prompt}],
+            temperature=0.2,
+            max_tokens=800,
+            response_format={"type": "json_object"},
         )
-        
-        raw_content = response.choices[0].message.content.strip()
-        
-        if raw_content.startswith("```json"):
-            raw_content = raw_content[7:]
-        if raw_content.endswith("```"):
-            raw_content = raw_content[:-3]
-            
-        return json.loads(raw_content.strip())
+
+        raw_content = (response.choices[0].message.content or "").strip()
+
+        # Robust JSON extraction to prevent markdown decoder issues
+        json_match = re.search(r"\{.*\}", raw_content, re.DOTALL)
+        if json_match:
+            parsed = json.loads(json_match.group(0))
+        else:
+            parsed = json.loads(raw_content)
+
+        # Sanitize score bounds
+        raw_score = parsed.get("score", 0)
+        try:
+            parsed["score"] = max(0, min(100, int(raw_score)))
+        except (ValueError, TypeError):
+            parsed["score"] = 50
+
+        return parsed
 
     except json.JSONDecodeError as e:
-        print(f"Failed to parse JSON from LLM: {raw_content}")
+        logger.error(f"Malformed JSON from summary generation: {raw_content}")
         raise InterviewProviderError(
             "ProviderInvalidResponse",
             "AI provider returned malformed summary JSON.",
             False,
         ) from e
     except Exception as e:
-        print(f"Error generating summary: {e}")
+        logger.error(f"Error generating interview summary: {e}")
         _raise_provider_error(e, "generate interview summary")

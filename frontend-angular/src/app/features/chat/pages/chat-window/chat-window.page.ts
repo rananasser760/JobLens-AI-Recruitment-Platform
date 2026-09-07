@@ -1,4 +1,13 @@
-import { Component, OnInit, OnDestroy, inject, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  inject,
+  ViewChild,
+  ElementRef,
+  AfterViewChecked,
+  ChangeDetectorRef,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -11,7 +20,7 @@ import { Subscription } from 'rxjs';
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './chat-window.page.html',
-  styleUrl: './chat-window.page.css'
+  styleUrl: './chat-window.page.css',
 })
 export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
   private route = inject(ActivatedRoute);
@@ -33,8 +42,8 @@ export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
 
   ngOnInit() {
     this.currentUserId = this.authService.currentUser()?.userId || 0;
-    
-    this.route.paramMap.subscribe(params => {
+
+    this.route.paramMap.subscribe((params) => {
       const idStr = params.get('conversationId');
       if (idStr) {
         this.conversationId = parseInt(idStr, 10);
@@ -45,31 +54,31 @@ export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
 
     this.sub = new Subscription();
     this.sub.add(
-      this.chatService.incomingMessage$.subscribe(msg => {
+      this.chatService.incomingMessage$.subscribe((msg) => {
         if (msg && msg.conversationId === this.conversationId) {
           // If we didn't send it, it might not be in the list, or it's new
-          const exists = this.messages.find(m => m.id === msg.id);
+          const exists = this.messages.find((m) => m.id === msg.id);
           if (!exists) {
             this.messages.push(msg);
             this.scrollToBottom();
             if (msg.senderId !== this.currentUserId) {
-               this.markAsRead();
+              this.markAsRead();
             }
             this.cdr.detectChanges();
           }
         }
-      })
+      }),
     );
 
     this.sub.add(
-      this.chatService.messagesRead$.subscribe(convId => {
+      this.chatService.messagesRead$.subscribe((convId) => {
         if (convId === this.conversationId) {
-          this.messages.forEach(m => {
+          this.messages.forEach((m) => {
             if (m.senderId === this.currentUserId) m.isRead = true;
           });
           this.cdr.detectChanges();
         }
-      })
+      }),
     );
   }
 
@@ -94,7 +103,7 @@ export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
         console.error('Failed to load messages', err);
         this.loading = false;
         this.cdr.detectChanges();
-      }
+      },
     });
   }
 
@@ -105,29 +114,29 @@ export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
   async sendMessage() {
     if (!this.newMessage.trim()) return;
 
-    // We need the receiverId. We can infer it from the messages if there are any, 
+    // We need the receiverId. We can infer it from the messages if there are any,
     // or we'd need a GetConversation API call. Let's fetch it from the first message that isn't us.
     let receiverId = 0;
-    const otherMsg = this.messages.find(m => m.senderId !== this.currentUserId);
+    const otherMsg = this.messages.find((m) => m.senderId !== this.currentUserId);
     if (otherMsg) {
-       receiverId = otherMsg.senderId;
+      receiverId = otherMsg.senderId;
     } else {
-       // We might not have a receiverId easily available here if conversation has no messages
-       // In a real app we'd load the conversation details too. 
-       // For now, let's assume we fetch conversation detail first or we got here from a button.
-       // As a fallback, we need to load conversation.
+      // We might not have a receiverId easily available here if conversation has no messages
+      // In a real app we'd load the conversation details too.
+      // For now, let's assume we fetch conversation detail first or we got here from a button.
+      // As a fallback, we need to load conversation.
     }
 
     if (!receiverId) {
-       // Let's get it from the conversation list
-       this.chatService.getConversations().subscribe(async convs => {
-          const conv = convs.find(c => c.id === this.conversationId);
-          if (conv) {
-             await this.executeSend(conv.otherParticipantId);
-          }
-       });
+      // Let's get it from the conversation list
+      this.chatService.getConversations().subscribe(async (convs) => {
+        const conv = (convs ?? []).find((c) => c.id === this.conversationId);
+        if (conv) {
+          await this.executeSend(conv.otherParticipantId);
+        }
+      });
     } else {
-       await this.executeSend(receiverId);
+      await this.executeSend(receiverId);
     }
   }
 
@@ -136,7 +145,7 @@ export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
     try {
       await this.chatService.sendMessageRealtime({
         receiverId: receiverId,
-        content: this.newMessage
+        content: this.newMessage,
       });
       this.newMessage = '';
       this.scrollToBottom();
@@ -158,7 +167,8 @@ export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
 
   private scrollToBottom(): void {
     try {
-      this.messagesContainer.nativeElement.scrollTop = this.messagesContainer.nativeElement.scrollHeight;
-    } catch (err) { }
+      this.messagesContainer.nativeElement.scrollTop =
+        this.messagesContainer.nativeElement.scrollHeight;
+    } catch (err) {}
   }
 }

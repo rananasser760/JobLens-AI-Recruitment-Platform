@@ -5,28 +5,44 @@
       <p>Track your hiring pipeline, follow interview progress, and manage open applications.</p>
     </div>
     <button type="button" class="refresh" (click)="load()" [disabled]="loading()">
-      <i class="fa-solid fa-rotate"></i> {{ loading() ? 'Loading…' : 'Refresh' }}
+      <span class="material-symbols-outlined text-sm">refresh</span>
+      {{ loading() ? 'Loading…' : 'Refresh' }}
     </button>
   </header>
 
   @if (error()) {
-    <p class="banner error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error() }}</p>
+    <p class="banner error">
+      <span class="material-symbols-outlined text-sm">warning</span>
+      {{ error() }}
+    </p>
   }
   @if (success()) {
-    <p class="banner success"><i class="fa-solid fa-check"></i> {{ success() }}</p>
+    <p class="banner success">
+      <span class="material-symbols-outlined text-sm">check_circle</span>
+      {{ success() }}
+    </p>
   }
 
   <section class="stats-grid">
     <article class="stat-card">
-      <span><i class="fa-solid fa-layer-group"></i> Total Applications</span>
+      <span>
+        <span class="material-symbols-outlined text-sm">layers</span>
+        Total Applications
+      </span>
       <strong>{{ totalApplications() }}</strong>
     </article>
     <article class="stat-card">
-      <span><i class="fa-solid fa-spinner"></i> Active Pipeline</span>
+      <span>
+        <span class="material-symbols-outlined text-sm">progress_activity</span>
+        Active Pipeline
+      </span>
       <strong>{{ activeApplications() }}</strong>
     </article>
     <article class="stat-card">
-      <span><i class="fa-solid fa-microphone-lines"></i> Interview Stage</span>
+      <span>
+        <span class="material-symbols-outlined text-sm">mic</span>
+        Interview Stage
+      </span>
       <strong>{{ interviewReady() }}</strong>
     </article>
   </section>
@@ -50,10 +66,12 @@
     </div>
     <div class="filter-actions">
       <button type="button" class="btn-apply" (click)="applyFilter()" [disabled]="loading()">
-        <i class="fa-solid fa-filter"></i> Apply
+        <span class="material-symbols-outlined text-sm">filter_list</span>
+        Apply
       </button>
       <button type="button" class="btn-clear" (click)="clearFilter()" [disabled]="loading()">
-        <i class="fa-solid fa-xmark"></i> Clear
+        <span class="material-symbols-outlined text-sm">close</span>
+        Clear
       </button>
     </div>
   </div>
@@ -76,7 +94,12 @@
       </div>
     } @else if (applications().length === 0) {
       <div class="empty">
-        <i class="fa-solid fa-inbox" style="font-size:2rem;opacity:.3;display:block;margin-bottom:.5rem"></i>
+        <span
+          class="material-symbols-outlined"
+          style="font-size: 2.5rem; opacity: 0.3; display: block; margin-bottom: 0.5rem"
+        >
+          inbox
+        </span>
         No applications found for your current filter.
       </div>
     } @else {
@@ -93,19 +116,23 @@
 
             <div class="meta">
               <span class="meta-chip">
-                <i class="fa-solid fa-calendar-days"></i> {{ app.appliedAt | date: 'MMM d, y' }}
+                <span class="material-symbols-outlined text-xs">calendar_today</span>
+                {{ app.appliedAt | date: 'MMM d, y' }}
               </span>
               <span class="meta-chip">
-                <i class="fa-solid fa-globe"></i> {{ app.appliedVia }}
+                <span class="material-symbols-outlined text-xs">language</span>
+                {{ app.appliedVia || 'Portal' }}
               </span>
               @if (app.hasInterview) {
                 <span class="meta-chip interview">
-                  <i class="fa-solid fa-microphone"></i> Interview linked
+                  <span class="material-symbols-outlined text-xs">mic</span>
+                  Interview linked
                 </span>
               }
               @if (app.atsScore !== null && app.atsScore !== undefined) {
                 <span class="meta-chip ats">
-                  <i class="fa-solid fa-chart-line"></i> ATS {{ app.atsScore }}
+                  <span class="material-symbols-outlined text-xs">trending_up</span>
+                  ATS {{ app.atsScore }}%
                 </span>
               }
             </div>
@@ -116,11 +143,13 @@
 
             <div class="card-actions">
               <a class="btn-card-action" [routerLink]="['/candidate/jobs', app.jobId]">
-                <i class="fa-solid fa-briefcase"></i> View Job
+                <span class="material-symbols-outlined text-xs">work</span>
+                View Job
               </a>
               @if (app.hasInterview) {
                 <a class="btn-card-action" routerLink="/candidate/interviews">
-                  <i class="fa-solid fa-microphone"></i> My Interviews
+                  <span class="material-symbols-outlined text-xs">mic</span>
+                  My Interviews
                 </a>
               }
               <button
@@ -130,11 +159,13 @@
                 [disabled]="!canWithdraw(app)"
               >
                 @if (isWithdrawing(app.id)) {
-                  <i class="fa-solid fa-circle-notch fa-spin"></i> Withdrawing…
+                  Withdrawing…
                 } @else if (app.status === 'Withdrawn') {
-                  <i class="fa-solid fa-ban"></i> Withdrawn
+                  <span class="material-symbols-outlined text-xs">block</span>
+                  Withdrawn
                 } @else {
-                  <i class="fa-solid fa-hand"></i> Withdraw
+                  <span class="material-symbols-outlined text-xs">cancel</span>
+                  Withdraw
                 }
               </button>
             </div>
@@ -147,7 +178,11 @@
   <app-confirm-dialog
     [open]="confirmWithdrawOpen()"
     title="Withdraw Application"
-    [message]="'Withdraw your application for ' + (pendingWithdrawApplication()?.jobTitle || 'this role') + '? This cannot be undone.'"
+    [message]="
+      'Withdraw your application for ' +
+      (pendingWithdrawApplication()?.jobTitle || 'this role') +
+      '? This cannot be undone.'
+    "
     confirmLabel="Withdraw"
     cancelLabel="Keep"
     [busy]="pendingWithdrawBusy()"

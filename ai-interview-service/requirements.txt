@@ -1,19 +1,26 @@
-fastapi
-uvicorn
-python-multipart
-requests
-websockets
-python-dotenv
-openai
-nemo_toolkit[asr]
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+python-multipart>=0.0.9
+requests>=2.31.0
+websockets>=12.0
+python-dotenv>=1.0.1
+openai>=1.14.0
+
+# Audio Processing & Transcoding
+imageio-ffmpeg>=0.4.9
+scipy>=1.11.0
+soundfile>=0.12.1
+
+# Speech-to-Text (STT) & Deep Learning
+torch>=2.1.0
+torchaudio>=2.1.0
+transformers>=4.38.0
+huggingface-hub>=0.21.0
+nemo_toolkit[asr]>=1.23.0
+
+# Text-to-Speech (TTS)
 coqui-tts>=0.24.0
-torch
-torchaudio
-torchvision
-pydub
-ffmpeg-python
-imageio-ffmpeg
-scipy
-gTTS
-transformers
-huggingface-hub
+gTTS>=2.5.1
+
+# Caching & Utilities
+cachetools>=5.3.3

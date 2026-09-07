@@ -15,9 +15,18 @@ using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Ensure Kestrel binds to all network interfaces inside Docker
+builder.WebHost.UseUrls("http://0.0.0.0:5245");
+
+// Align Kestrel payload limit with Nginx (25MB) for heavy resume and frame uploads
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 25 * 1024 * 1024;
+});
 builder.Services.Configure<AiBackendOptions>(builder.Configuration.GetSection(AiBackendOptions.SectionName));
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
@@ -33,16 +42,24 @@ if (!string.IsNullOrWhiteSpace(jwtSigningKeyFromEnv))
     jwtOptions.SigningKey = jwtSigningKeyFromEnv;
 }
 
-if (builder.Environment.IsProduction() &&
-    (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) || jwtOptions.SigningKey.Contains("change-me", StringComparison.OrdinalIgnoreCase)))
+if (builder.Environment.IsProduction())
 {
-    throw new InvalidOperationException("A secure JWT signing key must be provided via JWT_SIGNING_KEY in production.");
+    if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) ||
+        jwtOptions.SigningKey.Contains("change-me", StringComparison.OrdinalIgnoreCase) ||
+        jwtOptions.SigningKey.Contains("your_super_secret", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException("A secure JWT signing key must be provided via JWT_SIGNING_KEY in production.");
+    }
 }
 
 builder.Services.AddDbContext<JobLensDbContext>(options =>
+{
     options.UseSqlServer(
         connectionString,
-        sqlServer => sqlServer.EnableRetryOnFailure()));
+        sqlServer => sqlServer.EnableRetryOnFailure())
+    .ConfigureWarnings(warnings =>
+        warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
+});
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -65,8 +82,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
+                // Bind JWT token automatically for WebSocket SignalR hubs
                 if (!string.IsNullOrWhiteSpace(accessToken) && 
-                    (path.StartsWithSegments("/hubs/interviews") || path.StartsWithSegments("/hubs/chat")))
+                    (path.StartsWithSegments("/hubs/interview") || path.StartsWithSegments("/hubs/chat")))
                 {
                     context.Token = accessToken;
                 }
@@ -83,7 +101,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy(
         "Frontend",
         policy => policy
-            .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:4200"])
+            .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:4200", "http://localhost:4000"])
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials());
@@ -104,11 +122,13 @@ builder.Services.AddHangfire(config =>
         });
 });
 builder.Services.AddHangfireServer();
+
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = true;
-    options.MaximumReceiveMessageSize = 5 * 1024 * 1024; // 5 MB to allow large base64 video and audio frames
+    options.MaximumReceiveMessageSize = 5 * 1024 * 1024; // 5 MB for large base64 frames
 });
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddTransient<CorrelationIdHandler>();
@@ -129,7 +149,7 @@ builder.Services.AddHttpClient<IAiBackendClient, AiBackendClient>((serviceProvid
 {
     options.AttemptTimeout.Timeout = TimeSpan.FromMinutes(5);
     options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
-    options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(10); // Must be at least double the AttemptTimeout
+    options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(10);
 });
 
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -182,17 +202,27 @@ if (int.TryParse(builder.Configuration["BackgroundJobs:CleanupStaleAfterDays"], 
     staleAfterDays = configuredStaleAfterDays;
 }
 
+// Database initialization and Hangfire Seed Data
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<JobLensDbContext>();
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-    await dbContext.Database.MigrateAsync();
+    
+    // Automatically apply Entity Framework Core migrations on startup
+    try
+    {
+        await dbContext.Database.MigrateAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Database migration skipped or encountered warnings on startup.");
+    }
 
     var seedAdminEnabled = builder.Configuration.GetValue<bool?>("Security:SeedAdminEnabled") ?? true;
     if (seedAdminEnabled)
     {
         var seedAdminEmail = (builder.Configuration["Security:SeedAdminEmail"] ?? "admin@gmail.com").Trim().ToLowerInvariant();
-        var seedAdminPassword = builder.Configuration["Security:SeedAdminPassword"] ?? "Admin@123"; // In production, this should be set to a strong value via configuration and not hardcoded
+        var seedAdminPassword = builder.Configuration["Security:SeedAdminPassword"] ?? "Admin@123";
         var seedAdminDisplayName = builder.Configuration["Security:SeedAdminDisplayName"] ?? "System Admin";
 
         var existingAdmin = await dbContext.Users.FirstOrDefaultAsync(x => x.Email == seedAdminEmail);
@@ -211,6 +241,7 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
+    // Register Background Jobs
     var recurringJobs = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
     recurringJobs.AddOrUpdate<JobScrapingJob>(
         "joblens-scrape-jobs",
@@ -239,13 +270,15 @@ app.MapHangfireDashboard(
     {
         Authorization = [new AdminHangfireDashboardAuthorizationFilter()],
     });
-app.MapHub<JobLens.Api.Hubs.InterviewHub>("/hubs/interviews");
+
+// Map Real-time WebSockets
+app.MapHub<JobLens.Api.Hubs.InterviewHub>("/hubs/interview");
 app.MapHub<JobLens.Api.Hubs.ChatHub>("/hubs/chat");
 
 app.MapGet("/", () => Results.Ok(new
 {
     service = "JobLens Gateway",
-    version = "0.1.0",
+    version = "1.0.0",
     status = "running",
 }));
 

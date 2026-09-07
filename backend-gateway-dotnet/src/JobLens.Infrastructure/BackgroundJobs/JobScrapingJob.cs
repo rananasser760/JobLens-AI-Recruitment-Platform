@@ -82,6 +82,19 @@ public sealed class JobScrapingJob(
             state.LastRunAtUtc = DateTime.UtcNow;
             await dbContext.SaveChangesAsync();
 
+            // Cache existing external jobs in memory to avoid repetitive database round-trips
+            var existingJobs = await dbContext.Jobs
+                .Where(x => x.SourceType == JobSourceType.External)
+                .ToListAsync();
+
+            var existingByExtId = existingJobs
+                .Where(x => !string.IsNullOrWhiteSpace(x.ExternalJobId))
+                .ToDictionary(x => x.ExternalJobId, StringComparer.OrdinalIgnoreCase);
+
+            var existingByUrl = existingJobs
+                .Where(x => !string.IsNullOrWhiteSpace(x.SourceUrl))
+                .ToDictionary(x => x.SourceUrl, StringComparer.OrdinalIgnoreCase);
+
             foreach (var item in result.Data.Jobs)
             {
                 var incomingSource = (item.Source ?? string.Empty).Trim();
@@ -132,6 +145,7 @@ public sealed class JobScrapingJob(
                     .Select(skill => skill.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
+
                 var metadataPayload = item.Metadata is not null
                     ? new Dictionary<string, object?>(item.Metadata)
                     : new Dictionary<string, object?>();
@@ -160,15 +174,15 @@ public sealed class JobScrapingJob(
                     ? ServiceJson.Serialize(metadataPayload)
                     : null;
 
-                var existing = await dbContext.Jobs.FirstOrDefaultAsync(x =>
-                    x.SourceType == JobSourceType.External &&
-                    x.ExternalJobId == incomingExternalJobId);
+                JobPosting? existing = null;
+                if (!string.IsNullOrWhiteSpace(incomingExternalJobId))
+                {
+                    existingByExtId.TryGetValue(incomingExternalJobId, out existing);
+                }
 
                 if (existing is null && !string.IsNullOrWhiteSpace(incomingSourceUrl))
                 {
-                    existing = await dbContext.Jobs.FirstOrDefaultAsync(x =>
-                        x.SourceType == JobSourceType.External &&
-                        x.SourceUrl == incomingSourceUrl);
+                    existingByUrl.TryGetValue(incomingSourceUrl, out existing);
                 }
 
                 if (existing is null)
@@ -190,6 +204,15 @@ public sealed class JobScrapingJob(
                     };
                     dbContext.Jobs.Add(existing);
                     insertedJobs += 1;
+
+                    if (!string.IsNullOrWhiteSpace(incomingExternalJobId))
+                    {
+                        existingByExtId[incomingExternalJobId] = existing;
+                    }
+                    if (!string.IsNullOrWhiteSpace(incomingSourceUrl))
+                    {
+                        existingByUrl[incomingSourceUrl] = existing;
+                    }
                 }
                 else
                 {
@@ -234,6 +257,7 @@ public sealed class JobScrapingJob(
                 existing.ContentHash = contentHashService.Compute(
                     $"{existing.Title}\n{existing.Description}\n{existing.Location}\n{string.Join(',', finalSkills)}");
                 existing.IsActive = true;
+                existing.UpdatedAtUtc = DateTime.UtcNow;
 
                 processedJobs += 1;
                 if (processedJobs % 25 == 0 || processedJobs == totalJobs)
@@ -279,7 +303,6 @@ public sealed class JobScrapingJob(
 
             if (processedJobs > 0)
             {
-                // Scraped SQL jobs must be re-indexed in recommendation vectors after ingestion.
                 backgroundJobs.Enqueue<RecommendationRefreshJob>(job => job.RefreshAllAsync());
             }
         }

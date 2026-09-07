@@ -1,14 +1,18 @@
+using System.Data;
+using System.Security.Cryptography;
+using System.Text;
 using JobLens.Application.Contracts;
 using JobLens.Application.Interfaces;
 using JobLens.Domain.Entities;
 using JobLens.Domain.Enums;
 using JobLens.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
-using System.Data;
 
 namespace JobLens.Infrastructure.BackgroundJobs;
 
-public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbContext, IAiBackendClient aiBackendClient)
+public sealed class RecommendationRefreshJob(
+    Persistence.JobLensDbContext dbContext,
+    IAiBackendClient aiBackendClient)
 {
     public async Task RefreshAllAsync()
     {
@@ -34,8 +38,15 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
 
     public async Task RefreshCandidateAsync(long candidateId)
     {
-        var candidate = await dbContext.CandidateProfiles.Include(x => x.Resumes).FirstOrDefaultAsync(x => x.Id == candidateId);
-        var resume = candidate?.Resumes.OrderByDescending(x => x.IsDefault).ThenByDescending(x => x.CreatedAtUtc).FirstOrDefault();
+        var candidate = await dbContext.CandidateProfiles
+            .Include(x => x.Resumes)
+            .FirstOrDefaultAsync(x => x.Id == candidateId);
+
+        var resume = candidate?.Resumes
+            .OrderByDescending(x => x.IsDefault)
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .FirstOrDefault();
+
         if (candidate is null || resume is null || string.IsNullOrWhiteSpace(resume.RawText))
         {
             return;
@@ -57,6 +68,7 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
 
         var vectorEntry = await dbContext.VectorIndexEntries
             .FirstOrDefaultAsync(x => x.EntityType == "candidate" && x.EntityId == candidate.Id);
+
         if (vectorEntry is null)
         {
             vectorEntry = new VectorIndexEntry
@@ -86,20 +98,29 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
 
         await dbContext.SaveChangesAsync();
 
-        var results = await aiBackendClient.RecommendJobsAsync(new JobRecommendationRequest(candidateId, resume.RawText, 10), CancellationToken.None);
+        var results = await aiBackendClient.RecommendJobsAsync(
+            new JobRecommendationRequest(candidateId, resume.RawText, 10),
+            CancellationToken.None);
+
         if (!results.Success || results.Data is null)
         {
             return;
         }
 
         var sanitized = SanitizeRecommendations(results.Data, 10);
-        await ReplaceRecommendationCacheAsync(candidateId, RecommendationSubjectType.Candidate, RecommendationTargetType.Job, sanitized, CancellationToken.None);
+        await ReplaceRecommendationCacheAsync(
+            candidateId,
+            RecommendationSubjectType.Candidate,
+            RecommendationTargetType.Job,
+            sanitized,
+            resume.ContentHash,
+            CancellationToken.None);
     }
 
     public async Task RefreshJobAsync(long jobId)
     {
         var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId);
-        if (job is null)
+        if (job is null || !job.IsActive)
         {
             return;
         }
@@ -157,14 +178,23 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
             await dbContext.SaveChangesAsync();
         }
 
-        var results = await aiBackendClient.RecommendCandidatesAsync(new CandidateRecommendationRequest(job.Id, job.Description, 10), CancellationToken.None);
+        var results = await aiBackendClient.RecommendCandidatesAsync(
+            new CandidateRecommendationRequest(job.Id, job.Description, 10),
+            CancellationToken.None);
+
         if (!results.Success || results.Data is null)
         {
             return;
         }
 
         var sanitized = SanitizeRecommendations(results.Data, 10);
-        await ReplaceRecommendationCacheAsync(jobId, RecommendationSubjectType.Job, RecommendationTargetType.Candidate, sanitized, CancellationToken.None);
+        await ReplaceRecommendationCacheAsync(
+            jobId,
+            RecommendationSubjectType.Job,
+            RecommendationTargetType.Candidate,
+            sanitized,
+            job.ContentHash,
+            CancellationToken.None);
     }
 
     private async Task ReplaceRecommendationCacheAsync(
@@ -172,6 +202,7 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
         RecommendationSubjectType subjectType,
         RecommendationTargetType targetType,
         IReadOnlyList<RecommendationResultDto> recommendations,
+        string snapshotHash,
         CancellationToken cancellationToken)
     {
         var strategy = dbContext.Database.CreateExecutionStrategy();
@@ -190,6 +221,8 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
             }
 
             var refreshedAt = DateTime.UtcNow;
+            var safeSnapshotHash = ComputeShortHash(snapshotHash);
+
             for (var i = 0; i < recommendations.Count; i++)
             {
                 var item = recommendations[i];
@@ -202,7 +235,7 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
                     Rank = i + 1,
                     Score = item.Score,
                     Reason = item.Reason,
-                    SourceSnapshotHash = item.PreviewJson,
+                    SourceSnapshotHash = safeSnapshotHash,
                     RefreshedAtUtc = refreshedAt,
                     ExpiresAtUtc = refreshedAt.AddHours(6),
                 });
@@ -230,7 +263,7 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
 
             sanitized.Add(item with
             {
-                Score = double.IsFinite(item.Score) ? item.Score : 0,
+                Score = double.IsFinite(item.Score) ? Math.Clamp(item.Score, 0, 100) : 0,
                 Reason = item.Reason ?? string.Empty,
                 PreviewJson = item.PreviewJson ?? string.Empty,
             });
@@ -242,5 +275,16 @@ public sealed class RecommendationRefreshJob(Persistence.JobLensDbContext dbCont
         }
 
         return sanitized;
+    }
+
+    private static string ComputeShortHash(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return string.Empty;
+        }
+
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes)[..16];
     }
 }

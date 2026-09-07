@@ -1,19 +1,28 @@
+using System.Text.Json;
+using Hangfire;
 using JobLens.Api.Compatibility;
 using JobLens.Api.Contracts;
 using JobLens.Application.Common;
 using JobLens.Application.DTOs.Jobs;
 using JobLens.Application.Interfaces;
+using JobLens.Domain.Entities;
+using JobLens.Infrastructure.BackgroundJobs;
 using JobLens.Infrastructure.Persistence;
 using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 
 namespace JobLens.Api.Controllers;
 
 [Route("api/jobs")]
-public sealed class JobsController(IJobService jobService, IAdminService adminService, IAiBackendClient aiBackendClient, JobLensDbContext dbContext) : AppControllerBase
+public sealed class JobsController(
+    IJobService jobService,
+    IAdminService adminService,
+    IAiBackendClient aiBackendClient,
+    JobLensDbContext dbContext,
+    IContentHashService contentHashService,
+    IBackgroundJobClient backgroundJobs) : AppControllerBase
 {
     private static readonly string[] EgyptLocationTokens =
     [
@@ -146,6 +155,9 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
             return BadRequest(new ApiResponse<JobViewDto>(false, null, "Interview defaults are required.", ["validation_error"]));
         }
 
+        var userId = GetRequiredUserId();
+        var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+
         var create = new CreateJobRequest(
             request.Title,
             request.Description,
@@ -153,16 +165,25 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
             request.RequiredSkills?.Select(x => x.SkillName).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray() ?? [],
             request.ExpiresAt);
 
-        var result = await jobService.CreateJobAsync(GetRequiredUserId(), create, cancellationToken);
+        var result = await jobService.CreateJobAsync(userId, create, cancellationToken);
         if (!result.Success || result.Data is null)
         {
             return BadRequest(new ApiResponse<JobViewDto>(false, null, result.Message, result.Errors));
         }
 
-        var job = await dbContext.Jobs.Include(x => x.Company).Include(x => x.Applications).FirstOrDefaultAsync(x => x.Id == result.Data.JobId, cancellationToken);
+        var job = await dbContext.Jobs
+            .Include(x => x.Company)
+            .Include(x => x.Applications)
+            .FirstOrDefaultAsync(x => x.Id == result.Data.JobId, cancellationToken);
+
         if (job is null)
         {
             return Ok(new ApiResponse<JobViewDto>(true, null, result.Message));
+        }
+
+        if (recruiter is not null && recruiter.CompanyId.HasValue)
+        {
+            job.CompanyId = recruiter.CompanyId.Value;
         }
 
         job.Requirements = request.Requirements?.Trim() ?? job.Requirements;
@@ -174,7 +195,11 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
         job.Currency = request.Currency?.Trim() ?? job.Currency;
         job.ExperienceLevel = request.ExperienceLevel?.Trim() ?? job.ExperienceLevel;
         job.InterviewDefaultsJson = SerializeInterviewDefaults(request.InterviewDefaults);
+        job.ContentHash = contentHashService.Compute($"{job.Title}\n{job.Description}\n{job.Location}\n{job.SkillsJson}");
+        job.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshJobAsync(job.Id));
 
         return Ok(new ApiResponse<JobViewDto>(true, ToJobView(job), result.Message));
     }
@@ -183,6 +208,11 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
     [HttpPut("{jobId:long}")]
     public async Task<IActionResult> Update(long jobId, [FromBody] UpdateJobCompatRequest request, CancellationToken cancellationToken)
     {
+        if (!await CanManageJobAsync(jobId, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var current = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (current is null)
         {
@@ -242,7 +272,12 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
             current.InterviewDefaultsJson = SerializeInterviewDefaults(request.InterviewDefaults);
         }
 
+        current.ContentHash = contentHashService.Compute($"{current.Title}\n{current.Description}\n{current.Location}\n{current.SkillsJson}");
+        current.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshJobAsync(current.Id));
+
         return Ok(new ApiResponse<JobViewDto>(true, ToJobView(current), result.Message));
     }
 
@@ -250,6 +285,11 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
     [HttpDelete("{jobId:long}")]
     public async Task<IActionResult> Delete(long jobId, CancellationToken cancellationToken)
     {
+        if (!await CanManageJobAsync(jobId, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (job is null)
         {
@@ -285,6 +325,11 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
     [HttpPost("{jobId:long}/toggle-status")]
     public async Task<IActionResult> ToggleStatus(long jobId, CancellationToken cancellationToken)
     {
+        if (!await CanManageJobAsync(jobId, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (job is null)
         {
@@ -292,7 +337,11 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
         }
 
         job.IsActive = !job.IsActive;
+        job.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshJobAsync(job.Id));
+
         return Ok(new ApiResponse<bool>(true, true, "Job status updated."));
     }
 
@@ -300,6 +349,11 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
     [HttpPost("{jobId:long}/skills")]
     public async Task<IActionResult> AddSkill(long jobId, [FromBody] CreateJobSkillRequest request, CancellationToken cancellationToken)
     {
+        if (!await CanManageJobAsync(jobId, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (job is null)
         {
@@ -316,7 +370,11 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
         {
             skills.Add(request.SkillName.Trim());
             job.SkillsJson = ServiceJson.Serialize(skills);
+            job.ContentHash = contentHashService.Compute($"{job.Title}\n{job.Description}\n{job.Location}\n{job.SkillsJson}");
+            job.UpdatedAtUtc = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
+
+            backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshJobAsync(job.Id));
         }
 
         return Ok(new ApiResponse<bool>(true, true, "Skill added."));
@@ -326,6 +384,11 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
     [HttpDelete("{jobId:long}/skills/{skillId:long}")]
     public async Task<IActionResult> RemoveSkill(long jobId, long skillId, CancellationToken cancellationToken)
     {
+        if (!await CanManageJobAsync(jobId, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         if (job is null)
         {
@@ -341,7 +404,12 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
 
         skills.RemoveAt(index);
         job.SkillsJson = ServiceJson.Serialize(skills);
+        job.ContentHash = contentHashService.Compute($"{job.Title}\n{job.Description}\n{job.Location}\n{job.SkillsJson}");
+        job.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshJobAsync(job.Id));
+
         return Ok(new ApiResponse<bool>(true, true, "Skill removed."));
     }
 
@@ -418,6 +486,11 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
     [HttpGet("{jobId:long}/candidate-recommendations")]
     public async Task<IActionResult> GetCandidateRecommendationsForJob(long jobId, [FromQuery] int limit = 10, [FromQuery] bool forceRefresh = false, CancellationToken cancellationToken = default)
     {
+        if (!await CanManageJobAsync(jobId, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var recs = await jobService.GetRecommendationsForJobAsync(GetRequiredUserId(), jobId, limit, cancellationToken, forceRefresh);
         if (!recs.Success || recs.Data is null)
         {
@@ -464,9 +537,9 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
         }
 
         var query = dbContext.Jobs.Include(x => x.Company).AsQueryable();
-        if (recruiter is not null)
+        if (recruiter is not null && recruiter.CompanyId.HasValue)
         {
-            query = query.Where(x => x.CompanyId == recruiter.CompanyId);
+            query = query.Where(x => x.CompanyId == recruiter.CompanyId.Value);
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -850,6 +923,24 @@ public sealed class JobsController(IJobService jobService, IAdminService adminSe
             scrapingEnabled = true,
             timestampUtc = DateTime.UtcNow,
         }));
+    }
+
+    private async Task<bool> CanManageJobAsync(long jobId, CancellationToken cancellationToken)
+    {
+        if (User.IsInRole("Admin"))
+        {
+            return true;
+        }
+
+        var userId = GetRequiredUserId();
+        var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (recruiter is null || !recruiter.CompanyId.HasValue)
+        {
+            return false;
+        }
+
+        var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
+        return job is not null && job.CompanyId == recruiter.CompanyId;
     }
 
     private static JobViewDto ToJobView(Domain.Entities.JobPosting job)

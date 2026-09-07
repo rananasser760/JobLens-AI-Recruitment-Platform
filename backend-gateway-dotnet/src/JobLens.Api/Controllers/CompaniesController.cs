@@ -110,6 +110,11 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
     [HttpPut("{companyId:long}")]
     public async Task<IActionResult> Update(long companyId, [FromBody] UpdateCompanyRequest request, CancellationToken cancellationToken)
     {
+        if (!await CanManageCompanyAsync(companyId, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var company = await dbContext.Companies.FirstOrDefaultAsync(x => x.Id == companyId, cancellationToken);
         if (company is null)
         {
@@ -118,8 +123,15 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
 
         if (!string.IsNullOrWhiteSpace(request.Name))
         {
+            var newSlug = FrontendStatusMapper.Slugify(request.Name);
+            var conflict = await dbContext.Companies.AnyAsync(x => x.Slug == newSlug && x.Id != companyId, cancellationToken);
+            if (conflict)
+            {
+                return BadRequest(new ApiResponse<CompanyDto>(false, null, "Another company with this name already exists.", ["duplicate_name"]));
+            }
+
             company.Name = request.Name.Trim();
-            company.Slug = FrontendStatusMapper.Slugify(company.Name);
+            company.Slug = newSlug;
         }
 
         if (request.Website is not null)
@@ -147,6 +159,7 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
             company.Location = request.Location.Trim();
         }
 
+        company.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var totalJobs = await dbContext.Jobs.CountAsync(x => x.CompanyId == company.Id, cancellationToken);
@@ -173,6 +186,16 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
     [RequestSizeLimit(8_000_000)]
     public async Task<IActionResult> UpdateLogo(long companyId, [FromForm] IFormFile file, CancellationToken cancellationToken)
     {
+        if (!await CanManageCompanyAsync(companyId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new ApiResponse<bool>(false, false, "Logo file is required."));
+        }
+
         var company = await dbContext.Companies.FirstOrDefaultAsync(x => x.Id == companyId, cancellationToken);
         if (company is null)
         {
@@ -183,14 +206,38 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(company.LogoUrl))
+        var oldLogo = company.LogoUrl;
+        var newLogoPath = await fileStorageService.SaveAsync(file.FileName, memory.ToArray(), cancellationToken);
+
+        try
         {
-            await fileStorageService.DeleteAsync(company.LogoUrl, cancellationToken);
+            company.LogoUrl = newLogoPath;
+            company.UpdatedAtUtc = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(oldLogo))
+            {
+                await fileStorageService.DeleteAsync(oldLogo, cancellationToken);
+            }
+
+            return Ok(new ApiResponse<bool>(true, true, "Company logo updated."));
+        }
+        catch
+        {
+            await fileStorageService.DeleteAsync(newLogoPath, CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task<bool> CanManageCompanyAsync(long companyId, CancellationToken cancellationToken)
+    {
+        if (User.IsInRole("Admin"))
+        {
+            return true;
         }
 
-        company.LogoUrl = await fileStorageService.SaveAsync(file.FileName, memory.ToArray(), cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        return Ok(new ApiResponse<bool>(true, true, "Company logo updated."));
+        var userId = GetRequiredUserId();
+        var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        return recruiter is not null && recruiter.CompanyId == companyId;
     }
 }

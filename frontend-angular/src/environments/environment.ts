@@ -2,10 +2,11 @@ export const environment = {
   production: false,
   apiBaseUrl: 'http://localhost:5245',
   apiPrefix: '/api',
-  realtimeHubUrl: 'http://localhost:5245/hubs/interviews',
+  realtimeHubUrl: 'http://localhost:5245/hubs/interview',
+  chatHubUrl: 'http://localhost:5245/hubs/chat',
   authStorageKeys: {
     accessToken: 'joblens.accessToken',
     refreshToken: 'joblens.refreshToken',
-    authUser: 'joblens.authUser'
-  }
+    authUser: 'joblens.authUser',
+  },
 } as const;

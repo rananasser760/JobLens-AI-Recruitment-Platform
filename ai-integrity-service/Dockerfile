@@ -2,10 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+# Prevent uv lock timeouts and filesystem link warnings
+ENV UV_LINK_MODE=copy \
+    UV_HTTP_TIMEOUT=600 \
+    UV_LOCK_TIMEOUT=1200
+
+# Install system utilities, OpenCV headless dependencies, and Microsoft ODBC 18 driver
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
     libglib2.0-0 \
+    libsm6 \
+    libxext6 \
     curl \
     gnupg \
     unixodbc-dev \
@@ -18,15 +26,17 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-build-isolation uv "cython<3.0" setuptools wheel
+    pip install --no-cache-dir uv "cython<3.0" setuptools wheel
 
-RUN --mount=type=cache,target=/root/.cache/uv \
+# Isolated cache ID avoids lock contention with the other Python services
+RUN --mount=type=cache,id=integrity-uv-cache,target=/root/.cache/uv \
     uv pip install --system --no-build-isolation -r requirements.txt
 
 COPY . .
 
+# Ensure outputs directories exist
 RUN mkdir -p outputs/alert_frames
 
-EXPOSE 8000 8001
+EXPOSE 8000
 
-CMD ["python", "main.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,15 +1,11 @@
-import { Inject, Injectable, PLATFORM_ID } from '@angular/core';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { environment } from '../../../environments/environment';
 import { AuthResponseDto } from '../models/auth.model';
 
 @Injectable({ providedIn: 'root' })
 export class TokenStoreService {
-  private readonly browser: boolean;
-
-  constructor(@Inject(PLATFORM_ID) platformId: object) {
-    this.browser = isPlatformBrowser(platformId);
-  }
+  private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
 
   getAccessToken(): string | null {
     if (!this.browser) {
@@ -36,7 +32,12 @@ export class TokenStoreService {
     }
 
     try {
-      return JSON.parse(raw) as AuthResponseDto;
+      const parsed = JSON.parse(raw);
+      // Normalize expiresAtUtc / expiresAt property aliases
+      if (parsed && !parsed.expiresAt && parsed.expiresAtUtc) {
+        parsed.expiresAt = parsed.expiresAtUtc;
+      }
+      return parsed as AuthResponseDto;
     } catch {
       this.clearSession();
       return null;
@@ -48,9 +49,18 @@ export class TokenStoreService {
       return;
     }
 
+    // Ensure cross-compatibility between expiresAt and expiresAtUtc
+    const normalizedPayload = {
+      ...payload,
+      expiresAt:
+        payload.expiresAt ?? (payload as unknown as { expiresAtUtc?: string }).expiresAtUtc,
+      expiresAtUtc:
+        (payload as unknown as { expiresAtUtc?: string }).expiresAtUtc ?? payload.expiresAt,
+    };
+
     localStorage.setItem(environment.authStorageKeys.accessToken, payload.accessToken);
     localStorage.setItem(environment.authStorageKeys.refreshToken, payload.refreshToken);
-    localStorage.setItem(environment.authStorageKeys.authUser, JSON.stringify(payload));
+    localStorage.setItem(environment.authStorageKeys.authUser, JSON.stringify(normalizedPayload));
   }
 
   clearSession(): void {

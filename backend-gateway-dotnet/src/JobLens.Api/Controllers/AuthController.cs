@@ -6,9 +6,9 @@ using JobLens.Application.DTOs.Auth;
 using JobLens.Application.Interfaces;
 using JobLens.Infrastructure.Configuration;
 using JobLens.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace JobLens.Api.Controllers;
@@ -36,12 +36,19 @@ public sealed class AuthController(
             ? Domain.Enums.AppRole.Recruiter
             : Domain.Enums.AppRole.Candidate;
 
+        string? companyName = null;
+        if (request.CompanyId.HasValue && request.CompanyId.Value > 0)
+        {
+            var company = await dbContext.Companies.FirstOrDefaultAsync(x => x.Id == request.CompanyId.Value, cancellationToken);
+            companyName = company?.Name;
+        }
+
         var registerRequest = new RegisterRequest(
             request.Email,
             request.Password,
             request.FullName ?? request.Username,
             role,
-            request.CompanyId is > 0 ? null : null,
+            companyName,
             request.Username,
             request.FullName,
             request.ConfirmPassword,
@@ -113,7 +120,7 @@ public sealed class AuthController(
         var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId && x.IsActive, cancellationToken);
         if (user is null)
         {
-            return Unauthorized(new ApiResponse<AuthSessionDto>(false, null, "User not found.", ["not_found"]));
+            return Unauthorized(new ApiResponse<AuthSessionDto>(false, null, "User not found or account is deactivated.", ["not_found"]));
         }
 
         var token = tokenService.GenerateToken(user);
@@ -151,6 +158,7 @@ public sealed class AuthController(
         }
 
         user.PasswordHash = passwordHasher.Hash(request.NewPassword);
+        user.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new ApiResponse<bool>(true, true, "Password changed successfully."));
     }
@@ -214,6 +222,7 @@ public sealed class AuthController(
         }
 
         user.PasswordHash = passwordHasher.Hash(request.NewPassword);
+        user.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new ApiResponse<bool>(true, true, "Password reset completed."));
     }

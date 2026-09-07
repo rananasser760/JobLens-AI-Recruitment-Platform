@@ -32,7 +32,13 @@ public sealed record ScrapedJobItemDto(
     DateTime? PostedAtUtc,
     IReadOnlyDictionary<string, object?> Metadata);
 
-public sealed record ScrapeJobsResponseDto(int ProcessedCategories, int UpsertedJobs, IReadOnlyList<ScrapedJobItemDto> Jobs);
+public sealed record ScrapeJobsResponseDto(
+    int ProcessedCategories,
+    int UpsertedJobs,
+    int TotalJobs,
+    IReadOnlyList<ScrapedJobItemDto> Jobs,
+    IReadOnlyDictionary<string, object?>? Stats = null,
+    string? Warning = null);
 
 public sealed record StartInterviewAiRequest(
     string CandidateName,
@@ -52,8 +58,10 @@ public sealed record AudioAnalysisResponseDto(
     IReadOnlyList<string> Flags,
     string? ReplyAudioBase64,
     string? ReplyAudioMimeType);
-public sealed record VideoAnalysisRequest(string InterviewSessionId, string Base64Frame, int Sequence);
+
+public sealed record VideoAnalysisRequest(string IntegritySessionId, string Base64Frame, int Sequence);
 public sealed record VideoFlagDto(string EventType, string Severity, string Source, string Description, string? MediaReference = null);
-public sealed record VideoAnalysisResponseDto(IReadOnlyList<VideoFlagDto> Events);
-public sealed record FinalizeInterviewRequest(string InterviewSessionId, string IntegritySessionId, IReadOnlyList<TranscriptEntryDto> Transcript);
+public sealed record VideoAnalysisResponseDto(IReadOnlyList<VideoFlagDto> Events, bool Skipped = false, string? Reason = null);
+
+public sealed record FinalizeInterviewRequest(string InterviewSessionId, string? IntegritySessionId, IReadOnlyList<TranscriptEntryDto> Transcript);
 public sealed record InterviewFinalizationResponseDto(double FinalScore, string Verdict, string RecruiterReportJson, string CandidateFeedbackJson);

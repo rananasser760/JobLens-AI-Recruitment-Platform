@@ -38,11 +38,22 @@ class RecruitmentVectorStore:
 
             settings = get_recruitment_settings()
             self._client = chromadb.PersistentClient(path=settings.chroma_path)
-            self._legacy_jobs_col = self._client.get_or_create_collection(name=LEGACY_JOBS_COLLECTION_NAME)
-            self._internal_jobs_col = self._client.get_or_create_collection(name=INTERNAL_JOBS_COLLECTION_NAME)
-            self._scraped_jobs_col = self._client.get_or_create_collection(name=SCRAPED_JOBS_COLLECTION_NAME)
+            
+            # Use cosine space for accurate similarity ranking
+            cosine_metadata = {"hnsw:space": "cosine"}
+            self._legacy_jobs_col = self._client.get_or_create_collection(
+                name=LEGACY_JOBS_COLLECTION_NAME, metadata=cosine_metadata
+            )
+            self._internal_jobs_col = self._client.get_or_create_collection(
+                name=INTERNAL_JOBS_COLLECTION_NAME, metadata=cosine_metadata
+            )
+            self._scraped_jobs_col = self._client.get_or_create_collection(
+                name=SCRAPED_JOBS_COLLECTION_NAME, metadata=cosine_metadata
+            )
             self._jobs_col = self._internal_jobs_col
-            self._candidates_col = self._client.get_or_create_collection(name=CANDIDATES_COLLECTION_NAME)
+            self._candidates_col = self._client.get_or_create_collection(
+                name=CANDIDATES_COLLECTION_NAME, metadata=cosine_metadata
+            )
             self._migrate_legacy_job_listings()
 
     @staticmethod

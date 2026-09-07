@@ -4,7 +4,9 @@
 #  Both routers import engine / DBSessionLocal / all model classes from here.
 # ══════════════════════════════════════════════════════════════════════════════
 
+import logging
 import os
+import time
 from datetime import datetime
 from urllib.parse import quote_plus, unquote_plus
 
@@ -13,6 +15,8 @@ from sqlalchemy import (
     DateTime, ForeignKey, Text, LargeBinary, inspect, text
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+
+logger = logging.getLogger("joblens.integrity.models")
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 DEFAULT_SQLSERVER_CONNECTION_STRING = (
@@ -112,6 +116,7 @@ def _ensure_sql_server_database_exists(database_url: str) -> None:
             exists = connection.execute(exists_query, {"db_name": database_name}).scalar_one()
             if not exists:
                 connection.execute(text(f"CREATE DATABASE [{database_name}]"))
+                logger.info(f"Database [{database_name}] created successfully.")
     finally:
         master_engine.dispose()
 
@@ -142,8 +147,6 @@ class DBSession(Base):
     candidate_id      = Column(String(100), nullable=True)
 
     # ── Interview link ─────────────────────────────────────────────────────
-    # UUID from INTERVIEW_SESSIONS dict — nullable because integrity-only
-    # sessions (no AI interview) are still valid.
     interview_session_id = Column(String(100), nullable=True, index=True)
 
     # ── Interview results (denormalised for fast report queries) ───────────
@@ -216,7 +219,6 @@ class DBKeyframe(Base):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def run_migrations() -> None:
-    # (table, column, sql_type)
     migrations = [
         ("sessions", "candidate_name", "NVARCHAR(200)"),
         ("sessions", "candidate_id", "NVARCHAR(100)"),
@@ -239,19 +241,31 @@ def run_migrations() -> None:
                 existing_columns = {row["name"] for row in inspector.get_columns(table)}
                 if column not in existing_columns:
                     connection.execute(text(f"ALTER TABLE {table} ADD {column} {definition}"))
-                    print(f"[migration] added '{column}' to '{table}'")
+                    logger.info(f"[migration] added '{column}' to '{table}'")
 
             if "keyframes" not in existing_tables:
                 DBKeyframe.__table__.create(bind=connection, checkfirst=True)
-                print("[migration] ensured 'keyframes' table")
+                logger.info("[migration] ensured 'keyframes' table")
 
-        print("[migration] complete")
+        logger.info("[migration] complete")
 
     except Exception as exc:
-        print(f"[migration] warning: {exc}")
+        logger.warning(f"[migration] warning: {exc}")
 
 
-def init_db() -> None:
-    _ensure_sql_server_database_exists(DATABASE_URL)
-    Base.metadata.create_all(bind=engine)
-    run_migrations()
+def init_db(retries: int = 12, delay: float = 3.0) -> None:
+    """Initializes the database with connection retry support during startup."""
+    for attempt in range(1, retries + 1):
+        try:
+            logger.info(f"Connecting to SQL Server (attempt {attempt}/{retries})...")
+            _ensure_sql_server_database_exists(DATABASE_URL)
+            Base.metadata.create_all(bind=engine)
+            run_migrations()
+            logger.info("Database initialized successfully.")
+            return
+        except Exception as exc:
+            if attempt >= retries:
+                logger.error(f"Database initialization failed after {retries} attempts: {exc}")
+                raise
+            logger.warning(f"Database not ready yet ({exc}). Retrying in {delay}s...")
+            time.sleep(delay)

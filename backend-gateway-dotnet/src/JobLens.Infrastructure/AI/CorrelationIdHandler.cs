@@ -14,10 +14,12 @@ public sealed class CorrelationIdHandler(IHttpContextAccessor httpContextAccesso
             ?? Activity.Current?.TraceId.ToString()
             ?? Guid.NewGuid().ToString("N");
 
-        if (!request.Headers.Contains(HeaderName))
+        if (request.Headers.Contains(HeaderName))
         {
-            request.Headers.TryAddWithoutValidation(HeaderName, correlationId);
+            request.Headers.Remove(HeaderName);
         }
+
+        request.Headers.TryAddWithoutValidation(HeaderName, correlationId);
 
         return base.SendAsync(request, cancellationToken);
     }

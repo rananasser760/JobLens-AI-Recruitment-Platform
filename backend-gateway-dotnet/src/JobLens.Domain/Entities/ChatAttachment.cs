@@ -4,8 +4,8 @@ namespace JobLens.Domain.Entities;
 
 public sealed class ChatAttachment : BaseEntity
 {
-    public long MessageId { get; set; }
-    public ChatMessage Message { get; set; } = null!;
+    public long? MessageId { get; set; }
+    public ChatMessage? Message { get; set; }
 
     public string FileName { get; set; } = string.Empty;
     public string FileUrl { get; set; } = string.Empty;

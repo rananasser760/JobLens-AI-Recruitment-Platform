@@ -9,7 +9,10 @@ public sealed class ParsedResumeResult : BaseEntity
     public string FullName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
+    public string Headline { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
     public string SkillsJson { get; set; } = "[]";
+    public double? Confidence { get; set; }
     public DateTime ParsedAtUtc { get; set; } = DateTime.UtcNow;
 
     public Resume Resume { get; set; } = null!;

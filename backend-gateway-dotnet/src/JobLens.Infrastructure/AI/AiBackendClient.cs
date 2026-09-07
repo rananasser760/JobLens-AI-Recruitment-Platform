@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using JobLens.Application.Contracts;
 using JobLens.Application.DTOs.Interviews;
@@ -69,7 +68,7 @@ public sealed class AiBackendClient(HttpClient httpClient) : IAiBackendClient
 
     public Task<InternalApiEnvelope<VideoAnalysisResponseDto>> AnalyzeVideoAsync(VideoAnalysisRequest request, CancellationToken cancellationToken) =>
         PostAsync<VideoAnalysisRequest, VideoAnalysisResponseDto>(
-            "/internal/v1/integrity/analyze-video", // <-- Updated to route to ai-integrity-service via Nginx
+            "/internal/v1/integrity/analyze-video",
             request,
             cancellationToken);
 
@@ -85,11 +84,12 @@ public sealed class AiBackendClient(HttpClient httpClient) : IAiBackendClient
 
             if (!response.IsSuccessStatusCode)
             {
+                var parsedMessage = TryExtractErrorMessage(body) ?? $"AI backend request failed with HTTP {(int)response.StatusCode}";
                 return new InternalApiEnvelope<TResponse>(
                     Guid.NewGuid().ToString("N"),
                     false,
                     default,
-                    new InternalApiError(response.StatusCode.ToString(), "AI backend request failed", body));
+                    new InternalApiError(response.StatusCode.ToString(), parsedMessage, body));
             }
 
             var envelope = JsonSerializer.Deserialize<InternalApiEnvelope<TResponse>>(body, JsonOptions);
@@ -128,5 +128,50 @@ public sealed class AiBackendClient(HttpClient httpClient) : IAiBackendClient
                 default,
                 new InternalApiError("UnexpectedFailure", "Unexpected AI backend error", ex.Message));
         }
+    }
+
+    private static string? TryExtractErrorMessage(string responseBody)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("error", out var errorEl) && errorEl.ValueKind == JsonValueKind.Object)
+            {
+                if (errorEl.TryGetProperty("message", out var msgEl) && !string.IsNullOrWhiteSpace(msgEl.GetString()))
+                {
+                    return msgEl.GetString();
+                }
+            }
+
+            if (root.TryGetProperty("detail", out var detailEl))
+            {
+                if (detailEl.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(detailEl.GetString()))
+                {
+                    return detailEl.GetString();
+                }
+                if (detailEl.ValueKind == JsonValueKind.Array)
+                {
+                    return detailEl.ToString();
+                }
+            }
+
+            if (root.TryGetProperty("message", out var directMsgEl) && !string.IsNullOrWhiteSpace(directMsgEl.GetString()))
+            {
+                return directMsgEl.GetString();
+            }
+        }
+        catch
+        {
+            // Not a JSON error payload; let fallback handle it
+        }
+
+        return null;
     }
 }

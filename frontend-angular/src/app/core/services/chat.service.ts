@@ -1,11 +1,36 @@
-import { Injectable, inject, NgZone } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, Subject } from 'rxjs';
+import { Injectable, NgZone, inject } from '@angular/core';
+import {
+  HubConnection,
+  HubConnectionBuilder,
+  HubConnectionState,
+  LogLevel,
+} from '@microsoft/signalr';
+import { Observable, Subject, from, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import * as signalR from '@microsoft/signalr';
 import { TokenStoreService } from '../auth/token-store.service';
+import { ApiClientService } from '../api/api-client.service';
+import { ApiResponse } from '../models/api.model';
 
-export interface ChatConversationDto {
+export interface ChatMessage {
+  id: number;
+  conversationId: number;
+  senderId: number;
+  senderName: string;
+  content: string;
+  isRead: boolean;
+  sentAtUtc: string;
+  attachments?: ChatAttachment[];
+}
+
+export interface ChatAttachment {
+  id: number;
+  fileName: string;
+  fileUrl: string;
+  fileType: string;
+  fileSize: number;
+}
+
+export interface ChatConversation {
   id: number;
   otherParticipantId: number;
   otherParticipantName: string;
@@ -14,117 +39,137 @@ export interface ChatConversationDto {
   unreadCount: number;
 }
 
-export interface ChatAttachmentDto {
-  id: number;
-  fileName: string;
-  fileUrl: string;
-  fileType: string;
-  fileSize: number;
-}
-
-export interface ChatMessageDto {
-  id: number;
-  conversationId: number;
-  senderId: number;
-  senderName: string;
-  content: string;
-  isRead: boolean;
-  sentAtUtc: string;
-  attachments: ChatAttachmentDto[];
-}
-
-export interface SendMessageDto {
-  receiverId: number;
+export interface SendMessageRealtimeDto {
+  receiverId?: number;
+  conversationId?: number;
   content: string;
   attachmentIds?: number[];
 }
 
+export type ChatMessageDto = ChatMessage;
+export type ChatConversationDto = ChatConversation;
+
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class ChatService {
-  private http = inject(HttpClient);
-  private tokenStore = inject(TokenStoreService);
-  private ngZone = inject(NgZone);
-  private hubConnection: signalR.HubConnection | null = null;
-  private readonly baseUrl = `${environment.apiBaseUrl}${environment.apiPrefix}/chat`;
-  private readonly hubUrl = `${environment.apiBaseUrl}/hubs/chat`;
+  private readonly api = inject(ApiClientService);
+  private readonly tokenStore = inject(TokenStoreService);
+  private readonly zone = inject(NgZone);
 
-  private messagesSubject = new BehaviorSubject<ChatMessageDto | null>(null);
-  public incomingMessage$ = this.messagesSubject.asObservable();
-  
-  private messagesReadSubject = new Subject<number>();
-  public messagesRead$ = this.messagesReadSubject.asObservable();
+  private hubConnection: HubConnection | null = null;
+
+  private readonly messageReceivedSubject = new Subject<ChatMessage>();
+  public readonly messageReceived$ = this.messageReceivedSubject.asObservable();
+  public readonly incomingMessage$ = this.messageReceivedSubject.asObservable();
+
+  private readonly messagesReadSubject = new Subject<number>();
+  public readonly messagesRead$ = this.messagesReadSubject.asObservable();
+
+  private readonly typingIndicatorSubject = new Subject<{ userId: number; isTyping: boolean }>();
+  public readonly typingIndicator$ = this.typingIndicatorSubject.asObservable();
 
   public async startConnection(): Promise<void> {
-    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
+    if (this.hubConnection && this.hubConnection.state === HubConnectionState.Connected) {
       return;
     }
 
-    const token = this.tokenStore.getAccessToken();
-    if (!token) return;
-
-    this.hubConnection = new signalR.HubConnectionBuilder()
-      .withUrl(this.hubUrl, {
-        accessTokenFactory: () => this.tokenStore.getAccessToken() ?? '',
-        skipNegotiation: false,
-        transport: signalR.HttpTransportType.WebSockets
+    const hubUrl = `${environment.apiBaseUrl}/hubs/chat`;
+    this.hubConnection = new HubConnectionBuilder()
+      .withUrl(hubUrl, {
+        accessTokenFactory: () => this.tokenStore.getAccessToken() || '',
       })
       .withAutomaticReconnect()
+      .configureLogging(environment.production ? LogLevel.None : LogLevel.Information)
       .build();
 
-    this.hubConnection.on('ReceiveMessage', (message: ChatMessageDto) => {
-      this.ngZone.run(() => {
-        this.messagesSubject.next(message);
-      });
+    this.hubConnection.on('ReceiveMessage', (msg: ChatMessage) => {
+      this.zone.run(() => this.messageReceivedSubject.next(msg));
     });
 
     this.hubConnection.on('MessagesRead', (conversationId: number) => {
-      this.ngZone.run(() => {
-        this.messagesReadSubject.next(conversationId);
-      });
+      this.zone.run(() => this.messagesReadSubject.next(conversationId));
     });
 
-    try {
-      await this.hubConnection.start();
-      console.log('Chat SignalR connection established.');
-    } catch (err) {
-      console.error('Error establishing Chat SignalR connection:', err);
-    }
+    this.hubConnection.on('UserTyping', (userId: number) => {
+      this.zone.run(() => this.typingIndicatorSubject.next({ userId, isTyping: true }));
+    });
+
+    this.hubConnection.on('UserStoppedTyping', (userId: number) => {
+      this.zone.run(() => this.typingIndicatorSubject.next({ userId, isTyping: false }));
+    });
+
+    await this.hubConnection.start();
   }
 
-  public stopConnection(): void {
+  public async stopConnection(): Promise<void> {
     if (this.hubConnection) {
-      this.hubConnection.stop();
+      await this.hubConnection.stop();
       this.hubConnection = null;
     }
   }
 
-  public getConversations(): Observable<ChatConversationDto[]> {
-    return this.http.get<ChatConversationDto[]>(`${this.baseUrl}/conversations`);
+  public async sendMessage(
+    receiverId: number,
+    content: string,
+    attachmentIds?: number[],
+  ): Promise<void> {
+    if (!this.hubConnection || this.hubConnection.state !== HubConnectionState.Connected) {
+      await this.startConnection();
+    }
+    await this.hubConnection!.invoke('SendMessage', {
+      receiverId,
+      content,
+      attachmentIds: attachmentIds || [],
+    });
   }
 
-  public getOrCreateConversation(otherUserId: number): Observable<ChatConversationDto> {
-    return this.http.post<ChatConversationDto>(`${this.baseUrl}/conversations/with/${otherUserId}`, {});
-  }
-
-  public getMessages(conversationId: number, skip = 0, take = 50): Observable<ChatMessageDto[]> {
-    return this.http.get<ChatMessageDto[]>(`${this.baseUrl}/conversations/${conversationId}/messages?skip=${skip}&take=${take}`);
-  }
-
-  public getUnreadCount(): Observable<{ count: number }> {
-    return this.http.get<{ count: number }>(`${this.baseUrl}/unread-count`);
+  public async sendMessageRealtime(payload: SendMessageRealtimeDto): Promise<void> {
+    if (!this.hubConnection || this.hubConnection.state !== HubConnectionState.Connected) {
+      await this.startConnection();
+    }
+    await this.hubConnection!.invoke('SendMessage', payload);
   }
 
   public markAsRead(conversationId: number): Observable<void> {
-    return this.http.post<void>(`${this.baseUrl}/conversations/${conversationId}/read`, {});
+    return from(this.markAsReadAsync(conversationId));
   }
 
-  public async sendMessageRealtime(dto: SendMessageDto): Promise<void> {
-    if (this.hubConnection?.state === signalR.HubConnectionState.Connected) {
-      await this.hubConnection.invoke('SendMessage', dto);
-    } else {
-      throw new Error('SignalR connection is not active.');
+  public async markAsReadAsync(conversationId: number): Promise<void> {
+    if (!this.hubConnection || this.hubConnection.state !== HubConnectionState.Connected) {
+      await this.startConnection();
     }
+    await this.hubConnection!.invoke('MarkAsRead', conversationId);
+  }
+
+  public async sendTyping(receiverId: number, isTyping: boolean): Promise<void> {
+    if (!this.hubConnection || this.hubConnection.state !== HubConnectionState.Connected) return;
+    await this.hubConnection.invoke('SendTypingIndicator', receiverId, isTyping);
+  }
+
+  public getConversations(): Observable<ChatConversation[]> {
+    return this.api
+      .get<ChatConversation[]>('/api/chat/conversations')
+      .pipe(map((res: ApiResponse<ChatConversation[]>) => res.data ?? []));
+  }
+
+  public getOrCreateConversation(otherUserId: number): Observable<ChatConversation> {
+    return this.api
+      .post<ChatConversation>(`/api/chat/conversations/with/${otherUserId}`, {})
+      .pipe(map((res: ApiResponse<ChatConversation>) => res.data as ChatConversation));
+  }
+
+  public getMessages(conversationId: number, skip = 0, take = 50): Observable<ChatMessage[]> {
+    return this.api
+      .get<
+        ChatMessage[]
+      >(`/api/chat/conversations/${conversationId}/messages?skip=${skip}&take=${take}`)
+      .pipe(map((res: ApiResponse<ChatMessage[]>) => res.data ?? []));
+  }
+
+  public uploadAttachment(file: File): Observable<ApiResponse<ChatAttachment>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.api.post<ChatAttachment>('/api/chat/attachments', formData);
   }
 }

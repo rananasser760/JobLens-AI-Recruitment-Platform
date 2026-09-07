@@ -1,29 +1,67 @@
+from __future__ import annotations
+
+import asyncio
+import hmac
+import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
 RUNTIME_ENV = os.getenv("JOBLENS_ENV", "development").strip().lower()
 INTERNAL_API_KEY = os.getenv("JOBLENS_INTERNAL_API_KEY", "").strip()
 
-from routers.internal_api import router as internal_router
 from request_context import set_request_id
+from routers.internal_api import router as internal_router
+from session_store import cleanup_expired_sessions
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("joblens.interview")
+
+
+async def _session_cleanup_worker(interval_seconds: float = 600.0) -> None:
+    """Periodically purges expired sessions from memory to prevent memory leaks."""
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+            purged = cleanup_expired_sessions()
+            if purged > 0:
+                logger.info(f"Purged {purged} expired interview session(s) from memory.")
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning(f"Error in session cleanup worker: {exc}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if RUNTIME_ENV not in {"development", "dev", "local", "test"} and not INTERNAL_API_KEY:
         raise RuntimeError("JOBLENS_INTERNAL_API_KEY must be configured outside development environments")
+
+    cleanup_task = asyncio.create_task(_session_cleanup_worker())
+    logger.info("AI Interview Service started.")
     yield
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("AI Interview Service shut down.")
+
 
 def _docs_enabled() -> bool:
     return os.getenv("JOBLENS_ENABLE_DOCS", "true").strip().lower() == "true"
+
 
 app = FastAPI(
     title="JobLens AI - Interview Service",
@@ -44,9 +82,11 @@ cors_origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.middleware("http")
 async def correlation_id_middleware(request: Request, call_next):
@@ -57,43 +97,53 @@ async def correlation_id_middleware(request: Request, call_next):
     response.headers["X-Correlation-Id"] = correlation_id
     return response
 
+
 @app.middleware("http")
 async def internal_api_key_guard(request: Request, call_next):
     if INTERNAL_API_KEY:
         path = request.url.path
         if path.startswith("/internal/v1/"):
-            provided_key = request.headers.get("X-API-Key", "")
-            if provided_key != INTERNAL_API_KEY:
+            provided_key = request.headers.get("X-API-Key", "").strip()
+            if not hmac.compare_digest(provided_key, INTERNAL_API_KEY):
                 return JSONResponse(
                     status_code=401,
                     content={"detail": "Invalid or missing X-API-Key"},
                 )
     return await call_next(request)
 
+
 app.include_router(internal_router)
 
 if os.path.isdir("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 @app.get("/health")
 def health():
     provider = os.getenv("JOBLENS_LLM_PROVIDER", "openrouter").lower().strip()
     llm_ok = bool(os.getenv("OPENROUTER_API_KEY")) if provider != "groq" else bool(os.getenv("GROQ_API_KEY"))
+
     return {
         "status": "healthy",
         "version": app.version,
         "environment": RUNTIME_ENV,
         "services": {
             "llm": "configured" if llm_ok else "missing_api_key",
-            "stt_tts": "active"
+            "provider": provider,
+            "stt_tts": "active",
         },
     }
 
+
 @app.get("/")
 def serve_home():
-    return FileResponse("index.html")
+    if os.path.exists("index.html"):
+        return FileResponse("index.html")
+    return JSONResponse({"message": "JobLens AI Interview Service is running."})
+
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

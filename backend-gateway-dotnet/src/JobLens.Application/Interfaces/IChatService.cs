@@ -15,4 +15,6 @@ public interface IChatService
     Task MarkConversationAsReadAsync(long userId, long conversationId, CancellationToken cancellationToken = default);
     
     Task<int> GetUnreadCountAsync(long userId, CancellationToken cancellationToken = default);
+
+    Task<ChatAttachmentDto> SaveAttachmentAsync(long userId, string fileName, string contentType, byte[] content, CancellationToken cancellationToken = default);
 }

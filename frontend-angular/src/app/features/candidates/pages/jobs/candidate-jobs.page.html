@@ -19,30 +19,56 @@
   <div class="panel filters">
     <div class="filter-field">
       <label class="filter-label" for="job-keyword">Keyword</label>
-      <input id="job-keyword" class="filter-input" type="text" #keywordInput
-        [value]="keyword()" (input)="onKeywordChanged(keywordInput.value)"
-        placeholder="Role, skill, or company" />
+      <input
+        id="job-keyword"
+        class="filter-input"
+        type="text"
+        #keywordInput
+        [value]="keyword()"
+        (input)="onKeywordChanged(keywordInput.value)"
+        placeholder="Role, skill, or company"
+      />
     </div>
     <div class="filter-field">
       <label class="filter-label" for="job-location">Location</label>
-      <input id="job-location" class="filter-input" type="text" #locationInput
-        [value]="location()" (input)="onLocationChanged(locationInput.value)"
-        placeholder="Remote, Cairo, Dubai…" />
+      <input
+        id="job-location"
+        class="filter-input"
+        type="text"
+        #locationInput
+        [value]="location()"
+        (input)="onLocationChanged(locationInput.value)"
+        placeholder="Remote, Cairo, Dubai…"
+      />
     </div>
     <div class="filter-field">
       <label class="filter-label" for="job-employment-type">Type</label>
-      <select id="job-employment-type" class="filter-select" #employmentTypeSelect
-        [value]="employmentType()" (change)="onEmploymentTypeChanged(employmentTypeSelect.value)">
+      <select
+        id="job-employment-type"
+        class="filter-select"
+        #employmentTypeSelect
+        [value]="employmentType()"
+        (change)="onEmploymentTypeChanged(employmentTypeSelect.value)"
+      >
         <option value="">All types</option>
-        @for (type of employmentTypes(); track type) { <option [value]="type">{{ type }}</option> }
+        @for (type of employmentTypes(); track type) {
+          <option [value]="type">{{ type }}</option>
+        }
       </select>
     </div>
     <div class="filter-field">
       <label class="filter-label" for="job-source">Source</label>
-      <select id="job-source" class="filter-select" #sourceSelect
-        [value]="source()" (change)="onSourceChanged(sourceSelect.value)">
+      <select
+        id="job-source"
+        class="filter-select"
+        #sourceSelect
+        [value]="source()"
+        (change)="onSourceChanged(sourceSelect.value)"
+      >
         <option value="">All sources</option>
-        @for (opt of sources(); track opt) { <option [value]="opt">{{ opt }}</option> }
+        @for (opt of sources(); track opt) {
+          <option [value]="opt">{{ opt }}</option>
+        }
       </select>
     </div>
     <div class="filter-actions">
@@ -65,7 +91,7 @@
 
     @if (loading() && jobs().length === 0) {
       <div class="jobs-skeleton">
-        @for (i of [1,2,3,4,5,6]; track i) {
+        @for (i of [1, 2, 3, 4, 5, 6]; track i) {
           <div class="sk-job">
             <div class="sk-line wide"></div>
             <div class="sk-line med"></div>
@@ -75,7 +101,7 @@
       </div>
     } @else if (jobs().length === 0) {
       <div class="empty-state">
-        <i class="fa-solid fa-magnifying-glass" style="font-size:2.5rem;opacity:.3"></i>
+        <i class="fa-solid fa-magnifying-glass" style="font-size: 2.5rem; opacity: 0.3"></i>
         <p>No active jobs matched your current filters. Try broadening your search.</p>
       </div>
     } @else {
@@ -86,8 +112,9 @@
               <div>
                 <h3 class="job-title">{{ job.title }}</h3>
                 <p class="job-company">
-                  <i class="fa-solid fa-building" style="opacity:.5;margin-right:.25rem"></i>
-                  {{ job.companyName || 'Company' }} &nbsp;·&nbsp; {{ job.location || 'Location TBD' }}
+                  <i class="fa-solid fa-building" style="opacity: 0.5; margin-right: 0.25rem"></i>
+                  {{ job.companyName || 'Company' }} &nbsp;·&nbsp;
+                  {{ job.location || 'Location TBD' }}
                 </p>
               </div>
               <span class="source-chip">{{ job.source }}</span>
@@ -106,7 +133,7 @@
             </div>
 
             <div class="skills-row">
-              @if (job.topSkills.length === 0) {
+              @if (!job.topSkills?.length) {
                 <span class="skill-empty">No skills tagged</span>
               } @else {
                 @for (skill of job.topSkills; track skill) {
@@ -116,7 +143,12 @@
             </div>
 
             <div class="card-footer">
-              <button type="button" class="btn-apply-job" (click)="onPrimaryAction(job)" [disabled]="shouldDisableApply(job)">
+              <button
+                type="button"
+                class="btn-apply-job"
+                (click)="onPrimaryAction(job)"
+                [disabled]="shouldDisableApply(job)"
+              >
                 @if (isApplying(job.id)) {
                   <i class="fa-solid fa-circle-notch fa-spin"></i> Applying…
                 } @else {
@@ -137,11 +169,21 @@
 
       @if (totalCount() > 0) {
         <div class="pagination">
-          <button type="button" class="btn-page" (click)="goToPreviousPage()" [disabled]="loading() || !hasPreviousPage()">
+          <button
+            type="button"
+            class="btn-page"
+            (click)="goToPreviousPage()"
+            [disabled]="loading() || !hasPreviousPage()"
+          >
             <i class="fa-solid fa-arrow-left"></i> Prev
           </button>
           <span class="pagination-info">Page {{ pageNumber() }} of {{ totalPages() }}</span>
-          <button type="button" class="btn-page" (click)="goToNextPage()" [disabled]="loading() || !hasNextPage()">
+          <button
+            type="button"
+            class="btn-page"
+            (click)="goToNextPage()"
+            [disabled]="loading() || !hasNextPage()"
+          >
             Next <i class="fa-solid fa-arrow-right"></i>
           </button>
         </div>

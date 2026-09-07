@@ -1,10 +1,9 @@
+using System.Collections.Concurrent;
+using System.Security.Claims;
 using JobLens.Application.DTOs.Interviews;
 using JobLens.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using System.Collections.Concurrent;
-using System.Linq;
-using System.Security.Claims;
 
 namespace JobLens.Api.Hubs;
 
@@ -23,6 +22,17 @@ public sealed class InterviewHub(IInterviewService interviewService, ILogger<Int
     {
         await EnsureSessionAccessAsync(interviewSessionId);
         await Groups.AddToGroupAsync(Context.ConnectionId, $"interview:{interviewSessionId}");
+        logger.LogInformation("Connection {ConnectionId} joined interview room {InterviewSessionId}", Context.ConnectionId, interviewSessionId);
+    }
+
+    public async Task LeaveSession(long interviewSessionId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"interview:{interviewSessionId}");
+        if (AuthorizedSessionsByConnection.TryGetValue(Context.ConnectionId, out var sessions))
+        {
+            sessions.TryRemove(interviewSessionId, out _);
+        }
+        logger.LogInformation("Connection {ConnectionId} left interview room {InterviewSessionId}", Context.ConnectionId, interviewSessionId);
     }
 
     public async Task SubmitAudio(long interviewSessionId, string base64Audio, int sequence)
@@ -46,7 +56,7 @@ public sealed class InterviewHub(IInterviewService interviewService, ILogger<Int
                 return;
             }
 
-            var result = await interviewService.ProcessAudioAsync(interviewSessionId, base64Audio, sequence, CancellationToken.None);
+            var result = await interviewService.ProcessAudioAsync(interviewSessionId, base64Audio, sequence, Context.ConnectionAborted);
             if (!result.Success)
             {
                 var code = result.Errors?.FirstOrDefault() ?? "audio_processing_failed";
@@ -140,7 +150,7 @@ public sealed class InterviewHub(IInterviewService interviewService, ILogger<Int
 
         try
         {
-            var result = await interviewService.ProcessVideoFrameAsync(interviewSessionId, base64Frame, sequence, CancellationToken.None);
+            var result = await interviewService.ProcessVideoFrameAsync(interviewSessionId, base64Frame, sequence, Context.ConnectionAborted);
             if (!result.Success)
             {
                 var code = result.Errors?.FirstOrDefault() ?? "video_processing_failed";
@@ -218,7 +228,8 @@ public sealed class InterviewHub(IInterviewService interviewService, ILogger<Int
         }
 
         var userIdRaw = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? Context.User?.FindFirstValue("sub");
+            ?? Context.User?.FindFirstValue("sub")
+            ?? Context.User?.FindFirstValue("id");
 
         if (!long.TryParse(userIdRaw, out var userId))
         {

@@ -2,29 +2,36 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+# Prevent uv lock timeouts and filesystem link warnings
+ENV PHONEMIZER_ESPEAK_LIBRARY=/usr/lib/x86_64-linux-gnu/libespeak-ng.so.1 \
+    UV_LINK_MODE=copy \
+    UV_HTTP_TIMEOUT=600 \
+    UV_LOCK_TIMEOUT=1200
+
+# Install build dependencies, ffmpeg for audio transcoding, and espeak-ng for Coqui TTS
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    gnupg \
-    unixodbc-dev \
     ffmpeg \
     espeak-ng \
-    && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
-    && curl -fsSL https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list \
-    && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
+    libespeak-ng-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-build-isolation uv "cython<3.0" setuptools wheel
+    pip install --no-cache-dir uv "cython<3.0" setuptools wheel
 
-RUN --mount=type=cache,target=/root/.cache/uv \
+# Isolated cache ID avoids lock contention with the other Python services
+RUN --mount=type=cache,id=interview-uv-cache,target=/root/.cache/uv \
     uv pip install --system --no-build-isolation -r requirements.txt
 
 COPY . .
 
-EXPOSE 8000 8001
+# Ensure audio exchange directory exists
+RUN mkdir -p /app/temp_audio
 
-CMD ["python", "main.py"]
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

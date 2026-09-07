@@ -7,13 +7,14 @@
 
 import asyncio
 import base64
+import hmac
 import json
 import math
 import os
 import sys
 import threading
 import time
-import queue # Added for WebSocket frame routing
+import queue
 from datetime import datetime
 from typing import Optional
 
@@ -40,29 +41,24 @@ from models import (
     DBSession, DBAlert, DBYoloAlert, DBScoreHistory, DBKeyframe,
     DBSessionLocal,
 )
-from session_store import ACTIVE_PROCESSORS, push_log
+from session_store import get_processor, set_processor, pop_processor, push_log
 
 router = APIRouter(prefix="/api", tags=["integrity"])
 
-# Shared state guards for concurrent API/thread access.
-_ACTIVE_PROCESSORS_LOCK = threading.Lock()
 _WS_CONNECTIONS_LOCK = threading.Lock()
 _WS_CONNECTIONS: dict[int, int] = {}
 
 
-def _active_get(session_id: int):
-    with _ACTIVE_PROCESSORS_LOCK:
-        return ACTIVE_PROCESSORS.get(session_id)
+def _active_get(session_id):
+    return get_processor(session_id)
 
 
-def _active_set(session_id: int, processor) -> None:
-    with _ACTIVE_PROCESSORS_LOCK:
-        ACTIVE_PROCESSORS[session_id] = processor
+def _active_set(session_id, processor) -> None:
+    set_processor(session_id, processor)
 
 
-def _active_pop(session_id: int):
-    with _ACTIVE_PROCESSORS_LOCK:
-        return ACTIVE_PROCESSORS.pop(session_id, None)
+def _active_pop(session_id):
+    return pop_processor(session_id)
 
 
 def _ws_inc(session_id: int) -> None:
@@ -91,7 +87,7 @@ def _is_ws_authorized(websocket: WebSocket) -> bool:
         return True
 
     provided_key = (websocket.headers.get("x-api-key") or websocket.query_params.get("api_key") or "").strip()
-    return provided_key == expected_key
+    return hmac.compare_digest(provided_key, expected_key)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -171,29 +167,38 @@ class Config:
 
 class FaceDetector:
     def __init__(self):
+        self._lock = threading.Lock()
         self._mesh = mp_face_mesh.FaceMesh(
             max_num_faces=Config.MAX_NUM_FACES,
             refine_landmarks=Config.REFINE_LANDMARKS,
             min_detection_confidence=Config.MIN_DETECTION_CONFIDENCE,
             min_tracking_confidence=Config.MIN_TRACKING_CONFIDENCE,
         )
+
     def detect(self, frame):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         rgb.flags.writeable = False
-        return self._mesh.process(rgb)
+        with self._lock:
+            return self._mesh.process(rgb)
+
     @staticmethod
     def face_count(results) -> int:
-        return len(results.multi_face_landmarks) if results.multi_face_landmarks else 0
+        return len(results.multi_face_landmarks) if results and results.multi_face_landmarks else 0
+
     def get_eye_data(self, lms, w, h):
         def _pts(idx):
             return np.array([(int(lms.landmark[i].x*w), int(lms.landmark[i].y*h)) for i in idx])
         return {'left_eye': _pts(Config.LEFT_EYE), 'right_eye': _pts(Config.RIGHT_EYE),
                 'left_iris': _pts(Config.LEFT_EYE_IRIS), 'right_iris': _pts(Config.RIGHT_EYE_IRIS)}
+
     def get_face_bbox(self, lms, w, h):
         xs = [int(l.x*w) for l in lms.landmark]
         ys = [int(l.y*h) for l in lms.landmark]
         return max(0,min(xs)-20), max(0,min(ys)-20), min(w,max(xs)+20), min(h,max(ys)+20)
-    def close(self): self._mesh.close()
+
+    def close(self):
+        with self._lock:
+            self._mesh.close()
 
 
 class EyeMovementTracker:
@@ -338,10 +343,12 @@ class AlertManager:
             try:
                 kf=self._capture_keyframe(frame)
                 if kf: self._keyframes[idx]=kf
-            except: pass
+            except Exception: pass
             if Config.SAVE_ALERTS:
-                path=os.path.join(Config.ALERT_FRAMES_DIR,f"{atype}_{int(now*1000)}.jpg")
-                cv2.imwrite(path,frame); rec['frame_path']=path
+                try:
+                    path=os.path.join(Config.ALERT_FRAMES_DIR,f"{atype}_{int(now*1000)}.jpg")
+                    cv2.imwrite(path,frame); rec['frame_path']=path
+                except Exception: pass
         self._alerts.append(rec); return True
 
     def _capture_keyframe(self,frame):
@@ -430,8 +437,10 @@ class YOLODetector:
             try:
                 coco_model_path = os.path.join(current_dir, "yolov8n.pt")
                 phone_model_path = os.path.join(current_dir, "phones.pt")
-                self._coco = _YOLO(coco_model_path)
-                self._custom = _YOLO(phone_model_path)
+                if os.path.exists(coco_model_path):
+                    self._coco = _YOLO(coco_model_path)
+                if os.path.exists(phone_model_path):
+                    self._custom = _YOLO(phone_model_path)
             except Exception as e:
                 print(f"YOLO load error: {e}"); self._ok=False
         self.session_id=session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -440,7 +449,7 @@ class YOLODetector:
         self.frame_counters={"total":0,"secure":0,"cheating":0,"MULTIPLE_PEOPLE":0,"CHEATING_ITEM_MOBILE":0}
 
     @property
-    def available(self): return self._ok
+    def available(self): return self._ok and self._coco is not None
 
     @staticmethod
     def _iou(a,b):
@@ -457,19 +466,29 @@ class YOLODetector:
         return kept
 
     def detect(self, frame):
-        if not self._ok: return None,"Secure",frame
+        if not self.available: return None,"Secure",frame
         h,w=frame.shape[:2]; area=h*w
         pb=[]; phb=[]
-        for r in self._coco.predict(frame,conf=self.PERSON_CONF,iou=0.45,verbose=False, device='cpu'):
-            for b in r.boxes:
-                if int(b.cls[0])!=0: continue
-                x1,y1,x2,y2=map(int,b.xyxy[0]); pb.append((x1,y1,x2,y2,round(float(b.conf[0]),2)))
+        try:
+            for r in self._coco.predict(frame,conf=self.PERSON_CONF,iou=0.45,verbose=False, device='cpu'):
+                for b in r.boxes:
+                    if int(b.cls[0])!=0: continue
+                    x1,y1,x2,y2=map(int,b.xyxy[0]); pb.append((x1,y1,x2,y2,round(float(b.conf[0]),2)))
+        except Exception:
+            pass
+
         pb=self._dedup(pb,0.45); pc=len(pb)
-        for r in self._custom.predict(frame,conf=self.PHONE_CONF,iou=0.40,verbose=False, device='cpu'):
-            for b in r.boxes:
-                x1,y1,x2,y2=map(int,b.xyxy[0]); conf=round(float(b.conf[0]),2)
-                if (x2-x1)*(y2-y1)<area*self.PHONE_MIN_AREA: continue
-                phb.append((x1,y1,x2,y2,conf))
+
+        if self._custom is not None:
+            try:
+                for r in self._custom.predict(frame,conf=self.PHONE_CONF,iou=0.40,verbose=False, device='cpu'):
+                    for b in r.boxes:
+                        x1,y1,x2,y2=map(int,b.xyxy[0]); conf=round(float(b.conf[0]),2)
+                        if (x2-x1)*(y2-y1)<area*self.PHONE_MIN_AREA: continue
+                        phb.append((x1,y1,x2,y2,conf))
+            except Exception:
+                pass
+
         phb=self._dedup(phb,0.40); phone=len(phb)>0
         raw="MULTIPLE_PEOPLE" if pc>1 else ("CHEATING_ITEM_MOBILE" if phone else None)
         for k,buf in self._votes.items(): buf.append(raw==k)
@@ -489,7 +508,7 @@ class YOLODetector:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  WebSessionProcessor (Updated to receive frames via WebSocket queue)
+#  WebSessionProcessor
 # ══════════════════════════════════════════════════════════════════════════════
 
 class WebSessionProcessor:
@@ -521,9 +540,6 @@ class WebSessionProcessor:
             "dropped_frames":0,
         }
         self._unpolled_alerts = set()
-
-        # --- FIX: Removed cv2.VideoCapture() completely ---
-        # Instead of pulling frames from hardware, we queue them from the browser
         self._frame_queue = queue.Queue(maxsize=5) 
         
         self._yolo           = YOLODetector(session_id=str(session_id))
@@ -551,7 +567,6 @@ class WebSessionProcessor:
         try:
             self._frame_queue.put_nowait(frame)
         except queue.Full:
-            # In rare races where queue fills again before put, skip this frame.
             with self._lock:
                 self._dropped_frames += 1
 
@@ -608,13 +623,14 @@ class WebSessionProcessor:
                         db.add(DBYoloAlert(session_id=self.session_id,alert_type=alert,
                                            elapsed_secs=elapsed,details_json="{}"))
                         db.commit()
+                except Exception:
+                    db.rollback()
                 finally: db.close()
 
     # ── camera loop ───────────────────────────────────────────────────────
     def _camera_loop(self, db_factory):
         pending=[]
         while self._running:
-            # --- FIX: Pull from Queue instead of cv2.VideoCapture ---
             try:
                 frame = self._frame_queue.get(timeout=0.1)
             except queue.Empty:
@@ -628,7 +644,7 @@ class WebSessionProcessor:
 
             # calibration phase
             if not self.head_est.is_calibrated or not self.eye_tracker.is_calibrated:
-                if results.multi_face_landmarks and fc==1:
+                if results and results.multi_face_landmarks and fc==1:
                     lms=results.multi_face_landmarks[0]
                     if not self.head_est.is_calibrated: self.head_est.calibrate(lms,w,h)
                     if not self.eye_tracker.is_calibrated:
@@ -659,7 +675,7 @@ class WebSessionProcessor:
             elif fc>1:
                 if self.alerts.add("MULTIPLE_FACES",frame): alert="MULTIPLE_FACES"; push_log("[FACE] MULTIPLE_FACES",{"count":fc},self.session_id)
 
-            if results.multi_face_landmarks and fc>=1:
+            if results and results.multi_face_landmarks and fc>=1:
                 lms=results.multi_face_landmarks[0]
                 eyes=self.face_det.get_eye_data(lms,w,h)
                 eh,ev,ed,e_alert=self.eye_tracker.track(eyes['left_eye'],eyes['left_iris'],eyes['right_eye'],eyes['right_iris'])
@@ -757,28 +773,36 @@ class WebSessionProcessor:
     def finalize(self, db):
         self._running=False
         for t in [self._thread,self._yolo_thread]:
-            if t: t.join(timeout=3)
+            if t and t.is_alive():
+                t.join(timeout=3)
             
         score=self.alerts.suspicion_score()
         rec,_=self.alerts.recommendation()
         if self.abandoned: rec="ABANDONED"
         duration=time.time()-self._session_start
-        for entry in self.alerts.get_timeline_data():
-            if entry['has_keyframe']:
-                kd=self.alerts._keyframes.get(entry['keyframe_idx'])
-                if kd:
-                    ex=db.query(DBKeyframe).filter(DBKeyframe.session_id==self.session_id,
-                        DBKeyframe.elapsed_secs==round(entry['elapsed'],1)).first()
-                    if not ex:
-                        db.add(DBKeyframe(session_id=self.session_id,alert_type=entry['type'],
-                                          elapsed_secs=round(entry['elapsed'],1),image_data=kd))
-        for t,s in self.alerts._score_history:
-            db.add(DBScoreHistory(session_id=self.session_id,score=s))
-        db.query(DBSession).filter(DBSession.id==self.session_id).update(
-            {"ended_at":datetime.utcnow(),"final_score":score,"recommendation":rec,"duration_seconds":duration})
-        db.commit()
-        self.alerts.export_report(f"session_{self.session_id}_report.txt")
-        self.face_det.close()
+        try:
+            for entry in self.alerts.get_timeline_data():
+                if entry['has_keyframe']:
+                    kd=self.alerts._keyframes.get(entry['keyframe_idx'])
+                    if kd:
+                        ex=db.query(DBKeyframe).filter(DBKeyframe.session_id==self.session_id,
+                            DBKeyframe.elapsed_secs==round(entry['elapsed'],1)).first()
+                        if not ex:
+                            db.add(DBKeyframe(session_id=self.session_id,alert_type=entry['type'],
+                                              elapsed_secs=round(entry['elapsed'],1),image_data=kd))
+            for t,s in self.alerts._score_history:
+                db.add(DBScoreHistory(session_id=self.session_id,score=s))
+            db.query(DBSession).filter(DBSession.id==self.session_id).update(
+                {"ended_at":datetime.utcnow(),"final_score":score,"recommendation":rec,"duration_seconds":duration})
+            db.commit()
+        except Exception as e:
+            print(f"finalize DB error: {e}")
+            db.rollback()
+
+        try:
+            self.alerts.export_report(f"session_{self.session_id}_report.txt")
+            self.face_det.close()
+        except: pass
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -788,7 +812,7 @@ class WebSessionProcessor:
 class StartSessionRequest(BaseModel):
     candidate_name: Optional[str] = None
     candidate_id:   Optional[str] = None
-    interview_session_id: Optional[str] = None   # link to interview
+    interview_session_id: Optional[str] = None
 
 
 @router.post("/sessions/start")
@@ -874,7 +898,6 @@ def get_report(session_id: int):
                               "has_keyframe":False,"source":"yolo"})
         timeline.sort(key=lambda x:x['elapsed_secs'])
 
-        # interview summary if linked
         interview_data = None
         if s.interview_summary_json:
             try: interview_data = json.loads(s.interview_summary_json)
@@ -948,7 +971,6 @@ def dashboard_stats():
 
 
 def _cleanup_orphan_processor(session_id: int, grace_seconds: float = 20.0):
-    """Graceful cleanup when client disconnects and never calls /sessions/{id}/end."""
     time.sleep(grace_seconds)
 
     if _ws_count(session_id) > 0:
@@ -968,7 +990,7 @@ def _cleanup_orphan_processor(session_id: int, grace_seconds: float = 20.0):
         else:
             proc._running = False
             for t in [proc._thread, proc._yolo_thread]:
-                if t:
+                if t and t.is_alive():
                     t.join(timeout=2)
             try:
                 proc.face_det.close()
@@ -981,7 +1003,6 @@ def _cleanup_orphan_processor(session_id: int, grace_seconds: float = 20.0):
         db.close()
 
 
-# ── WebSocket: live camera state (Updated for Ping-Pong Routing) ──────────────
 @router.websocket("/ws/{session_id}")
 async def ws_state(websocket: WebSocket, session_id: int):
     if not _is_ws_authorized(websocket):
@@ -999,7 +1020,6 @@ async def ws_state(websocket: WebSocket, session_id: int):
             return
             
         while True:
-            # 1. Wait for the browser to send a frame
             data = await websocket.receive_json()
             if data.get("type") == "frame" and data.get("frame_b64"):
                 try:
@@ -1011,7 +1031,6 @@ async def ws_state(websocket: WebSocket, session_id: int):
                 except Exception as e:
                     print(f"Error decoding frame: {e}")
 
-            # 2. Reply with the analyzed state and the processed face-mesh image
             state = proc.get_state()
             await websocket.send_json(state)
             

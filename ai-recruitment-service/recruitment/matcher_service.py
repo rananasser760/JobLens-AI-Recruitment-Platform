@@ -293,11 +293,14 @@ def recommend_jobs_for_candidate(candidate_id: int, limit: int = 10) -> List[Dic
             metadata = result.get("metadatas", [[{}]])[0][index] if result.get("metadatas") else {}
             db_id = _extract_numeric_id(metadata.get("job_id")) or _extract_numeric_id(vector_id)
             raw_preview = result["documents"][0][index]
+            dist = result["distances"][0][index] if "distances" in result else 0.5
+            # Cosine distance bounded [0, 2]; similarity is max(0.0, 1.0 - distance)
+            sim_score = float(round(max(0.0, 1.0 - float(dist)), 2))
             matches.append(
                 {
                     "job_id": vector_id,
                     "db_id": db_id,
-                    "match_score": float(round(max(0.0, 1.0 - result["distances"][0][index]), 2)),
+                    "match_score": sim_score,
                     "job_preview": _safe_json_load(raw_preview),
                 }
             )
@@ -325,7 +328,8 @@ def recommend_candidates_for_job(job_id: str, limit: int = 50, min_score: float 
     matches = []
     if result.get("distances") and result.get("ids") and result["ids"][0]:
         for index in range(len(result["ids"][0])):
-            score = max(0.0, 1.0 - result["distances"][0][index])
+            dist = result["distances"][0][index]
+            score = max(0.0, 1.0 - float(dist))
             if score < min_score:
                 continue
 

@@ -10,7 +10,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
   standalone: true,
   imports: [CommonModule, RouterModule],
   templateUrl: './inbox.page.html',
-  styleUrl: './inbox.page.css'
+  styleUrl: './inbox.page.css',
 })
 export class InboxPage implements OnInit, OnDestroy {
   private chatService = inject(ChatService);
@@ -18,13 +18,13 @@ export class InboxPage implements OnInit, OnDestroy {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private cdr = inject(ChangeDetectorRef);
-  
+
   conversations: ChatConversationDto[] = [];
   loading = true;
   private sub?: Subscription;
 
   ngOnInit() {
-    this.route.queryParams.subscribe(params => {
+    this.route.queryParams.subscribe((params) => {
       const receiverId = Number(params['receiverId']);
       if (receiverId) {
         this.chatService.getOrCreateConversation(receiverId).subscribe({
@@ -34,7 +34,7 @@ export class InboxPage implements OnInit, OnDestroy {
           error: (err) => {
             console.error('Failed to create conversation', err);
             this.loadConversations();
-          }
+          },
         });
       } else {
         this.loadConversations();
@@ -42,7 +42,7 @@ export class InboxPage implements OnInit, OnDestroy {
     });
 
     // Re-fetch conversations if a new message arrives so preview/unread updates
-    this.sub = this.chatService.incomingMessage$.subscribe(msg => {
+    this.sub = this.chatService.incomingMessage$.subscribe((msg) => {
       if (msg) {
         this.loadConversations();
       }
@@ -56,7 +56,7 @@ export class InboxPage implements OnInit, OnDestroy {
   loadConversations() {
     this.chatService.getConversations().subscribe({
       next: (data) => {
-        this.conversations = data;
+        this.conversations = data ?? [];
         this.loading = false;
         this.cdr.detectChanges();
       },
@@ -64,7 +64,7 @@ export class InboxPage implements OnInit, OnDestroy {
         console.error('Failed to load conversations', err);
         this.loading = false;
         this.cdr.detectChanges();
-      }
+      },
     });
   }
 

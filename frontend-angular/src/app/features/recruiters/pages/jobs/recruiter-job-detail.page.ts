@@ -15,14 +15,14 @@ const FALLBACK_EMPLOYMENT_TYPES: EmploymentType[] = [
   'Contract',
   'Internship',
   'Freelance',
-  'Remote'
+  'Remote',
 ];
 
 @Component({
   selector: 'app-recruiter-job-detail-page',
   imports: [CommonModule, ReactiveFormsModule, RouterLink],
   templateUrl: './recruiter-job-detail.page.html',
-  styleUrl: './recruiter-job-detail.page.css'
+  styleUrl: './recruiter-job-detail.page.css',
 })
 export class RecruiterJobDetailPage {
   private readonly route = inject(ActivatedRoute);
@@ -56,7 +56,7 @@ export class RecruiterJobDetailPage {
     salaryMax: [''],
     experienceLevel: [''],
     expiresAt: [''],
-    isActive: [true]
+    isActive: [true],
   });
 
   constructor() {
@@ -85,12 +85,12 @@ export class RecruiterJobDetailPage {
     forkJoin({
       job: this.jobsService.getById(id).pipe(
         map((res) => res.data),
-        catchError(() => of(null))
+        catchError(() => of(null)),
       ),
       employmentTypes: this.metadataService.getEnums().pipe(
         map((res) => this.extractEmploymentTypes(res.data?.enums?.['EmploymentType'] ?? [])),
-        catchError(() => of([...FALLBACK_EMPLOYMENT_TYPES]))
-      )
+        catchError(() => of([...FALLBACK_EMPLOYMENT_TYPES])),
+      ),
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
@@ -107,7 +107,7 @@ export class RecruiterJobDetailPage {
         },
         error: () => {
           this.error.set('Unable to load job details right now.');
-        }
+        },
       });
   }
 
@@ -135,7 +135,7 @@ export class RecruiterJobDetailPage {
       salaryMax: this.parseNumber(raw.salaryMax),
       experienceLevel: raw.experienceLevel.trim() || undefined,
       expiresAt: this.toIsoDateTime(raw.expiresAt),
-      isActive: raw.isActive
+      isActive: raw.isActive,
     };
 
     this.jobsService
@@ -148,7 +148,7 @@ export class RecruiterJobDetailPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to update job details right now.'));
-        }
+        },
       });
   }
 
@@ -172,7 +172,7 @@ export class RecruiterJobDetailPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to toggle job status right now.'));
-        }
+        },
       });
   }
 
@@ -197,13 +197,14 @@ export class RecruiterJobDetailPage {
     this.success.set(null);
 
     const parsedImportance = this.parseNumber(this.newSkillImportance());
-    const importance = parsedImportance === undefined ? 50 : Math.max(1, Math.min(100, parsedImportance));
+    const importance =
+      parsedImportance === undefined ? 50 : Math.max(1, Math.min(100, parsedImportance));
 
     this.jobsService
       .addSkill(id, {
         skillName,
         importance,
-        isRequired: true
+        isRequired: true,
       })
       .pipe(finalize(() => this.addingSkill.set(false)))
       .subscribe({
@@ -215,7 +216,7 @@ export class RecruiterJobDetailPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to add this skill right now.'));
-        }
+        },
       });
   }
 
@@ -226,20 +227,22 @@ export class RecruiterJobDetailPage {
       requirements: job.requirements || '',
       responsibilities: job.responsibilities || '',
       location: job.location || '',
-      employmentType: this.toEmploymentType(job.employmentType) || 'FullTime',
+      employmentType: this.toEmploymentType(job.employmentType || '') || 'FullTime',
       salaryRange: job.salaryRange || '',
       salaryMin: job.salaryMin?.toString() || '',
       salaryMax: job.salaryMax?.toString() || '',
       experienceLevel: job.experienceLevel || '',
       expiresAt: this.toDateTimeLocal(job.expiresAt),
-      isActive: job.isActive
+      isActive: job.isActive,
     });
   }
 
   private extractEmploymentTypes(options: EnumOptionDto[]): EmploymentType[] {
     const parsed = options
       .map((item) => item.name)
-      .filter((name): name is EmploymentType => FALLBACK_EMPLOYMENT_TYPES.includes(name as EmploymentType));
+      .filter((name): name is EmploymentType =>
+        FALLBACK_EMPLOYMENT_TYPES.includes(name as EmploymentType),
+      );
 
     if (parsed.length === 0) {
       return [...FALLBACK_EMPLOYMENT_TYPES];

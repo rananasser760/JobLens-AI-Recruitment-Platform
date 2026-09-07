@@ -21,7 +21,10 @@
   @if (job(); as selectedJob) {
     <article class="panel hero">
       <h2>{{ selectedJob.title }}</h2>
-      <p>{{ selectedJob.companyName || 'Company' }} · {{ selectedJob.location || 'Location not set' }}</p>
+      <p>
+        {{ selectedJob.companyName || 'Company' }} ·
+        {{ selectedJob.location || 'Location not set' }}
+      </p>
     </article>
   }
 
@@ -38,7 +41,11 @@
         </tr>
       </thead>
       <tbody>
-        @for (candidate of candidates(); track trackByCandidateId($index, candidate); let i = $index) {
+        @for (
+          candidate of candidates();
+          track trackByCandidateId($index, candidate);
+          let i = $index
+        ) {
           <tr>
             <td>{{ i + 1 }}</td>
             <td>
@@ -51,7 +58,9 @@
               </div>
             </td>
             <td>
-              @if (candidate.yearsOfExperience !== null && candidate.yearsOfExperience !== undefined) {
+              @if (
+                candidate.yearsOfExperience !== null && candidate.yearsOfExperience !== undefined
+              ) {
                 {{ candidate.yearsOfExperience }} yrs
               } @else {
                 --
@@ -65,7 +74,7 @@
             </td>
             <td>
               <div class="skills-list">
-                @for (skill of candidate.skills.slice(0, 4); track skill) {
+                @for (skill of (candidate.skills ?? []).slice(0, 4); track skill) {
                   <span class="skill-chip">{{ skill }}</span>
                 } @empty {
                   <span class="skill-chip muted">No skills listed</span>

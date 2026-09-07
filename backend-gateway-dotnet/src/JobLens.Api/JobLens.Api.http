@@ -1,6 +1,15 @@
 @JobLens.Api_HostAddress = http://localhost:5245
 
-GET {{JobLens.Api_HostAddress}}/weatherforecast/
+### Root Health Probe
+GET {{JobLens.Api_HostAddress}}/
+Accept: application/json
+
+### Metadata Enums
+GET {{JobLens.Api_HostAddress}}/api/metadata/enums
+Accept: application/json
+
+### Public Jobs Listing
+GET {{JobLens.Api_HostAddress}}/api/jobs?pageNumber=1&pageSize=10
 Accept: application/json
 
 ###

@@ -1,44 +1,56 @@
 :root {
-	--jl-primary: #0d2d8a;
-	--jl-accent: #19b27a;
-	--jl-ink: #111a2c;
-	--jl-ink-soft: #33405a;
-	--jl-muted-text: #66708a;
-	--jl-border: #dde3f2;
-	--jl-surface: #ffffff;
-	--jl-surface-muted: #f1f4fb;
-	--jl-page-bg: #f6f8fe;
-	--jl-danger: #bb2531;
+  --jl-primary: #0d2d8a;
+  --jl-accent: #19b27a;
+  --jl-ink: #111a2c;
+  --jl-ink-soft: #33405a;
+  --jl-muted-text: #66708a;
+  --jl-border: #dde3f2;
+  --jl-surface: #ffffff;
+  --jl-surface-muted: #f1f4fb;
+  --jl-page-bg: #f6f8fe;
+  --jl-danger: #bb2531;
 
-	--jl-radius-lg: 16px;
-	--jl-radius-xl: 24px;
-	--jl-shadow: 0 14px 36px -22px rgba(13, 45, 138, 0.45);
+  --jl-radius-lg: 16px;
+  --jl-radius-xl: 24px;
+  --jl-shadow: 0 14px 36px -22px rgba(13, 45, 138, 0.45);
 }
 
 * {
-	box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 html,
 body {
-	margin: 0;
-	min-height: 100%;
+  margin: 0;
+  min-height: 100%;
 }
 
 body {
-	font-family: Manrope, Inter, 'Segoe UI', Tahoma, sans-serif;
-	color: var(--jl-ink);
-	background: var(--jl-page-bg);
-	line-height: 1.4;
+  font-family: Manrope, Inter, 'Segoe UI', Tahoma, sans-serif;
+  color: var(--jl-ink);
+  background: var(--jl-page-bg);
+  line-height: 1.4;
+}
+
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+  user-select: none;
 }
 
 .page-content:has(app-candidate-interview-session-page) {
-	padding: 0 !important;
+  padding: 0 !important;
 }
 
 button,
 input,
 textarea,
 select {
-	font: inherit;
+  font: inherit;
 }

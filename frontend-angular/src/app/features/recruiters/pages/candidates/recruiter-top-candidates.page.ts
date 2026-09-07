@@ -10,7 +10,7 @@ import { JobsService } from '../../../jobs/jobs.service';
   selector: 'app-recruiter-top-candidates-page',
   imports: [CommonModule, RouterLink],
   templateUrl: './recruiter-top-candidates.page.html',
-  styleUrl: './recruiter-top-candidates.page.css'
+  styleUrl: './recruiter-top-candidates.page.css',
 })
 export class RecruiterTopCandidatesPage {
   private readonly route = inject(ActivatedRoute);
@@ -51,20 +51,22 @@ export class RecruiterTopCandidatesPage {
     forkJoin({
       job: this.jobsService.getById(id).pipe(
         map((res) => res.data),
-        catchError(() => of(null))
+        catchError(() => of(null)),
       ),
-      recommendations: this.jobsService.getCandidateRecommendationsForJob(id, 20, forceRefresh).pipe(
-        map((res) => ({
-          candidates: res.data ?? [],
-          message: res.message ?? null
-        })),
-        catchError(() =>
-          of({
-            candidates: [] as CandidateRecommendationDto[],
-            message: 'Unable to load AI recommendations right now.'
-          })
-        )
-      )
+      recommendations: this.jobsService
+        .getCandidateRecommendationsForJob(id, 20, forceRefresh)
+        .pipe(
+          map((res) => ({
+            candidates: res.data ?? [],
+            message: res.message ?? null,
+          })),
+          catchError(() =>
+            of({
+              candidates: [] as CandidateRecommendationDto[],
+              message: 'Unable to load AI recommendations right now.',
+            }),
+          ),
+        ),
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
@@ -82,11 +84,11 @@ export class RecruiterTopCandidatesPage {
         },
         error: () => {
           this.error.set('Unable to load top candidates right now.');
-        }
+        },
       });
   }
 
   trackByCandidateId(_: number, item: CandidateRecommendationDto): number {
-    return item.candidateId;
+    return item.candidateId ?? _;
   }
 }

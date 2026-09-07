@@ -1,7 +1,10 @@
+using System.Text.Json;
+using Hangfire;
 using JobLens.Api.Compatibility;
 using JobLens.Api.Contracts;
 using JobLens.Application.Common;
 using JobLens.Application.Interfaces;
+using JobLens.Infrastructure.BackgroundJobs;
 using JobLens.Infrastructure.Persistence;
 using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -15,7 +18,8 @@ public sealed class CandidatesController(
     ICandidateService candidateService,
     JobLensDbContext dbContext,
     IAiBackendClient aiBackendClient,
-    IFileStorageService fileStorageService) : AppControllerBase
+    IFileStorageService fileStorageService,
+    IBackgroundJobClient backgroundJobs) : AppControllerBase
 {
     [Authorize(Roles = "Candidate")]
     [HttpGet("profile")]
@@ -90,7 +94,11 @@ public sealed class CandidatesController(
             profile.YearsExperience = Math.Max(0, request.YearsOfExperience.Value);
         }
 
+        profile.UpdatedAtUtc = DateTime.UtcNow;
+        profile.User.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(profile.Id));
 
         var dto = await MapCandidateProfileAsync(profile, cancellationToken);
         return Ok(new ApiResponse<CandidateProfileViewDto>(true, dto, "Candidate profile updated."));
@@ -101,6 +109,11 @@ public sealed class CandidatesController(
     [RequestSizeLimit(8_000_000)]
     public async Task<IActionResult> UpdateProfileImage([FromForm] IFormFile file, CancellationToken cancellationToken)
     {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new ApiResponse<bool>(false, false, "Invalid image file."));
+        }
+
         var profile = await dbContext.CandidateProfiles.FirstOrDefaultAsync(x => x.UserId == GetRequiredUserId(), cancellationToken);
         if (profile is null)
         {
@@ -111,14 +124,27 @@ public sealed class CandidatesController(
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(profile.ProfileImagePath))
-        {
-            await fileStorageService.DeleteAsync(profile.ProfileImagePath, cancellationToken);
-        }
+        var oldImagePath = profile.ProfileImagePath;
+        var newStoragePath = await fileStorageService.SaveAsync(file.FileName, memory.ToArray(), cancellationToken);
 
-        profile.ProfileImagePath = await fileStorageService.SaveAsync(file.FileName, memory.ToArray(), cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new ApiResponse<bool>(true, true, "Profile image updated."));
+        try
+        {
+            profile.ProfileImagePath = newStoragePath;
+            profile.UpdatedAtUtc = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(oldImagePath))
+            {
+                await fileStorageService.DeleteAsync(oldImagePath, cancellationToken);
+            }
+
+            return Ok(new ApiResponse<bool>(true, true, "Profile image updated."));
+        }
+        catch
+        {
+            await fileStorageService.DeleteAsync(newStoragePath, CancellationToken.None);
+            throw;
+        }
     }
 
     [Authorize(Roles = "Candidate")]
@@ -329,7 +355,10 @@ public sealed class CandidatesController(
         }
 
         profile.SkillsJson = ServiceJson.Serialize(skills);
+        profile.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(profile.Id));
 
         var dto = new CandidateSkillDto(skills.Count, normalized, request.ExperienceYears, null, request.ProficiencyLevel, false);
         return Ok(new ApiResponse<CandidateSkillDto>(true, dto, "Skill added."));
@@ -354,7 +383,11 @@ public sealed class CandidatesController(
 
         skills.RemoveAt(index);
         profile.SkillsJson = ServiceJson.Serialize(skills);
+        profile.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(profile.Id));
+
         return Ok(new ApiResponse<bool>(true, true, "Skill removed."));
     }
 
@@ -362,47 +395,186 @@ public sealed class CandidatesController(
     [HttpPost("fill-from-resume/{resumeId:long}")]
     public async Task<IActionResult> FillFromResume(long resumeId, CancellationToken cancellationToken)
     {
-        var profile = await dbContext.CandidateProfiles.Include(x => x.User).FirstOrDefaultAsync(x => x.UserId == GetRequiredUserId(), cancellationToken);
+        var profile = await dbContext.CandidateProfiles
+            .Include(x => x.User)
+            .FirstOrDefaultAsync(x => x.UserId == GetRequiredUserId(), cancellationToken);
+
         if (profile is null)
         {
             return NotFound(new ApiResponse<bool>(false, false, "Candidate profile not found.", ["not_found"]));
         }
 
-        var resume = await dbContext.Resumes.FirstOrDefaultAsync(x => x.Id == resumeId && x.CandidateProfileId == profile.Id, cancellationToken);
+        var resume = await dbContext.Resumes
+            .Include(x => x.ParsedResumeResult)
+            .FirstOrDefaultAsync(x => x.Id == resumeId && x.CandidateProfileId == profile.Id, cancellationToken);
+
         if (resume is null)
         {
             return NotFound(new ApiResponse<bool>(false, false, "Resume not found.", ["not_found"]));
         }
 
-        var parse = await aiBackendClient.ParseResumeTextAsync(resume.RawText, cancellationToken);
-        if (!parse.Success || parse.Data is null)
+        string? structuredJson = resume.ParsedResumeResult?.StructuredJson;
+        List<string> extractedSkills = ServiceJson.DeserializeStringList(resume.ParsedResumeResult?.SkillsJson).ToList();
+
+        if (string.IsNullOrWhiteSpace(structuredJson))
         {
-            return BadRequest(new ApiResponse<bool>(false, false, parse.Error?.Message ?? "Could not parse resume."));
+            var parse = await aiBackendClient.ParseResumeTextAsync(resume.RawText, cancellationToken);
+            if (!parse.Success || parse.Data is null)
+            {
+                return BadRequest(new ApiResponse<bool>(false, false, parse.Error?.Message ?? "Could not parse resume."));
+            }
+
+            structuredJson = parse.Data.StructuredJson;
+            if (parse.Data.Skills is { Count: > 0 })
+            {
+                extractedSkills = parse.Data.Skills.ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(parse.Data.FullName))
+            {
+                profile.User.DisplayName = parse.Data.FullName.Trim();
+            }
+            if (!string.IsNullOrWhiteSpace(parse.Data.Phone))
+            {
+                profile.Phone = parse.Data.Phone.Trim();
+            }
+
+            if (resume.ParsedResumeResult is null)
+            {
+                dbContext.ParsedResumeResults.Add(new Domain.Entities.ParsedResumeResult
+                {
+                    ResumeId = resume.Id,
+                    FullName = parse.Data.FullName ?? string.Empty,
+                    Email = parse.Data.Email ?? string.Empty,
+                    Phone = parse.Data.Phone ?? string.Empty,
+                    SkillsJson = ServiceJson.Serialize(extractedSkills),
+                    StructuredJson = structuredJson ?? "{}",
+                    ParsedAtUtc = DateTime.UtcNow,
+                });
+            }
+            else
+            {
+                resume.ParsedResumeResult.FullName = parse.Data.FullName ?? string.Empty;
+                resume.ParsedResumeResult.Email = parse.Data.Email ?? string.Empty;
+                resume.ParsedResumeResult.Phone = parse.Data.Phone ?? string.Empty;
+                resume.ParsedResumeResult.SkillsJson = ServiceJson.Serialize(extractedSkills);
+                resume.ParsedResumeResult.StructuredJson = structuredJson ?? "{}";
+                resume.ParsedResumeResult.ParsedAtUtc = DateTime.UtcNow;
+            }
+
+            resume.ParseStatus = "Parsed";
+            resume.UpdatedAtUtc = DateTime.UtcNow;
         }
 
-        profile.User.DisplayName = string.IsNullOrWhiteSpace(parse.Data.FullName) ? profile.User.DisplayName : parse.Data.FullName;
-        profile.Headline = string.IsNullOrWhiteSpace(profile.Headline) ? "Candidate" : profile.Headline;
-        profile.SkillsJson = ServiceJson.Serialize(parse.Data.Skills);
-
-        if (!string.IsNullOrWhiteSpace(parse.Data.Email))
+        if (!string.IsNullOrWhiteSpace(structuredJson))
         {
-            var incomingEmail = parse.Data.Email.Trim().ToLowerInvariant();
-            if (profile.User.Email != incomingEmail)
+            try
             {
-                var existingUser = await dbContext.Users.AnyAsync(x => x.Email == incomingEmail, cancellationToken);
-                if (!existingUser)
+                using var doc = JsonDocument.Parse(structuredJson);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("full_name", out var nameEl) && !string.IsNullOrWhiteSpace(nameEl.GetString()))
                 {
-                    profile.User.Email = incomingEmail;
+                    profile.User.DisplayName = nameEl.GetString()!.Trim();
                 }
+
+                if (root.TryGetProperty("phone", out var phoneEl) && !string.IsNullOrWhiteSpace(phoneEl.GetString()))
+                {
+                    profile.Phone = phoneEl.GetString()!.Trim();
+                }
+
+                if (root.TryGetProperty("job_title", out var titleEl) && !string.IsNullOrWhiteSpace(titleEl.GetString()))
+                {
+                    profile.Headline = titleEl.GetString()!.Trim();
+                }
+
+                if (root.TryGetProperty("summary", out var summaryEl) && !string.IsNullOrWhiteSpace(summaryEl.GetString()))
+                {
+                    profile.Summary = summaryEl.GetString()!.Trim();
+                }
+
+                if (root.TryGetProperty("location", out var locationEl) && !string.IsNullOrWhiteSpace(locationEl.GetString()))
+                {
+                    profile.Location = locationEl.GetString()!.Trim();
+                }
+
+                if (root.TryGetProperty("linkedin", out var linkedInEl) && !string.IsNullOrWhiteSpace(linkedInEl.GetString()))
+                {
+                    profile.LinkedInUrl = linkedInEl.GetString()!.Trim();
+                }
+
+                if (root.TryGetProperty("github", out var githubEl) && !string.IsNullOrWhiteSpace(githubEl.GetString()))
+                {
+                    profile.PortfolioUrl = githubEl.GetString()!.Trim();
+                }
+
+                if (root.TryGetProperty("skills", out var skillsEl))
+                {
+                    var skillsList = new List<string>();
+                    if (skillsEl.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var prop in skillsEl.EnumerateObject())
+                        {
+                            if (prop.Value.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var item in prop.Value.EnumerateArray())
+                                {
+                                    var val = item.GetString()?.Trim();
+                                    if (!string.IsNullOrWhiteSpace(val)) skillsList.Add(val);
+                                }
+                            }
+                        }
+                    }
+                    else if (skillsEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in skillsEl.EnumerateArray())
+                        {
+                            var val = item.GetString()?.Trim();
+                            if (!string.IsNullOrWhiteSpace(val)) skillsList.Add(val);
+                        }
+                    }
+
+                    if (skillsList.Count > 0)
+                    {
+                        extractedSkills = skillsList.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                    }
+                }
+
+                if (root.TryGetProperty("experience", out var expEl) && expEl.ValueKind == JsonValueKind.Array)
+                {
+                    var expCount = expEl.GetArrayLength();
+                    if (expCount > 0)
+                    {
+                        profile.YearsExperience = Math.Max(profile.YearsExperience, expCount * 2);
+
+                        if (string.IsNullOrWhiteSpace(profile.Location))
+                        {
+                            var firstExp = expEl[0];
+                            if (firstExp.TryGetProperty("location", out var expLoc) && !string.IsNullOrWhiteSpace(expLoc.GetString()))
+                            {
+                                profile.Location = expLoc.GetString()!.Trim();
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Gracefully preserve direct assignments if JSON structure varies
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(parse.Data.Phone))
+        if (extractedSkills.Count > 0)
         {
-            profile.Phone = parse.Data.Phone.Trim();
+            profile.SkillsJson = ServiceJson.Serialize(extractedSkills);
         }
 
+        profile.UpdatedAtUtc = DateTime.UtcNow;
+        profile.User.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(profile.Id));
+
         return Ok(new ApiResponse<bool>(true, true, "Profile fields were filled from resume."));
     }
 
@@ -411,7 +583,11 @@ public sealed class CandidatesController(
         var atsByResume = await dbContext.AtsAssessments
             .Where(x => x.Application.CandidateProfileId == profile.Id)
             .GroupBy(x => x.Application.ResumeId)
-            .Select(x => new { ResumeId = x.Key, Score = x.OrderByDescending(y => y.EvaluatedAtUtc ?? y.CreatedAtUtc).Select(y => y.Score).FirstOrDefault() })
+            .Select(x => new 
+            { 
+                ResumeId = x.Key, 
+                Score = x.OrderByDescending(y => y.EvaluatedAtUtc ?? y.CreatedAtUtc).Select(y => y.Score).FirstOrDefault() 
+            })
             .ToListAsync(cancellationToken);
 
         var scoreLookup = atsByResume.ToDictionary(x => x.ResumeId, x => x.Score);

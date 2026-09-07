@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { ApiClientService } from '../../../core/api/api-client.service';
@@ -8,23 +8,23 @@ import {
   CleanupJobsRequest,
   ScrapingDiagnosticsDto,
   ScrapingStatusDto,
-  TriggerScrapeRequest
+  TriggerScrapeRequest,
 } from '../models/admin.model';
 import { ScrapedJobDto } from '../../../core/models/job.model';
 
 @Injectable({ providedIn: 'root' })
 export class AdminService {
+  private readonly apiClient = inject(ApiClientService);
+
   private readonly base = '/admin';
   private readonly jobsBase = '/jobs';
 
-  constructor(private readonly apiClient: ApiClientService) {}
-
   triggerScrape(payload: TriggerScrapeRequest): Observable<ApiResponse<boolean>> {
-    return this.apiClient.post<boolean>(`${this.base}/scraping/trigger`, payload);
+    return this.apiClient.post<boolean>(`${this.base}/scrape`, payload);
   }
 
   cleanupJobs(payload: CleanupJobsRequest): Observable<ApiResponse<boolean>> {
-    return this.apiClient.post<boolean>(`${this.base}/jobs/cleanup`, payload);
+    return this.apiClient.post<boolean>(`${this.base}/cleanup`, payload);
   }
 
   refreshRecommendations(): Observable<ApiResponse<boolean>> {
@@ -32,7 +32,7 @@ export class AdminService {
   }
 
   getBackgroundJobs(): Observable<ApiResponse<BackgroundJobDto[]>> {
-    return this.apiClient.get<BackgroundJobDto[]>(`${this.base}/background-jobs`);
+    return this.apiClient.get<BackgroundJobDto[]>(`${this.base}/jobs`);
   }
 
   getScrapingStatus(): Observable<ApiResponse<ScrapingStatusDto>> {

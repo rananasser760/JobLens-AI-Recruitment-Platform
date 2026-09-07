@@ -27,6 +27,7 @@ export interface InterviewSessionDto {
   status: string;
   integritySessionId?: number | null;
   interviewBackendSessionId?: string | null;
+  interviewSessionId?: string | null;
   finalReport?: string | null;
   aiFeedback?: string | null;
   candidateName: string;

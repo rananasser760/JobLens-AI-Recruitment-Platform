@@ -1,3 +1,4 @@
+using System.Text.Json;
 using JobLens.Application.Contracts;
 using JobLens.Application.Interfaces;
 using JobLens.Domain.Entities;
@@ -16,7 +17,7 @@ public sealed class ResumeWorkflowJob(
     {
         var resume = await dbContext.Resumes
             .Include(x => x.CandidateProfile)
-            .ThenInclude(x => x.User)
+                .ThenInclude(x => x.User)
             .Include(x => x.ParsedResumeResult)
             .FirstOrDefaultAsync(x => x.Id == resumeId);
 
@@ -25,21 +26,19 @@ public sealed class ResumeWorkflowJob(
             return;
         }
 
-        // If the API controller (or someone else) already completed parsing, skip the heavy AI call
         if (resume.ParseStatus == "Completed" && resume.ParsedResumeResult != null)
         {
             await RunVectorUpsertOnlyAsync(resume);
             return;
         }
-        
-        // If it's already parsing concurrently, throw to let Hangfire retry later!
+
         if (resume.ParseStatus == "Parsing")
         {
             throw new InvalidOperationException("Resume is currently being parsed by another process. Will retry later.");
         }
 
-        // Mark as parsing and save, to lock out other processes
         resume.ParseStatus = "Parsing";
+        resume.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
 
         var state = await StartStateAsync("ResumeParse", resumeId.ToString());
@@ -49,6 +48,7 @@ public sealed class ResumeWorkflowJob(
             if (string.IsNullOrWhiteSpace(resume.RawText))
             {
                 resume.ParseStatus = "Failed";
+                resume.UpdatedAtUtc = DateTime.UtcNow;
                 await FailStateAsync(state, "No extractable resume text found.");
                 await dbContext.SaveChangesAsync();
                 return;
@@ -64,23 +64,43 @@ public sealed class ResumeWorkflowJob(
 
                 await FailStateAsync(state, error);
                 resume.ParseStatus = "Failed";
+                resume.UpdatedAtUtc = DateTime.UtcNow;
                 await dbContext.SaveChangesAsync();
                 return;
             }
 
             resume.ParseStatus = "Completed";
+            resume.UpdatedAtUtc = DateTime.UtcNow;
+
             if (resume.ParsedResumeResult is null)
             {
                 resume.ParsedResumeResult = new ParsedResumeResult { ResumeId = resume.Id };
             }
 
-            resume.ParsedResumeResult.StructuredJson = parsed.Data.StructuredJson;
-            resume.ParsedResumeResult.FullName = parsed.Data.FullName;
-            resume.ParsedResumeResult.Email = parsed.Data.Email;
-            resume.ParsedResumeResult.Phone = parsed.Data.Phone;
+            var structuredJson = parsed.Data.StructuredJson;
+            resume.ParsedResumeResult.StructuredJson = structuredJson;
+            resume.ParsedResumeResult.FullName = parsed.Data.FullName ?? string.Empty;
+            resume.ParsedResumeResult.Email = parsed.Data.Email ?? string.Empty;
+            resume.ParsedResumeResult.Phone = parsed.Data.Phone ?? string.Empty;
             resume.ParsedResumeResult.SkillsJson = ServiceJson.Serialize(parsed.Data.Skills);
             resume.ParsedResumeResult.ParsedAtUtc = DateTime.UtcNow;
-            resume.CandidateProfile.SkillsJson = ServiceJson.Serialize(parsed.Data.Skills);
+
+            ExtractExtendedDetails(structuredJson, resume.ParsedResumeResult);
+
+            if (parsed.Data.Skills is { Count: > 0 })
+            {
+                resume.CandidateProfile.SkillsJson = ServiceJson.Serialize(parsed.Data.Skills);
+            }
+
+            if (!string.IsNullOrWhiteSpace(resume.ParsedResumeResult.Summary) && string.IsNullOrWhiteSpace(resume.CandidateProfile.Summary))
+            {
+                resume.CandidateProfile.Summary = resume.ParsedResumeResult.Summary;
+            }
+
+            if (!string.IsNullOrWhiteSpace(resume.ParsedResumeResult.Headline) && string.IsNullOrWhiteSpace(resume.CandidateProfile.Headline))
+            {
+                resume.CandidateProfile.Headline = resume.ParsedResumeResult.Headline;
+            }
 
             var vector = await aiBackendClient.UpsertCandidateVectorAsync(
                 new CandidateVectorSyncRequest(
@@ -96,35 +116,30 @@ public sealed class ResumeWorkflowJob(
                     resume.ContentHash),
                 CancellationToken.None);
 
+            var entry = await dbContext.VectorIndexEntries
+                .FirstOrDefaultAsync(x => x.EntityType == "candidate" && x.EntityId == resume.CandidateProfileId);
+
+            if (entry is null)
+            {
+                entry = new VectorIndexEntry { EntityType = "candidate", EntityId = resume.CandidateProfileId };
+                dbContext.VectorIndexEntries.Add(entry);
+            }
+
+            entry.ContentHash = resume.ContentHash;
+            entry.EmbeddedAtUtc = DateTime.UtcNow;
+
             if (vector.Success && vector.Data is not null)
             {
-                var entry = await dbContext.VectorIndexEntries.FirstOrDefaultAsync(x => x.EntityType == "candidate" && x.EntityId == resume.CandidateProfileId);
-                if (entry is null)
-                {
-                    entry = new VectorIndexEntry { EntityType = "candidate", EntityId = resume.CandidateProfileId };
-                    dbContext.VectorIndexEntries.Add(entry);
-                }
-
-                entry.ContentHash = resume.ContentHash;
                 entry.Collection = vector.Data.Collection;
                 entry.VectorId = vector.Data.VectorId;
                 entry.Model = vector.Data.Model;
                 entry.Status = VectorIndexStatus.Ready;
-                entry.EmbeddedAtUtc = DateTime.UtcNow;
                 entry.LastError = string.Empty;
             }
             else
             {
-                var entry = await dbContext.VectorIndexEntries.FirstOrDefaultAsync(x => x.EntityType == "candidate" && x.EntityId == resume.CandidateProfileId);
-                if (entry is null)
-                {
-                    entry = new VectorIndexEntry { EntityType = "candidate", EntityId = resume.CandidateProfileId };
-                    dbContext.VectorIndexEntries.Add(entry);
-                }
-
                 entry.Status = VectorIndexStatus.Failed;
                 entry.LastError = vector.Error?.Message ?? "Candidate vector upsert failed.";
-                entry.EmbeddedAtUtc = DateTime.UtcNow;
             }
 
             await CompleteStateAsync(state);
@@ -139,13 +154,48 @@ public sealed class ResumeWorkflowJob(
         {
             await FailStateAsync(state, ex.Message);
             resume.ParseStatus = "Failed";
+            resume.UpdatedAtUtc = DateTime.UtcNow;
             await dbContext.SaveChangesAsync();
+        }
+    }
+
+    private static void ExtractExtendedDetails(string? structuredJson, ParsedResumeResult target)
+    {
+        if (string.IsNullOrWhiteSpace(structuredJson))
+        {
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(structuredJson);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("summary", out var summaryEl) && summaryEl.ValueKind == JsonValueKind.String)
+            {
+                target.Summary = summaryEl.GetString()?.Trim() ?? string.Empty;
+            }
+
+            if (root.TryGetProperty("job_title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
+            {
+                target.Headline = titleEl.GetString()?.Trim() ?? string.Empty;
+            }
+        }
+        catch
+        {
+            // Fallback gracefully on custom LLM json structures
         }
     }
 
     private async Task<BackgroundJobState> StartStateAsync(string jobType, string correlationId)
     {
-        var state = new BackgroundJobState { JobType = jobType, CorrelationId = correlationId, Status = "Running", LastRunAtUtc = DateTime.UtcNow };
+        var state = new BackgroundJobState 
+        { 
+            JobType = jobType, 
+            CorrelationId = correlationId, 
+            Status = "Running", 
+            LastRunAtUtc = DateTime.UtcNow 
+        };
         dbContext.BackgroundJobStates.Add(state);
         await dbContext.SaveChangesAsync();
         return state;
@@ -167,7 +217,7 @@ public sealed class ResumeWorkflowJob(
         await dbContext.SaveChangesAsync();
     }
 
-    private async Task RunVectorUpsertOnlyAsync(JobLens.Domain.Entities.Resume resume)
+    private async Task RunVectorUpsertOnlyAsync(Resume resume)
     {
         var skills = new List<string>();
         if (resume.ParsedResumeResult != null && !string.IsNullOrWhiteSpace(resume.ParsedResumeResult.SkillsJson))
@@ -189,36 +239,32 @@ public sealed class ResumeWorkflowJob(
                 resume.ContentHash),
             CancellationToken.None);
 
+        var entry = await dbContext.VectorIndexEntries
+            .FirstOrDefaultAsync(x => x.EntityType == "candidate" && x.EntityId == resume.CandidateProfileId);
+
+        if (entry is null)
+        {
+            entry = new VectorIndexEntry { EntityType = "candidate", EntityId = resume.CandidateProfileId };
+            dbContext.VectorIndexEntries.Add(entry);
+        }
+
+        entry.ContentHash = resume.ContentHash;
+        entry.EmbeddedAtUtc = DateTime.UtcNow;
+
         if (vector.Success && vector.Data is not null)
         {
-            var entry = await dbContext.VectorIndexEntries.FirstOrDefaultAsync(x => x.EntityType == "candidate" && x.EntityId == resume.CandidateProfileId);
-            if (entry is null)
-            {
-                entry = new VectorIndexEntry { EntityType = "candidate", EntityId = resume.CandidateProfileId };
-                dbContext.VectorIndexEntries.Add(entry);
-            }
-
-            entry.ContentHash = resume.ContentHash;
             entry.Collection = vector.Data.Collection;
             entry.VectorId = vector.Data.VectorId;
             entry.Model = vector.Data.Model;
             entry.Status = VectorIndexStatus.Ready;
-            entry.EmbeddedAtUtc = DateTime.UtcNow;
             entry.LastError = string.Empty;
         }
         else
         {
-            var entry = await dbContext.VectorIndexEntries.FirstOrDefaultAsync(x => x.EntityType == "candidate" && x.EntityId == resume.CandidateProfileId);
-            if (entry is null)
-            {
-                entry = new VectorIndexEntry { EntityType = "candidate", EntityId = resume.CandidateProfileId };
-                dbContext.VectorIndexEntries.Add(entry);
-            }
-
             entry.Status = VectorIndexStatus.Failed;
             entry.LastError = vector.Error?.Message ?? "Candidate vector upsert failed.";
-            entry.EmbeddedAtUtc = DateTime.UtcNow;
         }
+
         await dbContext.SaveChangesAsync();
 
         if (vector.Success && vector.Data is not null)

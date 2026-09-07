@@ -1,63 +1,88 @@
-import os
-import logging
-import torch
-from nemo.collections.asr.models import ASRModel
+from __future__ import annotations
 
-# --- 1. Suppress NeMo's excessive logging ---
+import logging
+import os
+import threading
+from typing import Any
+
+import torch
+
+logger = logging.getLogger("joblens.stt")
 logging.getLogger("nemo_logger").setLevel(logging.ERROR)
 
-# --- 2. Configuration ---
-MODEL_NAME = "nvidia/parakeet-tdt-0.6b-v2"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+MODEL_NAME = os.getenv("JOBLENS_STT_MODEL", "nvidia/parakeet-tdt-0.6b-v2")
 
-print(f"[stt] Loading STT model ({device})... This might take a minute.")
-if torch.cuda.is_available():
-    print(f"[stt] Using GPU: {torch.cuda.get_device_name(0)}")
+_model: Any = None
+_model_lock = threading.Lock()
+_device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
-# --- 3. Load Model Globally ---
-try:
-    model = ASRModel.from_pretrained(MODEL_NAME).to(device)
-    model.eval()
-    print("[stt] STT model loaded successfully.")
-except Exception as e:
-    print(f"[stt] Failed to load NeMo model: {e}")
-    raise e
+
+def _get_model() -> Any:
+    """Thread-safe lazy initialization of NVIDIA NeMo ASR model."""
+    global _model
+    if _model is not None:
+        return _model
+
+    with _model_lock:
+        if _model is not None:
+            return _model
+
+        logger.info(f"Loading NeMo STT model ({MODEL_NAME}) on device: {_device}")
+        try:
+            from nemo.collections.asr.models import ASRModel
+
+            loaded = ASRModel.from_pretrained(MODEL_NAME).to(_device)
+            loaded.eval()
+            _model = loaded
+            logger.info("NeMo STT model loaded successfully.")
+            return _model
+        except Exception as exc:
+            logger.exception(f"Failed to load NeMo STT model: {exc}")
+            raise RuntimeError(f"Could not load STT model '{MODEL_NAME}': {exc}") from exc
+
 
 def speech_to_text(audio_file_path: str) -> str:
     """
-    Transcribes a WAV file using NVIDIA Parakeet.
-    Returns ONLY the text string.
+    Transcribes a WAV file using NVIDIA Parakeet TDT.
+    Returns plain text only.
     """
+    if not audio_file_path:
+        return ""
+
     abs_path = os.path.abspath(audio_file_path)
-    
-    if not os.path.exists(abs_path):
-        print(f"[stt] Error: Audio file not found at {abs_path}")
+    if not os.path.isfile(abs_path):
+        logger.error(f"Audio file not found: {abs_path}")
+        return ""
+
+    if os.path.getsize(abs_path) == 0:
+        logger.warning(f"Audio file is empty (0 bytes): {abs_path}")
         return ""
 
     try:
-        # Transcribe returns a list of Hypothesis objects
-        transcriptions = model.transcribe([abs_path])
-        
-        # Handle tuple return type if it occurs
+        model = _get_model()
+        with torch.inference_mode():
+            transcriptions = model.transcribe([abs_path])
+
         if isinstance(transcriptions, tuple):
             transcriptions = transcriptions[0]
-            
-        if transcriptions and len(transcriptions) > 0:
-            # --- THE FIX IS HERE ---
-            # We must access the .text attribute of the Hypothesis object
-            result_object = transcriptions[0]
-            
-            # Check if it has a .text attribute (newer NeMo versions)
-            if hasattr(result_object, 'text'):
-                return result_object.text
-            # Fallback for simple string returns
-            elif isinstance(result_object, str):
-                return result_object
-            else:
-                return str(result_object)
-        else:
+
+        if not transcriptions:
             return ""
-            
-    except Exception as e:
-        print(f"[stt] Transcription error: {e}")
+
+        result = transcriptions[0]
+
+        # Extract text from NeMo Hypothesis or string
+        if hasattr(result, "text"):
+            text_val = result.text
+        elif isinstance(result, str):
+            text_val = result
+        elif isinstance(result, dict) and "text" in result:
+            text_val = result["text"]
+        else:
+            text_val = str(result)
+
+        return (text_val or "").strip()
+
+    except Exception as exc:
+        logger.exception(f"Inference error during speech transcription: {exc}")
         return ""

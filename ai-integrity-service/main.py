@@ -3,6 +3,7 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 import asyncio
+import hmac
 import json
 import os
 import uuid
@@ -51,7 +52,7 @@ def _is_websocket_authorized(websocket: WebSocket) -> bool:
     if not INTERNAL_API_KEY:
         return True
     provided = (websocket.headers.get("x-api-key") or websocket.query_params.get("api_key") or "").strip()
-    return provided == INTERNAL_API_KEY
+    return hmac.compare_digest(provided, INTERNAL_API_KEY)
 
 app = FastAPI(
     title="JobLens AI - Integrity Service",
@@ -72,6 +73,7 @@ cors_origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -90,13 +92,10 @@ async def correlation_id_middleware(request: Request, call_next):
 async def internal_api_key_guard(request: Request, call_next):
     if INTERNAL_API_KEY:
         path = request.url.path
-        protected = path.startswith("/internal/v1/")
-        if ALLOW_PUBLIC_ROUTES:
-            protected = protected or path.startswith("/api/")
-
-        if protected:
-            provided_key = request.headers.get("X-API-Key", "")
-            if provided_key != INTERNAL_API_KEY:
+        # Internal API strictly requires the shared secret
+        if path.startswith("/internal/v1/"):
+            provided_key = request.headers.get("X-API-Key", "").strip()
+            if not hmac.compare_digest(provided_key, INTERNAL_API_KEY):
                 return JSONResponse(status_code=401, content={"detail": "Invalid or missing X-API-Key"})
 
     return await call_next(request)
@@ -275,7 +274,9 @@ def health():
 
 @app.get("/")
 def serve_home():
-    return FileResponse("index.html")
+    if os.path.exists("index.html"):
+        return FileResponse("index.html")
+    return JSONResponse({"message": "JobLens AI Integrity Service is running."})
 
 if __name__ == "__main__":
     import uvicorn

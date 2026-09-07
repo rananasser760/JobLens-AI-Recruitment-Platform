@@ -14,9 +14,7 @@
     </div>
   }
   @if (success()) {
-    <div class="alert alert-success">
-      <i class="fa-solid fa-check"></i> {{ success() }}
-    </div>
+    <div class="alert alert-success"><i class="fa-solid fa-check"></i> {{ success() }}</div>
   }
 
   @if (loading() && !job()) {
@@ -40,14 +38,12 @@
           <div>
             <h1 class="hero-title">{{ j.title }}</h1>
             <p class="hero-company">
-              <i class="fa-solid fa-building" style="opacity:.6;margin-right:.3rem"></i>
+              <i class="fa-solid fa-building" style="opacity: 0.6; margin-right: 0.3rem"></i>
               {{ j.companyName || 'Company' }} &nbsp;·&nbsp; {{ j.location || 'Location TBD' }}
             </p>
           </div>
           @if (hasApplied()) {
-            <span class="applied-badge">
-              <i class="fa-solid fa-check"></i> Applied
-            </span>
+            <span class="applied-badge"> <i class="fa-solid fa-check"></i> Applied </span>
           }
         </div>
 
@@ -85,25 +81,19 @@
       <div class="detail-main">
         @if (j.description) {
           <div class="content-section">
-            <h2 class="section-title">
-              <i class="fa-solid fa-file-lines"></i> Job Description
-            </h2>
+            <h2 class="section-title"><i class="fa-solid fa-file-lines"></i> Job Description</h2>
             <p class="multiline-text">{{ j.description }}</p>
           </div>
         }
         @if (j.responsibilities) {
           <div class="content-section">
-            <h2 class="section-title">
-              <i class="fa-solid fa-bullseye"></i> Responsibilities
-            </h2>
+            <h2 class="section-title"><i class="fa-solid fa-bullseye"></i> Responsibilities</h2>
             <p class="multiline-text">{{ j.responsibilities }}</p>
           </div>
         }
         @if (j.requirements) {
           <div class="content-section">
-            <h2 class="section-title">
-              <i class="fa-solid fa-list-check"></i> Requirements
-            </h2>
+            <h2 class="section-title"><i class="fa-solid fa-list-check"></i> Requirements</h2>
             <p class="multiline-text">{{ j.requirements }}</p>
           </div>
         }
@@ -112,9 +102,10 @@
       <aside class="detail-sidebar">
         <div class="sidebar-card">
           <h3 class="sidebar-title">
-            <i class="fa-solid fa-code" style="color:#4059aa;margin-right:.4rem"></i> Required Skills
+            <i class="fa-solid fa-code" style="color: #4059aa; margin-right: 0.4rem"></i> Required
+            Skills
           </h3>
-          @if (j.requiredSkills.length === 0) {
+          @if (!j.requiredSkills?.length) {
             <p class="sidebar-empty">No required skills listed.</p>
           } @else {
             <div class="skills-grid">
@@ -133,15 +124,23 @@
             </div>
 
             @if (j.externalUrl) {
-              <a class="btn-apply-external" [href]="j.externalUrl" target="_blank" rel="noopener noreferrer">
+              <a
+                class="btn-apply-external"
+                [href]="j.externalUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <i class="fa-solid fa-arrow-up-right-from-square"></i> Apply on Source Website
               </a>
             } @else {
-              <p class="sidebar-empty">Application link is not available for this external listing yet.</p>
+              <p class="sidebar-empty">
+                Application link is not available for this external listing yet.
+              </p>
             }
           } @else {
             <h3 class="sidebar-title">
-              <i class="fa-solid fa-paper-plane" style="color:#4059aa;margin-right:.4rem"></i> Apply to this Role
+              <i class="fa-solid fa-paper-plane" style="color: #4059aa; margin-right: 0.4rem"></i>
+              Apply to this Role
             </h3>
 
             @if (!defaultResumeId()) {
@@ -170,7 +169,12 @@
               ></textarea>
             </div>
 
-            <button type="button" class="btn-apply-now" (click)="applyNow()" [disabled]="hasApplied() || applying() || !defaultResumeId()">
+            <button
+              type="button"
+              class="btn-apply-now"
+              (click)="applyNow()"
+              [disabled]="hasApplied() || applying() || !defaultResumeId()"
+            >
               @if (applying()) {
                 <span class="btn-spinner"></span> Submitting…
               } @else if (hasApplied()) {

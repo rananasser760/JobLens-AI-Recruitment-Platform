@@ -7,7 +7,7 @@ import { MetadataService } from '../../../../core/api/metadata.service';
 import {
   ApplicationStatus,
   BulkUpdateApplicationStatusResultDto,
-  CandidateApplicationDto
+  CandidateApplicationDto,
 } from '../../../../core/models/application.model';
 import { InterviewAgentType } from '../../../../core/models/interview.model';
 import { EnumOptionDto } from '../../../../core/models/metadata.model';
@@ -29,7 +29,7 @@ const FALLBACK_STATUSES: ApplicationStatus[] = [
   'Offered',
   'Rejected',
   'Withdrawn',
-  'ExternalRedirected'
+  'ExternalRedirected',
 ];
 
 const INTERVIEW_AGENT_TYPES: InterviewAgentType[] = ['Technical', 'Behavioral', 'Mixed'];
@@ -49,7 +49,7 @@ interface RecruiterApplicationsFilterState {
   selector: 'app-recruiter-applications-page',
   imports: [CommonModule, ErrorRetryComponent, LoadingSpinnerComponent],
   templateUrl: './recruiter-applications.page.html',
-  styleUrl: './recruiter-applications.page.css'
+  styleUrl: './recruiter-applications.page.css',
 })
 export class RecruiterApplicationsPage {
   private readonly router = inject(Router);
@@ -107,7 +107,9 @@ export class RecruiterApplicationsPage {
       return false;
     }
 
-    return result.skippedCount > 0 || result.notFoundIds.length > 0 || result.unauthorizedIds.length > 0;
+    return (
+      result.skippedCount > 0 || result.notFoundIds.length > 0 || result.unauthorizedIds.length > 0
+    );
   });
   readonly allSelected = computed(() => {
     const items = this.applications();
@@ -136,12 +138,12 @@ export class RecruiterApplicationsPage {
         .getMyJobs({ pageNumber: 1, pageSize: 100, sortBy: 'postedAt', sortDescending: true })
         .pipe(
           map((res) => res.data?.items ?? []),
-          catchError(() => of([] as JobListDto[]))
+          catchError(() => of([] as JobListDto[])),
         ),
       statusOptions: this.metadataService.getEnums().pipe(
         map((res) => this.extractStatusOptions(res.data?.enums?.['ApplicationStatus'] ?? [])),
-        catchError(() => of([...FALLBACK_STATUSES]))
-      )
+        catchError(() => of([...FALLBACK_STATUSES])),
+      ),
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
@@ -173,7 +175,7 @@ export class RecruiterApplicationsPage {
         },
         error: () => {
           this.error.set('Unable to load application management context right now.');
-        }
+        },
       });
   }
 
@@ -194,7 +196,7 @@ export class RecruiterApplicationsPage {
         pageSize: this.pageSize(),
         sortBy: 'appliedAt',
         sortDescending: true,
-        status: this.filterStatus() || undefined
+        status: this.filterStatus() || undefined,
       })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
@@ -210,12 +212,12 @@ export class RecruiterApplicationsPage {
 
           const validIds = new Set(items.map((item) => item.applicationId));
           this.selectedApplicationIds.set(
-            this.selectedApplicationIds().filter((id) => validIds.has(id))
+            this.selectedApplicationIds().filter((id) => validIds.has(id)),
           );
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to load applications for this job.'));
-        }
+        },
       });
   }
 
@@ -338,7 +340,7 @@ export class RecruiterApplicationsPage {
     const previousRowNotes = this.rowNotes();
 
     this.applications.set(
-      this.applyOptimisticStatus(previousApplications, [applicationId], nextStatus)
+      this.applyOptimisticStatus(previousApplications, [applicationId], nextStatus),
     );
     this.trimTransientStateToVisibleRows();
 
@@ -349,7 +351,7 @@ export class RecruiterApplicationsPage {
     this.applicationsService
       .updateStatus(applicationId, {
         status: nextStatus,
-        notes: this.getRowNotes(applicationId).trim() || undefined
+        notes: this.getRowNotes(applicationId).trim() || undefined,
       })
       .pipe(finalize(() => this.setRowSubmitting(applicationId, false)))
       .subscribe({
@@ -361,7 +363,7 @@ export class RecruiterApplicationsPage {
           this.rowStatuses.set(previousRowStatuses);
           this.rowNotes.set(previousRowNotes);
           this.error.set(this.mapError(err, 'Unable to update this application status right now.'));
-        }
+        },
       });
   }
 
@@ -403,7 +405,7 @@ export class RecruiterApplicationsPage {
     const jobTitle = selectedJob?.title || 'Interview';
 
     this.scheduleApplicationId.set(application.applicationId);
-    this.scheduleCandidateName.set(application.candidateName);
+    this.scheduleCandidateName.set(application.candidateName ?? '');
     this.scheduleJobTitle.set(jobTitle);
     this.scheduleTitle.set(`${jobTitle} interview`);
     this.scheduleDateTime.set(this.toDateTimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000)));
@@ -452,7 +454,7 @@ export class RecruiterApplicationsPage {
         applicationId,
         scheduledAt,
         agentType: this.scheduleAgentType(),
-        interviewTitle: this.scheduleTitle().trim() || undefined
+        interviewTitle: this.scheduleTitle().trim() || undefined,
       })
       .pipe(finalize(() => this.scheduling.set(false)))
       .subscribe({
@@ -463,7 +465,7 @@ export class RecruiterApplicationsPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to schedule interview right now.'));
-        }
+        },
       });
   }
 
@@ -479,7 +481,9 @@ export class RecruiterApplicationsPage {
     const previousRowStatuses = this.rowStatuses();
     const previousRowNotes = this.rowNotes();
 
-    this.applications.set(this.applyOptimisticStatus(previousApplications, selectedIds, nextStatus));
+    this.applications.set(
+      this.applyOptimisticStatus(previousApplications, selectedIds, nextStatus),
+    );
     this.selectedApplicationIds.set([]);
     this.trimTransientStateToVisibleRows();
 
@@ -491,7 +495,7 @@ export class RecruiterApplicationsPage {
       .bulkUpdateStatus({
         applicationIds: selectedIds,
         status: nextStatus,
-        notes: this.bulkNotes().trim() || undefined
+        notes: this.bulkNotes().trim() || undefined,
       })
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe({
@@ -509,14 +513,16 @@ export class RecruiterApplicationsPage {
           this.rowStatuses.set(previousRowStatuses);
           this.rowNotes.set(previousRowNotes);
           this.error.set(this.mapError(err, 'Unable to apply bulk status update right now.'));
-        }
+        },
       });
   }
 
   private extractStatusOptions(options: EnumOptionDto[]): ApplicationStatus[] {
     const parsed = options
       .map((item) => item.name)
-      .filter((name): name is ApplicationStatus => FALLBACK_STATUSES.includes(name as ApplicationStatus));
+      .filter((name): name is ApplicationStatus =>
+        FALLBACK_STATUSES.includes(name as ApplicationStatus),
+      );
 
     if (parsed.length === 0) {
       return [...FALLBACK_STATUSES];
@@ -599,11 +605,11 @@ export class RecruiterApplicationsPage {
   private applyOptimisticStatus(
     rows: CandidateApplicationDto[],
     applicationIds: number[],
-    nextStatus: ApplicationStatus
+    nextStatus: ApplicationStatus,
   ): CandidateApplicationDto[] {
     const selected = new Set(applicationIds);
     const updated = rows.map((row) =>
-      selected.has(row.applicationId) ? { ...row, status: nextStatus } : row
+      selected.has(row.applicationId) ? { ...row, status: nextStatus } : row,
     );
 
     const activeFilter = this.filterStatus();
@@ -618,7 +624,7 @@ export class RecruiterApplicationsPage {
     const visibleIds = new Set(this.applications().map((item) => item.applicationId));
 
     this.selectedApplicationIds.set(
-      this.selectedApplicationIds().filter((id) => visibleIds.has(id))
+      this.selectedApplicationIds().filter((id) => visibleIds.has(id)),
     );
 
     const nextStatuses: Record<number, ApplicationStatus | ''> = {};
@@ -656,7 +662,7 @@ export class RecruiterApplicationsPage {
       bulkStatus: '',
       bulkNotes: '',
       pageNumber: 1,
-      pageSize: PAGE_SIZE_OPTIONS[0]
+      pageSize: PAGE_SIZE_OPTIONS[0],
     });
 
     this.selectedJobId.set(this.parseOptionalPositiveInt(saved.selectedJobId));
@@ -674,7 +680,7 @@ export class RecruiterApplicationsPage {
       bulkStatus: this.bulkStatus(),
       bulkNotes: this.bulkNotes(),
       pageNumber: this.pageNumber(),
-      pageSize: this.pageSize()
+      pageSize: this.pageSize(),
     });
   }
 

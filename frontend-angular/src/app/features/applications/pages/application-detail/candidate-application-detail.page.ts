@@ -12,7 +12,7 @@ import { LoadingSpinnerComponent } from '../../../../shared/components/loading-s
   selector: 'app-candidate-application-detail-page',
   imports: [CommonModule, RouterLink, ConfirmDialogComponent, LoadingSpinnerComponent],
   templateUrl: './candidate-application-detail.page.html',
-  styleUrl: './candidate-application-detail.page.css'
+  styleUrl: './candidate-application-detail.page.css',
 })
 export class CandidateApplicationDetailPage {
   private readonly route = inject(ActivatedRoute);
@@ -75,7 +75,7 @@ export class CandidateApplicationDetailPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to load application details right now.'));
-        }
+        },
       });
   }
 
@@ -107,19 +107,20 @@ export class CandidateApplicationDetailPage {
     this.withdrawing.set(true);
     this.error.set(null);
     this.success.set(null);
-
-    this.applicationsService
-      .withdraw(item.id)
-      .pipe(finalize(() => this.withdrawing.set(false)))
-      .subscribe({
-        next: (res) => {
-          this.success.set(res.message || 'Application withdrawn successfully.');
-          this.load();
-        },
-        error: (err: unknown) => {
-          this.error.set(this.mapError(err, 'Unable to withdraw this application right now.'));
-        }
-      });
+    if (item?.id) {
+      this.applicationsService
+        .withdraw(item.id)
+        .pipe(finalize(() => this.withdrawing.set(false)))
+        .subscribe({
+          next: (res) => {
+            this.success.set(res.message || 'Application withdrawn successfully.');
+            this.load();
+          },
+          error: (err: unknown) => {
+            this.error.set(this.mapError(err, 'Unable to withdraw this application right now.'));
+          },
+        });
+    }
   }
 
   formatStatus(status: string): string {

@@ -11,8 +11,8 @@ internal static class FrontendStatusMapper
         ApplicationStatus.AtsPending => nameof(ApplicationStatus.AtsPending),
         ApplicationStatus.AtsQualified => nameof(ApplicationStatus.AtsQualified),
         ApplicationStatus.AtsRejected => nameof(ApplicationStatus.AtsRejected),
-        ApplicationStatus.InterviewScheduled => "InterviewScheduled",
-        ApplicationStatus.InterviewCompleted => "InterviewCompleted",
+        ApplicationStatus.InterviewScheduled => nameof(ApplicationStatus.InterviewScheduled),
+        ApplicationStatus.InterviewCompleted => nameof(ApplicationStatus.InterviewCompleted),
         ApplicationStatus.Offered => nameof(ApplicationStatus.Offered),
         ApplicationStatus.Rejected => nameof(ApplicationStatus.Rejected),
         ApplicationStatus.Withdrawn => nameof(ApplicationStatus.Withdrawn),
@@ -20,21 +20,38 @@ internal static class FrontendStatusMapper
         _ => nameof(ApplicationStatus.Submitted),
     };
 
-    public static ApplicationStatus FromFrontend(string? status) => (status ?? string.Empty).Trim() switch
+    public static ApplicationStatus FromFrontend(string? status)
     {
-        nameof(ApplicationStatus.Submitted) => ApplicationStatus.Submitted,
-        nameof(ApplicationStatus.AtsPending) => ApplicationStatus.AtsPending,
-        nameof(ApplicationStatus.AtsQualified) => ApplicationStatus.AtsQualified,
-        nameof(ApplicationStatus.AtsRejected) => ApplicationStatus.AtsRejected,
-        nameof(ApplicationStatus.InterviewScheduled) => ApplicationStatus.InterviewScheduled,
-        nameof(ApplicationStatus.InterviewCompleted) => ApplicationStatus.InterviewCompleted,
-        nameof(ApplicationStatus.Offered) => ApplicationStatus.Offered,
-        nameof(ApplicationStatus.Rejected) => ApplicationStatus.Rejected,
-        nameof(ApplicationStatus.Withdrawn) => ApplicationStatus.Withdrawn,
-        nameof(ApplicationStatus.ExternalRedirected) => ApplicationStatus.ExternalRedirected,
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return ApplicationStatus.Submitted;
+        }
 
-        _ => ApplicationStatus.Submitted,
-    };
+        var normalized = status.Trim();
+
+        if (string.Equals(normalized, nameof(ApplicationStatus.Submitted), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.Submitted;
+        if (string.Equals(normalized, nameof(ApplicationStatus.AtsPending), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.AtsPending;
+        if (string.Equals(normalized, nameof(ApplicationStatus.AtsQualified), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.AtsQualified;
+        if (string.Equals(normalized, nameof(ApplicationStatus.AtsRejected), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.AtsRejected;
+        if (string.Equals(normalized, nameof(ApplicationStatus.InterviewScheduled), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.InterviewScheduled;
+        if (string.Equals(normalized, nameof(ApplicationStatus.InterviewCompleted), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.InterviewCompleted;
+        if (string.Equals(normalized, nameof(ApplicationStatus.Offered), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.Offered;
+        if (string.Equals(normalized, nameof(ApplicationStatus.Rejected), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.Rejected;
+        if (string.Equals(normalized, nameof(ApplicationStatus.Withdrawn), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.Withdrawn;
+        if (string.Equals(normalized, nameof(ApplicationStatus.ExternalRedirected), StringComparison.OrdinalIgnoreCase))
+            return ApplicationStatus.ExternalRedirected;
+
+        return ApplicationStatus.Submitted;
+    }
 
     public static string ToFrontend(InterviewSessionStatus status) => status switch
     {
@@ -47,6 +64,33 @@ internal static class FrontendStatusMapper
         InterviewSessionStatus.Cancelled => nameof(InterviewSessionStatus.Cancelled),
         _ => nameof(InterviewSessionStatus.Draft),
     };
+
+    public static InterviewSessionStatus ParseInterviewStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return InterviewSessionStatus.Draft;
+        }
+
+        var normalized = status.Trim();
+
+        if (string.Equals(normalized, nameof(InterviewSessionStatus.Draft), StringComparison.OrdinalIgnoreCase))
+            return InterviewSessionStatus.Draft;
+        if (string.Equals(normalized, nameof(InterviewSessionStatus.Scheduled), StringComparison.OrdinalIgnoreCase))
+            return InterviewSessionStatus.Scheduled;
+        if (string.Equals(normalized, nameof(InterviewSessionStatus.Live), StringComparison.OrdinalIgnoreCase))
+            return InterviewSessionStatus.Live;
+        if (string.Equals(normalized, nameof(InterviewSessionStatus.Completed), StringComparison.OrdinalIgnoreCase))
+            return InterviewSessionStatus.Completed;
+        if (string.Equals(normalized, nameof(InterviewSessionStatus.Abandoned), StringComparison.OrdinalIgnoreCase))
+            return InterviewSessionStatus.Abandoned;
+        if (string.Equals(normalized, nameof(InterviewSessionStatus.ReviewRequired), StringComparison.OrdinalIgnoreCase))
+            return InterviewSessionStatus.ReviewRequired;
+        if (string.Equals(normalized, nameof(InterviewSessionStatus.Cancelled), StringComparison.OrdinalIgnoreCase))
+            return InterviewSessionStatus.Cancelled;
+
+        return InterviewSessionStatus.Draft;
+    }
 
     public static string ToFrontend(JobSourceType sourceType) => sourceType switch
     {

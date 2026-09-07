@@ -14,7 +14,7 @@ import {
   ReportBrowserEventDto,
   ReportCheatingEventDto,
   ScheduleInterviewDto,
-  SubmitAnswerDto
+  SubmitAnswerDto,
 } from '../../core/models/interview.model';
 
 @Injectable({ providedIn: 'root' })
@@ -65,10 +65,13 @@ export class InterviewsService {
     return this.apiClient.post<unknown>(`${this.base}/submit-answer`, form);
   }
 
-  reportCheatingEvent(dto: ReportCheatingEventDto, frameImage?: File): Observable<ApiResponse<unknown>> {
+  reportCheatingEvent(
+    dto: ReportCheatingEventDto,
+    frameImage?: File,
+  ): Observable<ApiResponse<unknown>> {
     const form = new FormData();
     form.append('sessionId', String(dto.sessionId));
-    form.append('eventType', dto.eventType);
+    form.append('eventType', dto.eventType ?? '');
     if (dto.confidence !== undefined) {
       form.append('confidence', String(dto.confidence));
     }
@@ -91,13 +94,13 @@ export class InterviewsService {
 
   cancelInterview(sessionId: number, reason?: string): Observable<ApiResponse<unknown>> {
     return this.apiClient.post<unknown>(`${this.base}/${sessionId}/cancel`, {
-      reason: reason?.trim() || undefined
+      reason: reason?.trim() || undefined,
     });
   }
 
   rescheduleInterview(sessionId: number, scheduledAt: string): Observable<ApiResponse<unknown>> {
     return this.apiClient.post<unknown>(`${this.base}/${sessionId}/reschedule`, {
-      scheduledAt
+      scheduledAt,
     });
   }
 
@@ -113,17 +116,33 @@ export class InterviewsService {
     return this.apiClient.get<InterviewRankingDto[]>(`${this.base}/job/${jobId}/rankings`);
   }
 
-  getRecruiterInterviews(params: InterviewSearchParams): Observable<ApiResponse<PaginatedResponse<InterviewSessionListDto>>> {
-    return this.apiClient.get<PaginatedResponse<InterviewSessionListDto>>(`${this.base}/my-interviews`, params as Record<string, unknown>);
+  getRecruiterInterviews(
+    params: InterviewSearchParams,
+  ): Observable<ApiResponse<PaginatedResponse<InterviewSessionListDto>>> {
+    return this.apiClient.get<PaginatedResponse<InterviewSessionListDto>>(
+      `${this.base}/my-interviews`,
+      params as Record<string, unknown>,
+    );
   }
 
-  getCandidateInterviews(params: InterviewSearchParams): Observable<ApiResponse<PaginatedResponse<InterviewSessionListDto>>> {
-    return this.apiClient.get<PaginatedResponse<InterviewSessionListDto>>(`${this.base}/candidate-interviews`, params as Record<string, unknown>);
+  getCandidateInterviews(
+    params: InterviewSearchParams,
+  ): Observable<ApiResponse<PaginatedResponse<InterviewSessionListDto>>> {
+    return this.apiClient.get<PaginatedResponse<InterviewSessionListDto>>(
+      `${this.base}/candidate-interviews`,
+      params as Record<string, unknown>,
+    );
   }
 
-  uploadVideo(sessionId: number, file: File): Observable<ApiResponse<InterviewVideoUploadResponseDto>> {
+  uploadVideo(
+    sessionId: number,
+    file: File,
+  ): Observable<ApiResponse<InterviewVideoUploadResponseDto>> {
     const form = new FormData();
     form.append('videoFile', file);
-    return this.apiClient.post<InterviewVideoUploadResponseDto>(`${this.base}/${sessionId}/video`, form);
+    return this.apiClient.post<InterviewVideoUploadResponseDto>(
+      `${this.base}/${sessionId}/video`,
+      form,
+    );
   }
 }

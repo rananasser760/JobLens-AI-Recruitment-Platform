@@ -6,7 +6,7 @@ import { finalize } from 'rxjs';
 import {
   ApplicationDto,
   ApplicationStatus,
-  UpdateApplicationStatusDto
+  UpdateApplicationStatusDto,
 } from '../../../../core/models/application.model';
 import { InterviewAgentType } from '../../../../core/models/interview.model';
 import { ApplicationsService } from '../../applications.service';
@@ -23,7 +23,7 @@ const STATUS_OPTIONS: ApplicationStatus[] = [
   'Offered',
   'Rejected',
   'Withdrawn',
-  'ExternalRedirected'
+  'ExternalRedirected',
 ];
 
 const INTERVIEW_AGENT_TYPES: InterviewAgentType[] = ['Technical', 'Behavioral', 'Mixed'];
@@ -32,7 +32,7 @@ const INTERVIEW_AGENT_TYPES: InterviewAgentType[] = ['Technical', 'Behavioral', 
   selector: 'app-recruiter-application-detail-page',
   imports: [CommonModule, RouterLink, LoadingSpinnerComponent],
   templateUrl: './recruiter-application-detail.page.html',
-  styleUrl: './recruiter-application-detail.page.css'
+  styleUrl: './recruiter-application-detail.page.css',
 })
 export class RecruiterApplicationDetailPage {
   private readonly route = inject(ActivatedRoute);
@@ -99,11 +99,13 @@ export class RecruiterApplicationDetailPage {
           this.statusDraft.set(this.toApplicationStatus(item.status));
           this.notesDraft.set(item.recruiterNotes ?? '');
           this.scheduleTitle.set(`${item.jobTitle} interview`);
-          this.scheduleDateTime.set(this.toDateTimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000)));
+          this.scheduleDateTime.set(
+            this.toDateTimeLocal(new Date(Date.now() + 24 * 60 * 60 * 1000)),
+          );
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to load application details right now.'));
-        }
+        },
       });
   }
 
@@ -125,7 +127,7 @@ export class RecruiterApplicationDetailPage {
 
     const payload: UpdateApplicationStatusDto = {
       status: nextStatus,
-      notes: this.notesDraft().trim() || undefined
+      notes: this.notesDraft().trim() || undefined,
     };
 
     this.savingStatus.set(true);
@@ -142,7 +144,7 @@ export class RecruiterApplicationDetailPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to update application status right now.'));
-        }
+        },
       });
   }
 
@@ -182,10 +184,10 @@ export class RecruiterApplicationDetailPage {
 
     this.interviewsService
       .schedule({
-        applicationId: item.id,
+        applicationId: item.id ?? 0,
         scheduledAt,
         interviewTitle: this.scheduleTitle().trim() || undefined,
-        agentType: this.scheduleAgentType()
+        agentType: this.scheduleAgentType(),
       })
       .pipe(finalize(() => this.scheduling.set(false)))
       .subscribe({
@@ -196,7 +198,7 @@ export class RecruiterApplicationDetailPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to schedule interview right now.'));
-        }
+        },
       });
   }
 

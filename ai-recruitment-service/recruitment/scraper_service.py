@@ -98,7 +98,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _supports_async_subprocess() -> bool:
-    """Playwright launches browser subprocesses; some Windows event loops cannot do that."""
+    """Playwright launches browser subprocesses; ensure loop compatibility."""
     if os.name != "nt":
         return True
 
@@ -115,8 +115,6 @@ async def _supports_async_subprocess() -> bool:
     except NotImplementedError:
         return False
     except Exception:
-        # If subprocess support exists but the probe fails for another reason,
-        # allow scraper to continue and let the normal error handling report it.
         return True
 
 
@@ -286,7 +284,6 @@ def _is_egypt_location_label(location: str) -> bool:
     if any(token in normalized for token in EGYPT_LOCATION_TOKENS):
         return True
 
-    # Common Egypt-specific variants seen on boards.
     if "eg" == normalized or normalized.endswith(" eg"):
         return True
 
@@ -837,7 +834,7 @@ async def run_scraper(
             try:
                 page = await _new_page(context)
                 url = (
-                    f"https://wuzzuf.net/search/jobs/?q={encoded}"
+                    f"[https://wuzzuf.net/search/jobs/?q=](https://wuzzuf.net/search/jobs/?q=){encoded}"
                     f"&a=hpb&filters%5Bcountry%5D%5B0%5D=Egypt"
                 )
                 if not await goto_with_retry(page, url, timeout_ms=60000, attempts=3):
@@ -942,7 +939,7 @@ async def run_scraper(
             try:
                 page = await _new_page(context)
                 url = (
-                    f"https://www.linkedin.com/jobs/search?keywords={encoded}"
+                    f"[https://www.linkedin.com/jobs/search?keywords=](https://www.linkedin.com/jobs/search?keywords=){encoded}"
                     f"&location=Egypt&position=1&pageNum=0"
                 )
                 if not await goto_with_retry(page, url, timeout_ms=60000, attempts=3):

@@ -341,7 +341,7 @@ public sealed record ScrapedJobDto(
     string ExternalUrl,
     string ExternalSource,
     string? CompanyName,
-    DateTime PostedAt,
+    DateTime? PostedAt,
     IReadOnlyList<string>? Skills);
 
 public sealed record MatchJobsFromTextRequest(string ResumeText);
@@ -399,7 +399,8 @@ public sealed record ScheduleInterviewCompatRequest(
 public sealed record SubmitAnswerCompatRequest(
     long QuestionId,
     string? AnswerText,
-    int? ResponseDurationSeconds);
+    int? ResponseDurationSeconds,
+    long? SessionId = null);
 
 public sealed record ReportCheatingEventCompatRequest(
     long SessionId,

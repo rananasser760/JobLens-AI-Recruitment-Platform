@@ -16,12 +16,22 @@ public sealed class ApplicationService(
 {
     public async Task<ApiResponse<ApplicationDto>> CreateAsync(long candidateUserId, CreateApplicationRequest request, CancellationToken cancellationToken)
     {
-        var candidate = await dbContext.CandidateProfiles.FirstOrDefaultAsync(x => x.UserId == candidateUserId, cancellationToken);
-        var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == request.JobId, cancellationToken);
+        var candidate = await dbContext.CandidateProfiles
+            .Include(x => x.User)
+            .FirstOrDefaultAsync(x => x.UserId == candidateUserId, cancellationToken);
+
+        var job = await dbContext.Jobs
+            .Include(x => x.Company)
+            .FirstOrDefaultAsync(x => x.Id == request.JobId, cancellationToken);
 
         if (candidate is null || job is null)
         {
             return new ApiResponse<ApplicationDto>(false, null, "Candidate or job not found.", ["not_found"]);
+        }
+
+        if (!job.IsActive)
+        {
+            return new ApiResponse<ApplicationDto>(false, null, "This job posting is no longer active.", ["job_inactive"]);
         }
 
         var resume = request.ResumeId.HasValue && request.ResumeId.Value > 0
@@ -39,10 +49,13 @@ public sealed class ApplicationService(
             return new ApiResponse<ApplicationDto>(false, null, "No resume found for this application.", ["missing_resume"]);
         }
 
-        var existing = await dbContext.Applications.FirstOrDefaultAsync(x => x.CandidateProfileId == candidate.Id && x.JobPostingId == job.Id, cancellationToken);
+        var existing = await dbContext.Applications.FirstOrDefaultAsync(
+            x => x.CandidateProfileId == candidate.Id && x.JobPostingId == job.Id,
+            cancellationToken);
+
         if (existing is not null)
         {
-            return new ApiResponse<ApplicationDto>(false, null, "Application already exists.", ["duplicate_application"]);
+            return new ApiResponse<ApplicationDto>(false, null, "You have already applied for this job.", ["duplicate_application"]);
         }
 
         var application = new JobApplication
@@ -50,7 +63,10 @@ public sealed class ApplicationService(
             CandidateProfileId = candidate.Id,
             JobPostingId = job.Id,
             ResumeId = resume.Id,
-            Status = job.SourceType == JobSourceType.External ? ApplicationStatus.ExternalRedirected : ApplicationStatus.Submitted,
+            Status = job.SourceType == JobSourceType.External 
+                ? ApplicationStatus.ExternalRedirected 
+                : ApplicationStatus.Submitted,
+            SubmittedAtUtc = DateTime.UtcNow,
         };
 
         dbContext.Applications.Add(application);
@@ -61,36 +77,42 @@ public sealed class ApplicationService(
             return new ApiResponse<ApplicationDto>(true, ToDto(application, job, null), "External job tracked. Redirect to source to finish applying.");
         }
 
+        // Attempt immediate ATS evaluation with a bounded timeout
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
 
         try
         {
-            var ats = await aiBackendClient.ScoreAtsAsync(resume.RawText, job.Description, timeoutCts.Token);
-            if (ats.Success && ats.Data is not null)
+            if (!string.IsNullOrWhiteSpace(resume.RawText) && !string.IsNullOrWhiteSpace(job.Description))
             {
-                var assessment = new AtsAssessment
+                var ats = await aiBackendClient.ScoreAtsAsync(resume.RawText, job.Description, timeoutCts.Token);
+                if (ats.Success && ats.Data is not null)
                 {
-                    ApplicationId = application.Id,
-                    Status = "Completed",
-                    Score = ats.Data.Score,
-                    Summary = ats.Data.Summary,
-                    MissingSkillsJson = ServiceJson.Serialize(ats.Data.MissingSkills),
-                    SuggestionsJson = ServiceJson.Serialize(ats.Data.Suggestions),
-                    RawResponseJson = ServiceJson.Serialize(ats.Data),
-                    EvaluatedAtUtc = DateTime.UtcNow,
-                };
+                    var assessment = new AtsAssessment
+                    {
+                        ApplicationId = application.Id,
+                        Status = "Completed",
+                        Score = ats.Data.Score,
+                        Summary = ats.Data.Summary ?? string.Empty,
+                        MissingSkillsJson = ServiceJson.Serialize(ats.Data.MissingSkills ?? []),
+                        SuggestionsJson = ServiceJson.Serialize(ats.Data.Suggestions ?? []),
+                        RawResponseJson = ServiceJson.Serialize(ats.Data),
+                        EvaluatedAtUtc = DateTime.UtcNow,
+                    };
 
-                application.Status = ats.Data.Score >= 65 ? ApplicationStatus.AtsQualified : ApplicationStatus.AtsRejected;
-                dbContext.AtsAssessments.Add(assessment);
-                await dbContext.SaveChangesAsync(cancellationToken);
+                    application.Status = ats.Data.Score >= 65 ? ApplicationStatus.AtsQualified : ApplicationStatus.AtsRejected;
+                    application.ReviewedAtUtc = DateTime.UtcNow;
+                    dbContext.AtsAssessments.Add(assessment);
+                    await dbContext.SaveChangesAsync(cancellationToken);
 
-                return new ApiResponse<ApplicationDto>(true, ToDto(application, job, ats.Data.Score), "Application submitted and scored.");
+                    backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(candidate.Id));
+                    return new ApiResponse<ApplicationDto>(true, ToDto(application, job, ats.Data.Score), "Application submitted and evaluated.");
+                }
             }
         }
         catch
         {
-            // Fall back to pending background processing below.
+            // Fall back to queued background assessment
         }
 
         application.Status = ApplicationStatus.AtsPending;
@@ -101,7 +123,7 @@ public sealed class ApplicationService(
         });
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        backgroundJobs.Enqueue<RecommendationRefreshJob>(jobRunner => jobRunner.RefreshCandidateAsync(candidate.Id));
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(candidate.Id));
         return new ApiResponse<ApplicationDto>(true, ToDto(application, job, null), "Application submitted. ATS evaluation queued.");
     }
 
@@ -109,32 +131,67 @@ public sealed class ApplicationService(
     {
         var apps = await dbContext.Applications
             .Include(x => x.JobPosting)
+                .ThenInclude(x => x.Company)
             .Include(x => x.AtsAssessments)
             .Where(x => x.CandidateProfile.UserId == candidateUserId)
             .OrderByDescending(x => x.SubmittedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return new ApiResponse<IReadOnlyList<ApplicationDto>>(true, apps.Select(x => ToDto(x, x.JobPosting, x.AtsAssessments.OrderByDescending(y => y.CreatedAtUtc).FirstOrDefault()?.Score)).ToList());
+        var list = apps.Select(x => ToDto(
+            x, 
+            x.JobPosting, 
+            x.AtsAssessments.OrderByDescending(y => y.EvaluatedAtUtc ?? y.CreatedAtUtc).FirstOrDefault()?.Score)).ToList();
+
+        return new ApiResponse<IReadOnlyList<ApplicationDto>>(true, list);
     }
 
     public async Task<ApiResponse<IReadOnlyList<ApplicationDto>>> GetApplicantsForJobAsync(long recruiterUserId, long jobId, CancellationToken cancellationToken)
     {
-        var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == recruiterUserId, cancellationToken);
-        if (recruiter is null)
+        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Id == recruiterUserId, cancellationToken);
+        if (user is null)
         {
-            return new ApiResponse<IReadOnlyList<ApplicationDto>>(false, null, "Recruiter profile not found.", ["not_found"]);
+            return new ApiResponse<IReadOnlyList<ApplicationDto>>(false, null, "User not found.", ["not_found"]);
+        }
+
+        var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
+        if (job is null)
+        {
+            return new ApiResponse<IReadOnlyList<ApplicationDto>>(false, null, "Job not found.", ["not_found"]);
+        }
+
+        if (user.Role != AppRole.Admin)
+        {
+            var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == recruiterUserId, cancellationToken);
+            if (recruiter is null || !recruiter.CompanyId.HasValue || recruiter.CompanyId.Value != job.CompanyId)
+            {
+                return new ApiResponse<IReadOnlyList<ApplicationDto>>(false, null, "You are not authorized to view applicants for this job.", ["unauthorized"]);
+            }
         }
 
         var apps = await dbContext.Applications
             .Include(x => x.JobPosting)
             .Include(x => x.AtsAssessments)
+            .Include(x => x.CandidateProfile)
+                .ThenInclude(x => x.User)
             .Where(x => x.JobPostingId == jobId)
             .OrderByDescending(x => x.SubmittedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return new ApiResponse<IReadOnlyList<ApplicationDto>>(true, apps.Select(x => ToDto(x, x.JobPosting, x.AtsAssessments.OrderByDescending(y => y.CreatedAtUtc).FirstOrDefault()?.Score)).ToList());
+        var list = apps.Select(x => ToDto(
+            x, 
+            x.JobPosting, 
+            x.AtsAssessments.OrderByDescending(y => y.EvaluatedAtUtc ?? y.CreatedAtUtc).FirstOrDefault()?.Score)).ToList();
+
+        return new ApiResponse<IReadOnlyList<ApplicationDto>>(true, list);
     }
 
     private static ApplicationDto ToDto(JobApplication application, JobPosting job, double? latestScore) =>
-        new(application.Id, job.Id, job.Title, application.Status, latestScore, application.SubmittedAtUtc, job.RedirectUrl);
+        new(
+            application.Id,
+            job.Id,
+            job.Title,
+            application.Status,
+            latestScore,
+            application.SubmittedAtUtc,
+            job.RedirectUrl);
 }

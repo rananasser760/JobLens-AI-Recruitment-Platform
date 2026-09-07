@@ -6,10 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace JobLens.Api.Controllers;
 
-[Authorize]
 [Route("api/metadata")]
 public sealed class MetadataController : AppControllerBase
 {
+    [AllowAnonymous]
     [HttpGet("enums")]
     public IActionResult GetEnums()
     {
@@ -55,6 +55,15 @@ public sealed class MetadataController : AppControllerBase
                 new EnumOptionDto(5, "Freelance"),
                 new EnumOptionDto(6, "Remote"),
             ],
+            ["VectorIndexStatus"] = Enum.GetValues<VectorIndexStatus>()
+                .Select(x => new EnumOptionDto((int)x, x.ToString()))
+                .ToArray(),
+            ["RecommendationSubjectType"] = Enum.GetValues<RecommendationSubjectType>()
+                .Select(x => new EnumOptionDto((int)x, x.ToString()))
+                .ToArray(),
+            ["RecommendationTargetType"] = Enum.GetValues<RecommendationTargetType>()
+                .Select(x => new EnumOptionDto((int)x, x.ToString()))
+                .ToArray(),
         };
 
         return Ok(new ApiResponse<EnumMetadataDto>(true, new EnumMetadataDto(enums)));

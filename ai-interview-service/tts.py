@@ -1,18 +1,24 @@
+from __future__ import annotations
+
+import logging
 import os
 import threading
-import wave
 import uuid
+import wave
+from typing import Any, Optional
+
 import torch
-from typing import Any
 
-# 1. Select device (GPU is highly recommended for TTS)
-device = "cuda" if torch.cuda.is_available() else "cpu"
+logger = logging.getLogger("joblens.tts")
 
+device: str = "cuda" if torch.cuda.is_available() else "cpu"
 TTS_MODEL_NAME = os.getenv("TTS_MODEL_NAME", "tts_models/en/ljspeech/vits")
-_tts = None
-_tts_error = None
+
+_tts: Any = None
+_tts_error: Optional[str] = None
 _tts_lock = threading.Lock()
-ALLOW_SILENT_TTS_FALLBACK = (
+
+ALLOW_SILENT_TTS_FALLBACK: bool = (
     str(os.getenv("JOBLENS_ALLOW_SILENT_TTS_FALLBACK", "false") or "")
     .strip()
     .lower()
@@ -21,7 +27,7 @@ ALLOW_SILENT_TTS_FALLBACK = (
 
 
 def _get_tts_model() -> Any:
-    """Lazy-load Coqui TTS model; returns None when unavailable."""
+    """Lazy-loads Coqui TTS with thread safety and error caching."""
     global _tts, _tts_error
 
     if _tts is not None:
@@ -38,34 +44,43 @@ def _get_tts_model() -> Any:
         try:
             from TTS.api import TTS
 
-            print(f"Loading TTS model on {device}...")
-            _tts = TTS(TTS_MODEL_NAME).to(device)
-            print("TTS Model loaded.")
+            logger.info(f"Loading Coqui TTS model '{TTS_MODEL_NAME}' on {device}...")
+            loaded = TTS(TTS_MODEL_NAME).to(device)
+            logger.info("Coqui TTS model successfully loaded.")
+            _tts = loaded
             return _tts
         except Exception as exc:
             _tts_error = (
-                "TTS initialization failed. Ensure espeak-ng is installed or set "
-                "PHONEMIZER_ESPEAK_LIBRARY to libespeak-ng.dll. "
-                f"Original error: {exc}"
+                f"Coqui TTS initialization failed: {exc}. "
+                "Ensure espeak-ng is installed and configured in system path."
             )
-            print(f"[tts] {_tts_error}")
+            logger.error(_tts_error)
             return None
 
 
+def _synthesize_with_coqui(model: Any, text: str, output_path: str) -> bool:
+    try:
+        with _tts_lock:
+            model.tts_to_file(text=text, file_path=output_path)
+        return os.path.isfile(output_path) and os.path.getsize(output_path) > 0
+    except Exception as exc:
+        logger.warning(f"Coqui synthesis failure: {exc}")
+        return False
+
+
 def _synthesize_with_gtts(text: str, output_path: str) -> bool:
-    """Fallback cloud TTS if Coqui is unavailable."""
     try:
         from gtts import gTTS
 
-        gTTS(text=text, lang="en", slow=False).save(output_path)
-        return True
+        tts = gTTS(text=text, lang="en", slow=False)
+        tts.save(output_path)
+        return os.path.isfile(output_path) and os.path.getsize(output_path) > 0
     except Exception as exc:
-        print(f"[tts] gTTS fallback failed: {exc}")
+        logger.warning(f"gTTS fallback failure: {exc}")
         return False
 
 
 def _write_silent_wav(output_path: str, seconds: float = 0.5, sample_rate: int = 16000) -> str:
-    """Last-resort fallback so WebSocket flow keeps running without crashing."""
     frame_count = int(seconds * sample_rate)
     with wave.open(output_path, "wb") as wav_file:
         wav_file.setnchannels(1)
@@ -74,38 +89,39 @@ def _write_silent_wav(output_path: str, seconds: float = 0.5, sample_rate: int =
         wav_file.writeframes(b"\x00\x00" * frame_count)
     return output_path
 
+
 def text_to_speech_file(text: str) -> str:
     """
-    Converts text to audio and saves it as a temporary .wav file.
-    Returns the file path.
+    Converts text to an audio file (.wav or .mp3) and returns its absolute path.
+    Tries Coqui TTS -> gTTS -> optional silent audio fallback.
     """
-    # Ensure directory exists
-    os.makedirs("temp_audio", exist_ok=True)
+    clean_text = (text or "").strip()
+    if not clean_text:
+        clean_text = "Thank you."
 
-    uid = str(uuid.uuid4())
+    target_dir = os.path.abspath("temp_audio")
+    os.makedirs(target_dir, exist_ok=True)
+    uid = uuid.uuid4().hex
 
-    # 1) Try primary Coqui TTS output (wav)
-    coqui_path = os.path.join("temp_audio", f"response_{uid}.wav")
+    # 1. Primary Coqui synthesis (.wav)
     tts_model = _get_tts_model()
     if tts_model is not None:
-        try:
-            tts_model.tts_to_file(text=text, file_path=coqui_path)
+        coqui_path = os.path.join(target_dir, f"response_{uid}.wav")
+        if _synthesize_with_coqui(tts_model, clean_text, coqui_path):
             return coqui_path
-        except Exception as exc:
-            print(f"[tts] Coqui synthesis failed: {exc}")
 
-    # 2) Fallback to gTTS output (mp3)
-    gtts_path = os.path.join("temp_audio", f"response_{uid}.mp3")
-    if _synthesize_with_gtts(text, gtts_path):
+    # 2. Fallback Google TTS (.mp3)
+    gtts_path = os.path.join(target_dir, f"response_{uid}.mp3")
+    if _synthesize_with_gtts(clean_text, gtts_path):
         return gtts_path
 
-    # 3) Optional final fallback: short silent wav (disabled by default)
+    # 3. Optional emergency silent WAV
     if ALLOW_SILENT_TTS_FALLBACK:
-        print("[tts] Falling back to silent audio because JOBLENS_ALLOW_SILENT_TTS_FALLBACK is enabled.")
-        silent_path = os.path.join("temp_audio", f"response_{uid}_silent.wav")
+        logger.warning("All TTS generators failed; using silent WAV fallback.")
+        silent_path = os.path.join(target_dir, f"response_{uid}_silent.wav")
         return _write_silent_wav(silent_path)
 
     raise RuntimeError(
-        "TTS synthesis unavailable: Coqui and gTTS generation both failed. "
-        "Set JOBLENS_ALLOW_SILENT_TTS_FALLBACK=true to allow silent fallback output."
+        "TTS synthesis unavailable: Both Coqui and gTTS engines failed to generate audio. "
+        "Set JOBLENS_ALLOW_SILENT_TTS_FALLBACK=true if headless execution is intended."
     )

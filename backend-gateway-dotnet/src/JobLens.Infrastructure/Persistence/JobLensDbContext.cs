@@ -1,6 +1,7 @@
 using JobLens.Domain.Entities;
 using JobLens.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace JobLens.Infrastructure.Persistence;
 
@@ -28,6 +29,13 @@ public sealed class JobLensDbContext(DbContextOptions<JobLensDbContext> options)
     public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<ChatAttachment> ChatAttachments => Set<ChatAttachment>();
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+        optionsBuilder.ConfigureWarnings(warnings =>
+            warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,6 +86,8 @@ public sealed class JobLensDbContext(DbContextOptions<JobLensDbContext> options)
         {
             entity.Property(x => x.SourceType).HasConversion<string>();
             entity.Property(x => x.InterviewDefaultsJson).HasDefaultValue("{}");
+            entity.Property(x => x.SalaryMin).HasPrecision(18, 2);
+            entity.Property(x => x.SalaryMax).HasPrecision(18, 2);
             entity.HasIndex(x => new { x.ExternalJobId, x.SourceUrl });
             entity.HasIndex(x => x.PostedAtUtc);
             entity.HasIndex(x => x.IsActive);
@@ -138,6 +148,8 @@ public sealed class JobLensDbContext(DbContextOptions<JobLensDbContext> options)
                 .WithMany()
                 .HasForeignKey(x => x.Participant2Id)
                 .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(x => x.LastMessageAtUtc);
         });
 
         modelBuilder.Entity<ChatMessage>(entity =>
@@ -158,6 +170,7 @@ public sealed class JobLensDbContext(DbContextOptions<JobLensDbContext> options)
             entity.HasOne(x => x.Message)
                 .WithMany(x => x.Attachments)
                 .HasForeignKey(x => x.MessageId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

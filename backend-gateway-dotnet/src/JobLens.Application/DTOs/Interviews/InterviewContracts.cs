@@ -3,7 +3,15 @@ using JobLens.Domain.Enums;
 
 namespace JobLens.Application.DTOs.Interviews;
 
-public sealed record ScheduleInterviewRequest(long ApplicationId, DateTime ScheduledAtUtc, string EvaluationCriteria, int MaxQuestions = 5);
+public sealed record ScheduleInterviewRequest(
+    long ApplicationId,
+    DateTime ScheduledAtUtc,
+    string EvaluationCriteria,
+    int MaxQuestions = 5,
+    string? AgentType = "Mixed",
+    string? InterviewTitle = null,
+    IReadOnlyList<string>? FocusSkills = null);
+
 public sealed record StartInterviewRequest(long InterviewSessionId, bool ConsentCaptured);
 public sealed record BrowserEventRequest(long InterviewSessionId, string EventType, string Severity, string PayloadJson);
 public sealed record TranscriptEntryDto(int Sequence, string Speaker, string Content, DateTime OccurredAtUtc);

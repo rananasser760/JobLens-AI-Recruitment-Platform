@@ -113,6 +113,8 @@ public sealed class RecruitersController(IRecruiterService recruiterService, Job
             profile.CompanyId = company.Id;
         }
 
+        profile.UpdatedAtUtc = DateTime.UtcNow;
+        profile.User.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return await GetProfile(cancellationToken);
     }
@@ -127,29 +129,11 @@ public sealed class RecruitersController(IRecruiterService recruiterService, Job
         }
 
         var jobQuery = dbContext.Jobs.AsQueryable();
-        if (profile is not null)
-        {
-            jobQuery = jobQuery.Where(x => x.CompanyId == profile.CompanyId);
-        }
-
-        var totalJobs = await jobQuery.CountAsync(cancellationToken);
-        var activeJobs = await jobQuery.CountAsync(x => x.IsActive, cancellationToken);
-
         var applicationsQuery = dbContext.Applications
             .Include(x => x.CandidateProfile)
             .ThenInclude(x => x.User)
             .Include(x => x.JobPosting)
             .AsQueryable();
-
-        if (profile is not null)
-        {
-            applicationsQuery = applicationsQuery.Where(x => x.JobPosting.CompanyId == profile.CompanyId);
-        }
-
-        var allApplications = await applicationsQuery.ToListAsync(cancellationToken);
-        var totalApplications = allApplications.Count;
-        var pendingApplications = allApplications.Count(x => x.Status is Domain.Enums.ApplicationStatus.Submitted or Domain.Enums.ApplicationStatus.AtsPending);
-
         var interviewsQuery = dbContext.InterviewSessions
             .Include(x => x.Application)
             .ThenInclude(x => x.JobPosting)
@@ -157,11 +141,28 @@ public sealed class RecruitersController(IRecruiterService recruiterService, Job
 
         if (profile is not null)
         {
-            interviewsQuery = interviewsQuery.Where(x => x.Application.JobPosting.CompanyId == profile.CompanyId);
+            if (!profile.CompanyId.HasValue)
+            {
+                var emptyDto = new RecruiterDashboardDto(
+                    0, 0, 0, 0, 0, 0,
+                    Array.Empty<RecentApplicationDto>(),
+                    Array.Empty<JobStatsDto>());
+                return Ok(new ApiResponse<RecruiterDashboardDto>(true, emptyDto));
+            }
+
+            jobQuery = jobQuery.Where(x => x.CompanyId == profile.CompanyId.Value);
+            applicationsQuery = applicationsQuery.Where(x => x.JobPosting.CompanyId == profile.CompanyId.Value);
+            interviewsQuery = interviewsQuery.Where(x => x.Application.JobPosting.CompanyId == profile.CompanyId.Value);
         }
 
-        var interviews = await interviewsQuery.ToListAsync(cancellationToken);
+        var totalJobs = await jobQuery.CountAsync(cancellationToken);
+        var activeJobs = await jobQuery.CountAsync(x => x.IsActive, cancellationToken);
 
+        var allApplications = await applicationsQuery.ToListAsync(cancellationToken);
+        var totalApplications = allApplications.Count;
+        var pendingApplications = allApplications.Count(x => x.Status is Domain.Enums.ApplicationStatus.Submitted or Domain.Enums.ApplicationStatus.AtsPending);
+
+        var interviews = await interviewsQuery.ToListAsync(cancellationToken);
         var interviewsScheduled = interviews.Count(x => x.Status == Domain.Enums.InterviewSessionStatus.Scheduled);
         var interviewsCompleted = interviews.Count(x => x.Status == Domain.Enums.InterviewSessionStatus.Completed);
 

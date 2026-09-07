@@ -3,6 +3,7 @@ version: "3.8"
 services:
   sql-server:
     image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: joblens-sql-server
     ports:
       - "1433:1433"
     environment:
@@ -11,19 +12,51 @@ services:
     volumes:
       - mssql_data:/var/opt/mssql
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'SuperStrong!Passw0rd' -C -Q 'SELECT 1' || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   ai-integrity-service:
     build:
       context: ./ai-integrity-service
       dockerfile: Dockerfile
+    container_name: joblens-ai-integrity
     environment:
-      - JOBLENS_ENV=production
+      - JOBLENS_ENV=development
       - AI_SQLSERVER_CONNECTION_STRING=Server=sql-server;Database=GPAi;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
       - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
       - PORT=8000
     depends_on:
-      - sql-server
+      sql-server:
+        condition: service_healthy
     volumes:
+      - ./ai-integrity-service:/app
+      - huggingface_cache:/root/.cache/huggingface
+      - torch_cache:/root/.cache/torch
+      - chroma_cache:/root/.cache/chroma
+    restart: unless-stopped
+
+  ai-recruitment-service:
+    build:
+      context: ./ai-recruitment-service
+      dockerfile: Dockerfile
+    container_name: joblens-ai-recruitment
+    env_file:
+      - ./ai-recruitment-service/.env
+    environment:
+      - JOBLENS_ENV=development
+      - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
+      - JOBLENS_CHROMA_PATH=/root/.cache/chroma
+      - PORT=8000
+    volumes:
+      - ./ai-recruitment-service:/app
       - huggingface_cache:/root/.cache/huggingface
       - torch_cache:/root/.cache/torch
       - chroma_cache:/root/.cache/chroma
@@ -33,33 +66,23 @@ services:
     build:
       context: ./ai-interview-service
       dockerfile: Dockerfile
+    container_name: joblens-ai-interview
+    env_file:
+      - ./ai-interview-service/.env
     environment:
-      - JOBLENS_ENV=production
+      - JOBLENS_ENV=development
       - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
       - JOBLENS_INTERVIEW_MODEL=mistralai/mistral-small-3.2-24b-instruct
       - PORT=8000
     volumes:
+      - ./ai-interview-service:/app
       - huggingface_cache:/root/.cache/huggingface
       - torch_cache:/root/.cache/torch
-    restart: unless-stopped
-
-  ai-recruitment-service:
-    build:
-      context: ./ai-recruitment-service
-      dockerfile: Dockerfile
-    environment:
-      - JOBLENS_ENV=production
-      - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
-      - JOBLENS_CHROMA_PATH=/root/.cache/chroma
-      - PORT=8000
-    volumes:
-      - huggingface_cache:/root/.cache/huggingface
-      - torch_cache:/root/.cache/torch
-      - chroma_cache:/root/.cache/chroma
     restart: unless-stopped
 
   ai-gateway:
     image: nginx:alpine
+    container_name: joblens-ai-gateway
     ports:
       - "8000:80"
     volumes:
@@ -73,31 +96,41 @@ services:
   dotnet-gateway:
     build:
       context: ./backend-gateway-dotnet
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
+    container_name: joblens-dotnet-gateway
     ports:
       - "5245:5245"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_HTTP_PORTS=5245
       - AIBackend__BaseUrl=http://ai-gateway:80
       - AIBackend__ApiKey=super_secure_internal_shared_key_123
       - ConnectionStrings__DefaultConnection=Server=sql-server;Database=GPDot;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
       - JWT_SIGNING_KEY=your_super_secret_secure_jwt_signing_key_for_production_min_32_chars
       - Storage__RootPath=/app/data/storage
-    depends_on:
-      - sql-server
-      - ai-gateway
     volumes:
+      - ./backend-gateway-dotnet:/src
       - dotnet_storage:/app/data/storage
+      - nuget_cache:/root/.nuget/packages
+    depends_on:
+      sql-server:
+        condition: service_healthy
+      ai-gateway:
+        condition: service_started
     restart: unless-stopped
 
   angular-frontend:
     build:
       context: ./frontend-angular
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
+    container_name: joblens-angular-frontend
     ports:
       - "4000:4000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
+    volumes:
+      - ./frontend-angular:/app
+      - /app/node_modules
     depends_on:
       - dotnet-gateway
     restart: unless-stopped
@@ -108,3 +141,4 @@ volumes:
   torch_cache:
   chroma_cache:
   dotnet_storage:
+  nuget_cache:

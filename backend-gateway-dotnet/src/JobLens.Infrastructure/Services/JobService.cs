@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Hangfire;
 using JobLens.Application.Common;
 using JobLens.Application.Contracts;
@@ -27,13 +29,16 @@ public sealed class JobService(
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.Trim();
-            query = query.Where(x => x.Title.Contains(term) || x.Description.Contains(term) || x.Location.Contains(term));
+            var term = search.Trim().ToLowerInvariant();
+            query = query.Where(x => 
+                x.Title.ToLower().Contains(term) || 
+                x.Description.ToLower().Contains(term) || 
+                x.Location.ToLower().Contains(term));
         }
 
         var jobs = await query
             .OrderByDescending(x => x.PostedAtUtc ?? x.CreatedAtUtc)
-            .Select(x => ToDto(x))
+            .Select(x => ToDto(x, null))
             .ToListAsync(cancellationToken);
 
         return new ApiResponse<IReadOnlyList<JobPostingDto>>(true, jobs);
@@ -44,29 +49,34 @@ public sealed class JobService(
         var job = await dbContext.Jobs.Include(x => x.Company).FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
         return job is null
             ? new ApiResponse<JobPostingDto>(false, null, "Job not found.", ["not_found"])
-            : new ApiResponse<JobPostingDto>(true, ToDto(job));
+            : new ApiResponse<JobPostingDto>(true, ToDto(job, null));
     }
 
     public async Task<ApiResponse<JobPostingDto>> CreateJobAsync(long recruiterUserId, CreateJobRequest request, CancellationToken cancellationToken)
     {
         var recruiter = await dbContext.RecruiterProfiles.Include(x => x.Company).FirstOrDefaultAsync(x => x.UserId == recruiterUserId, cancellationToken);
-        if (recruiter is null)
+        var isAdmin = await dbContext.Users.AnyAsync(x => x.Id == recruiterUserId && x.Role == AppRole.Admin, cancellationToken);
+
+        if (recruiter is null && !isAdmin)
         {
             return new ApiResponse<JobPostingDto>(false, null, "Recruiter profile not found.", ["not_found"]);
         }
 
-        var normalized = $"{request.Title}\n{request.Description}\n{request.Location}\n{string.Join(',', request.Skills)}";
+        var skills = request.Skills ?? [];
+        var normalized = $"{request.Title}\n{request.Description}\n{request.Location}\n{string.Join(',', skills)}";
+        
         var job = new JobPosting
         {
-            CompanyId = recruiter.CompanyId,
+            CompanyId = recruiter?.CompanyId,
             Title = request.Title.Trim(),
             Description = request.Description.Trim(),
             Location = request.Location.Trim(),
-            SkillsJson = ServiceJson.Serialize(request.Skills),
+            SkillsJson = ServiceJson.Serialize(skills),
             ContentHash = contentHashService.Compute(normalized),
             ExpiresAtUtc = request.ExpiresAtUtc,
             PostedAtUtc = DateTime.UtcNow,
             SourceType = JobSourceType.Internal,
+            IsActive = true,
         };
 
         dbContext.Jobs.Add(job);
@@ -74,31 +84,46 @@ public sealed class JobService(
 
         backgroundJobs.Enqueue<RecommendationRefreshJob>(jobRunner => jobRunner.RefreshJobAsync(job.Id));
 
-        return new ApiResponse<JobPostingDto>(true, ToDto(job, recruiter.Company?.Name), "Job created.");
+        return new ApiResponse<JobPostingDto>(true, ToDto(job, recruiter?.Company?.Name), "Job created.");
     }
 
     public async Task<ApiResponse<JobPostingDto>> UpdateJobAsync(long recruiterUserId, long jobId, UpdateJobRequest request, CancellationToken cancellationToken)
     {
-        var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == recruiterUserId, cancellationToken);
-        var job = await dbContext.Jobs.Include(x => x.Company).FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
-
-        if (recruiter is null || job is null)
+        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Id == recruiterUserId, cancellationToken);
+        if (user is null)
         {
-            return new ApiResponse<JobPostingDto>(false, null, "Job or recruiter not found.", ["not_found"]);
+            return new ApiResponse<JobPostingDto>(false, null, "User not found.", ["not_found"]);
         }
 
+        var job = await dbContext.Jobs.Include(x => x.Company).FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
+        if (job is null)
+        {
+            return new ApiResponse<JobPostingDto>(false, null, "Job not found.", ["not_found"]);
+        }
+
+        if (user.Role != AppRole.Admin)
+        {
+            var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == recruiterUserId, cancellationToken);
+            if (recruiter is null || !recruiter.CompanyId.HasValue || recruiter.CompanyId.Value != job.CompanyId)
+            {
+                return new ApiResponse<JobPostingDto>(false, null, "You are not authorized to modify this job.", ["unauthorized"]);
+            }
+        }
+
+        var skills = request.Skills ?? [];
         job.Title = request.Title.Trim();
         job.Description = request.Description.Trim();
         job.Location = request.Location.Trim();
-        job.SkillsJson = ServiceJson.Serialize(request.Skills);
+        job.SkillsJson = ServiceJson.Serialize(skills);
         job.IsActive = request.IsActive;
         job.ExpiresAtUtc = request.ExpiresAtUtc;
-        job.ContentHash = contentHashService.Compute($"{job.Title}\n{job.Description}\n{job.Location}\n{string.Join(',', request.Skills)}");
+        job.ContentHash = contentHashService.Compute($"{job.Title}\n{job.Description}\n{job.Location}\n{string.Join(',', skills)}");
+        job.UpdatedAtUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         backgroundJobs.Enqueue<RecommendationRefreshJob>(jobRunner => jobRunner.RefreshJobAsync(job.Id));
 
-        return new ApiResponse<JobPostingDto>(true, ToDto(job), "Job updated.");
+        return new ApiResponse<JobPostingDto>(true, ToDto(job, job.Company?.Name), "Job updated.");
     }
 
     public async Task<ApiResponse<IReadOnlyList<RecommendationDto>>> MatchJobsFromTextAsync(string resumeText, int limit, CancellationToken cancellationToken)
@@ -119,7 +144,6 @@ public sealed class JobService(
         }
 
         var sanitized = SanitizeRecommendations(aiResult.Data, safeLimit);
-
         var mapped = sanitized
             .Select(x => new RecommendationDto(x.TargetId, x.TargetType, x.Score, x.Reason, x.PreviewJson))
             .ToList();
@@ -169,6 +193,7 @@ public sealed class JobService(
             var hasReadyJobVectors = await dbContext.VectorIndexEntries.AnyAsync(
                 x => x.EntityType == "job" && x.Status == VectorIndexStatus.Ready,
                 cancellationToken);
+
             if (!hasReadyJobVectors)
             {
                 backgroundJobs.Enqueue<RecommendationRefreshJob>(jobRunner => jobRunner.RefreshAllAsync());
@@ -183,6 +208,7 @@ public sealed class JobService(
             .OrderByDescending(x => x.IsDefault)
             .ThenByDescending(x => x.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
+
         if (resume is null || string.IsNullOrWhiteSpace(resume.RawText))
         {
             return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, "No resume with extractable text found for recommendations.", ["missing_resume"]);
@@ -207,39 +233,37 @@ public sealed class JobService(
         }
 
         var sanitized = SanitizeRecommendations(aiResult.Data, safeLimit);
-        if (sanitized.Count == 0)
-        {
-            backgroundJobs.Enqueue<RecommendationRefreshJob>(jobRunner => jobRunner.RefreshAllAsync());
-
-            var staleCached = await dbContext.RecommendationCacheEntries
-                .Where(x => x.SubjectType == RecommendationSubjectType.Candidate && x.SubjectId == candidate.Id && x.TargetType == RecommendationTargetType.Job)
-                .OrderBy(x => x.Rank)
-                .Take(safeLimit)
-                .Select(x => new RecommendationDto(x.TargetId, "Job", x.Score, x.Reason, string.Empty))
-                .ToListAsync(cancellationToken);
-
-            if (staleCached.Count > 0)
-            {
-                return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, staleCached, "Showing cached recommendations while fresh results are generated.");
-            }
-
-            return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, Array.Empty<RecommendationDto>(), "No matches returned yet. Recommendation vectors are being refreshed.");
-        }
-
         await UpsertRecommendationCacheAsync(candidate.Id, RecommendationSubjectType.Candidate, RecommendationTargetType.Job, sanitized, cancellationToken);
-        return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, sanitized.Select(x => new RecommendationDto(x.TargetId, x.TargetType, x.Score, x.Reason, x.PreviewJson)).ToList());
+
+        return new ApiResponse<IReadOnlyList<RecommendationDto>>(
+            true, 
+            sanitized.Select(x => new RecommendationDto(x.TargetId, x.TargetType, x.Score, x.Reason, x.PreviewJson)).ToList());
     }
 
     public async Task<ApiResponse<IReadOnlyList<RecommendationDto>>> GetRecommendationsForJobAsync(long recruiterUserId, long jobId, int limit, CancellationToken cancellationToken, bool forceRefresh = false)
     {
         var safeLimit = Math.Clamp(limit, 1, 50);
         var now = DateTime.UtcNow;
-        var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == recruiterUserId, cancellationToken);
-        var isAdmin = await dbContext.Users.AnyAsync(x => x.Id == recruiterUserId && x.Role == AppRole.Admin, cancellationToken);
-        var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
-        if (job is null || (recruiter is null && !isAdmin))
+
+        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Id == recruiterUserId, cancellationToken);
+        if (user is null)
         {
-            return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, "Job or recruiter not found.", ["not_found"]);
+            return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, "User not found.", ["not_found"]);
+        }
+
+        var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
+        if (job is null)
+        {
+            return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, "Job not found.", ["not_found"]);
+        }
+
+        if (user.Role != AppRole.Admin)
+        {
+            var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == recruiterUserId, cancellationToken);
+            if (recruiter is null || !recruiter.CompanyId.HasValue || recruiter.CompanyId.Value != job.CompanyId)
+            {
+                return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, "You are not authorized to view recommendations for this job.", ["unauthorized"]);
+            }
         }
 
         if (!forceRefresh)
@@ -273,7 +297,7 @@ public sealed class JobService(
             return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, Array.Empty<RecommendationDto>(), "Recommendations are being generated. Please refresh shortly.");
         }
 
-        var staleCachedForForceRefresh = await dbContext.RecommendationCacheEntries
+        var staleCachedForForce = await dbContext.RecommendationCacheEntries
             .Where(x => x.SubjectType == RecommendationSubjectType.Job && x.SubjectId == job.Id && x.TargetType == RecommendationTargetType.Candidate)
             .OrderBy(x => x.Rank)
             .Take(safeLimit)
@@ -286,9 +310,9 @@ public sealed class JobService(
 
         if (!aiResult.Success || aiResult.Data is null)
         {
-            if (staleCachedForForceRefresh.Count > 0)
+            if (staleCachedForForce.Count > 0)
             {
-                return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, staleCachedForForceRefresh, "Showing cached recommendations because refresh failed.");
+                return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, staleCachedForForce, "Showing cached recommendations because refresh failed.");
             }
 
             return new ApiResponse<IReadOnlyList<RecommendationDto>>(false, null, aiResult.Error?.Message ?? "Recommendation request failed.");
@@ -296,7 +320,10 @@ public sealed class JobService(
 
         var sanitized = SanitizeRecommendations(aiResult.Data, safeLimit);
         await UpsertRecommendationCacheAsync(job.Id, RecommendationSubjectType.Job, RecommendationTargetType.Candidate, sanitized, cancellationToken);
-        return new ApiResponse<IReadOnlyList<RecommendationDto>>(true, sanitized.Select(x => new RecommendationDto(x.TargetId, x.TargetType, x.Score, x.Reason, x.PreviewJson)).ToList());
+
+        return new ApiResponse<IReadOnlyList<RecommendationDto>>(
+            true, 
+            sanitized.Select(x => new RecommendationDto(x.TargetId, x.TargetType, x.Score, x.Reason, x.PreviewJson)).ToList());
     }
 
     private async Task UpsertRecommendationCacheAsync(
@@ -324,16 +351,20 @@ public sealed class JobService(
             var refreshedAt = DateTime.UtcNow;
             for (var i = 0; i < data.Count; i++)
             {
+                var item = data[i];
+                var hashInput = $"{subjectId}_{item.TargetId}_{refreshedAt.Ticks}";
+                var shortHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)))[..16];
+
                 dbContext.RecommendationCacheEntries.Add(new RecommendationCacheEntry
                 {
                     SubjectId = subjectId,
                     SubjectType = subjectType,
                     TargetType = targetType,
-                    TargetId = data[i].TargetId,
+                    TargetId = item.TargetId,
                     Rank = i + 1,
-                    Score = data[i].Score,
-                    Reason = data[i].Reason,
-                    SourceSnapshotHash = data[i].PreviewJson,
+                    Score = Math.Clamp(item.Score, 0, 100),
+                    Reason = item.Reason ?? string.Empty,
+                    SourceSnapshotHash = shortHash,
                     RefreshedAtUtc = refreshedAt,
                     ExpiresAtUtc = refreshedAt.AddHours(6),
                 });
@@ -361,7 +392,7 @@ public sealed class JobService(
 
             sanitized.Add(item with
             {
-                Score = double.IsFinite(item.Score) ? item.Score : 0,
+                Score = double.IsFinite(item.Score) ? Math.Clamp(item.Score, 0, 100) : 0,
                 Reason = item.Reason ?? string.Empty,
                 PreviewJson = item.PreviewJson ?? string.Empty,
             });
@@ -376,5 +407,15 @@ public sealed class JobService(
     }
 
     private static JobPostingDto ToDto(JobPosting job, string? companyName = null) =>
-        new(job.Id, job.SourceType, job.Title, job.Description, job.Location, companyName ?? job.Company?.Name ?? "External", job.IsActive, job.RedirectUrl, job.PostedAtUtc, ServiceJson.DeserializeStringList(job.SkillsJson));
+        new(
+            job.Id,
+            job.SourceType,
+            job.Title,
+            job.Description,
+            job.Location,
+            companyName ?? job.Company?.Name ?? (job.SourceType == JobSourceType.External ? "External" : "JobLens"),
+            job.IsActive,
+            job.RedirectUrl,
+            job.PostedAtUtc ?? job.CreatedAtUtc,
+            ServiceJson.DeserializeStringList(job.SkillsJson));
 }

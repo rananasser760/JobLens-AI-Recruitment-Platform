@@ -6,7 +6,7 @@ import { catchError, finalize, forkJoin, map, of } from 'rxjs';
 import {
   CheatingEventDto,
   InterviewQuestionDto,
-  InterviewSessionDto
+  InterviewSessionDto,
 } from '../../../../core/models/interview.model';
 import { InterviewsService } from '../../../interviews/interviews.service';
 
@@ -14,7 +14,7 @@ import { InterviewsService } from '../../../interviews/interviews.service';
   selector: 'app-recruiter-interview-detail-page',
   imports: [CommonModule, RouterLink],
   templateUrl: './recruiter-interview-detail.page.html',
-  styleUrl: './recruiter-interview-detail.page.css'
+  styleUrl: './recruiter-interview-detail.page.css',
 })
 export class RecruiterInterviewDetailPage {
   private readonly route = inject(ActivatedRoute);
@@ -35,14 +35,16 @@ export class RecruiterInterviewDetailPage {
   readonly cheatingEvents = signal<CheatingEventDto[]>([]);
 
   readonly answeredCount = computed(
-    () => this.questions().filter((item) => item.isAnswered).length
+    () => this.questions().filter((item) => item.isAnswered).length,
   );
-  readonly totalCount = computed(() => this.questions().length || this.session()?.totalQuestions || 0);
+  readonly totalCount = computed(
+    () => this.questions().length || this.session()?.totalQuestions || 0,
+  );
   readonly sortedEvents = computed(() => {
     const rows = [...this.cheatingEvents()];
     rows.sort((left, right) => {
-      const leftTs = Date.parse(left.detectedAt);
-      const rightTs = Date.parse(right.detectedAt);
+      const leftTs = Date.parse(left.detectedAt || '');
+      const rightTs = Date.parse(right.detectedAt || '');
       return rightTs - leftTs;
     });
     return rows;
@@ -73,9 +75,10 @@ export class RecruiterInterviewDetailPage {
       return;
     }
 
-    const reason = typeof window === 'undefined'
-      ? undefined
-      : window.prompt('Optional cancellation reason', 'Cancelled by recruiter') ?? undefined;
+    const reason =
+      typeof window === 'undefined'
+        ? undefined
+        : (window.prompt('Optional cancellation reason', 'Cancelled by recruiter') ?? undefined);
 
     this.cancelling.set(true);
     this.error.set(null);
@@ -91,7 +94,7 @@ export class RecruiterInterviewDetailPage {
         },
         error: () => {
           this.error.set('Unable to cancel this interview right now.');
-        }
+        },
       });
   }
 
@@ -153,7 +156,7 @@ export class RecruiterInterviewDetailPage {
         },
         error: () => {
           this.error.set('Unable to reschedule this interview right now.');
-        }
+        },
       });
   }
 
@@ -169,16 +172,16 @@ export class RecruiterInterviewDetailPage {
     forkJoin({
       session: this.interviewsService.getSession(id).pipe(
         map((res) => res.data),
-        catchError(() => of(null))
+        catchError(() => of(null)),
       ),
       questions: this.interviewsService.getQuestions(id).pipe(
         map((res) => res.data ?? []),
-        catchError(() => of([] as InterviewQuestionDto[]))
+        catchError(() => of([] as InterviewQuestionDto[])),
       ),
       cheatingEvents: this.interviewsService.getCheatingEvents(id).pipe(
         map((res) => res.data ?? []),
-        catchError(() => of([] as CheatingEventDto[]))
-      )
+        catchError(() => of([] as CheatingEventDto[])),
+      ),
     })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
@@ -193,7 +196,7 @@ export class RecruiterInterviewDetailPage {
         },
         error: () => {
           this.error.set('Unable to load interview details right now.');
-        }
+        },
       });
   }
 

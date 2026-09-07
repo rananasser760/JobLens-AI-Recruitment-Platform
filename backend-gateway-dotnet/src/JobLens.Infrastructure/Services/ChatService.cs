@@ -7,7 +7,10 @@ using Microsoft.Extensions.Logging;
 
 namespace JobLens.Infrastructure.Services;
 
-public sealed class ChatService(JobLensDbContext dbContext, ILogger<ChatService> logger) : IChatService
+public sealed class ChatService(
+    JobLensDbContext dbContext,
+    IFileStorageService fileStorageService,
+    ILogger<ChatService> logger) : IChatService
 {
     public async Task<IReadOnlyList<ChatConversationDto>> GetConversationsForUserAsync(long userId, CancellationToken cancellationToken = default)
     {
@@ -49,17 +52,17 @@ public sealed class ChatService(JobLensDbContext dbContext, ILogger<ChatService>
                 (c.Participant1Id == userId && c.Participant2Id == otherUserId) ||
                 (c.Participant1Id == otherUserId && c.Participant2Id == userId), cancellationToken);
 
-        if (conversation == null)
+        if (conversation is null)
         {
             conversation = new ChatConversation
             {
                 Participant1Id = userId,
-                Participant2Id = otherUserId
+                Participant2Id = otherUserId,
+                LastMessageAtUtc = DateTime.UtcNow
             };
             dbContext.ChatConversations.Add(conversation);
             await dbContext.SaveChangesAsync(cancellationToken);
             
-            // Reload with participants for DTO
             conversation = await dbContext.ChatConversations
                 .Include(c => c.Participant1)
                 .Include(c => c.Participant2)
@@ -72,7 +75,7 @@ public sealed class ChatService(JobLensDbContext dbContext, ILogger<ChatService>
             OtherParticipantId = otherUserId,
             OtherParticipantName = conversation.Participant1Id == userId ? conversation.Participant2.DisplayName : conversation.Participant1.DisplayName,
             LastMessagePreview = string.Empty,
-            LastMessageAtUtc = DateTime.UtcNow,
+            LastMessageAtUtc = conversation.LastMessageAtUtc ?? DateTime.UtcNow,
             UnreadCount = 0
         };
     }
@@ -114,7 +117,7 @@ public sealed class ChatService(JobLensDbContext dbContext, ILogger<ChatService>
                 FileType = a.FileType,
                 FileSize = a.FileSize
             }).ToList()
-        }).OrderBy(m => m.SentAtUtc).ToList(); // Order by asc for chat UI
+        }).OrderBy(m => m.SentAtUtc).ToList();
     }
 
     public async Task<ChatMessageDto> SendMessageAsync(long senderId, SendMessageDto dto, CancellationToken cancellationToken = default)
@@ -129,7 +132,8 @@ public sealed class ChatService(JobLensDbContext dbContext, ILogger<ChatService>
             conversation = new ChatConversation
             {
                 Participant1Id = senderId,
-                Participant2Id = dto.ReceiverId
+                Participant2Id = dto.ReceiverId,
+                LastMessageAtUtc = DateTime.UtcNow
             };
             dbContext.ChatConversations.Add(conversation);
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -143,13 +147,35 @@ public sealed class ChatService(JobLensDbContext dbContext, ILogger<ChatService>
             IsRead = false
         };
 
-        // Note: Attachment handling would involve fetching actual uploaded file records if they were uploaded beforehand
-        // For now we assume no attachments are added inline or handle it in a separate flow.
-        
         dbContext.ChatMessages.Add(message);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // Fetch sender to return name
+        var attachmentsList = new List<ChatAttachmentDto>();
+        if (dto.AttachmentIds != null && dto.AttachmentIds.Count > 0)
+        {
+            var pendingAttachments = await dbContext.ChatAttachments
+                .Where(a => dto.AttachmentIds.Contains(a.Id) && a.MessageId == null)
+                .ToListAsync(cancellationToken);
+
+            foreach (var att in pendingAttachments)
+            {
+                att.MessageId = message.Id;
+                attachmentsList.Add(new ChatAttachmentDto
+                {
+                    Id = att.Id,
+                    FileName = att.FileName,
+                    FileUrl = att.FileUrl,
+                    FileType = att.FileType,
+                    FileSize = att.FileSize
+                });
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        conversation.LastMessageAtUtc = message.CreatedAtUtc;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         var sender = await dbContext.Users.FindAsync(new object[] { senderId }, cancellationToken);
 
         return new ChatMessageDto
@@ -161,7 +187,7 @@ public sealed class ChatService(JobLensDbContext dbContext, ILogger<ChatService>
             Content = message.Content,
             IsRead = message.IsRead,
             SentAtUtc = message.CreatedAtUtc,
-            Attachments = new List<ChatAttachmentDto>()
+            Attachments = attachmentsList
         };
     }
 
@@ -171,7 +197,7 @@ public sealed class ChatService(JobLensDbContext dbContext, ILogger<ChatService>
             .Where(m => m.ConversationId == conversationId && m.SenderId != userId && !m.IsRead)
             .ToListAsync(cancellationToken);
 
-        if (unreadMessages.Any())
+        if (unreadMessages.Count > 0)
         {
             foreach (var message in unreadMessages)
             {
@@ -186,5 +212,29 @@ public sealed class ChatService(JobLensDbContext dbContext, ILogger<ChatService>
         return await dbContext.ChatMessages
             .Include(m => m.Conversation)
             .CountAsync(m => m.SenderId != userId && (m.Conversation.Participant1Id == userId || m.Conversation.Participant2Id == userId) && !m.IsRead, cancellationToken);
+    }
+
+    public async Task<ChatAttachmentDto> SaveAttachmentAsync(long userId, string fileName, string contentType, byte[] content, CancellationToken cancellationToken = default)
+    {
+        var storageKey = await fileStorageService.SaveAsync(fileName, content, cancellationToken);
+        var attachment = new ChatAttachment
+        {
+            FileName = Path.GetFileName(fileName),
+            FileUrl = $"/api/chat/attachments/{storageKey}",
+            FileType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType,
+            FileSize = content.LongLength,
+        };
+
+        dbContext.ChatAttachments.Add(attachment);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new ChatAttachmentDto
+        {
+            Id = attachment.Id,
+            FileName = attachment.FileName,
+            FileUrl = attachment.FileUrl,
+            FileType = attachment.FileType,
+            FileSize = attachment.FileSize
+        };
     }
 }

@@ -24,44 +24,56 @@ public sealed class ResumeService(
         }
 
         var storageKey = await fileStorageService.SaveAsync(request.FileName, request.Content, cancellationToken);
-        var contentHash = contentHashService.Compute(request.Content);
-        var rawText = await ExtractRawTextAsync(request, cancellationToken);
 
-        var setAsDefault = request.IsDefault;
-        if (!setAsDefault)
+        try
         {
-            var hasExistingResume = await dbContext.Resumes.AnyAsync(x => x.CandidateProfileId == candidate.Id, cancellationToken);
-            setAsDefault = !hasExistingResume;
+            var contentHash = contentHashService.Compute(request.Content);
+            var rawText = await ExtractRawTextAsync(request, cancellationToken);
+
+            var setAsDefault = request.IsDefault;
+            if (!setAsDefault)
+            {
+                var hasExistingResume = await dbContext.Resumes.AnyAsync(x => x.CandidateProfileId == candidate.Id, cancellationToken);
+                setAsDefault = !hasExistingResume;
+            }
+
+            if (setAsDefault)
+            {
+                var defaults = dbContext.Resumes.Where(x => x.CandidateProfileId == candidate.Id && x.IsDefault);
+                await defaults.ForEachAsync(x => x.IsDefault = false, cancellationToken);
+            }
+
+            var resume = new Resume
+            {
+                CandidateProfileId = candidate.Id,
+                FileName = request.FileName,
+                ContentType = request.ContentType,
+                FileSizeBytes = request.Content.LongLength,
+                StorageKey = storageKey,
+                ContentHash = contentHash,
+                RawText = rawText,
+                IsDefault = setAsDefault,
+                ParseStatus = queueParsing ? "Queued" : "Pending",
+            };
+
+            dbContext.Resumes.Add(resume);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            if (queueParsing)
+            {
+                backgroundJobs.Enqueue<ResumeWorkflowJob>(job => job.ProcessResumeAsync(resume.Id));
+            }
+
+            return new ApiResponse<ResumeDto>(
+                true,
+                new ResumeDto(resume.Id, resume.FileName, resume.ContentType, resume.IsDefault, resume.ParseStatus, resume.CreatedAtUtc),
+                "Resume uploaded.");
         }
-
-        if (setAsDefault)
+        catch
         {
-            var defaults = dbContext.Resumes.Where(x => x.CandidateProfileId == candidate.Id && x.IsDefault);
-            await defaults.ForEachAsync(x => x.IsDefault = false, cancellationToken);
+            await fileStorageService.DeleteAsync(storageKey, CancellationToken.None);
+            throw;
         }
-
-        var resume = new Resume
-        {
-            CandidateProfileId = candidate.Id,
-            FileName = request.FileName,
-            ContentType = request.ContentType,
-            FileSizeBytes = request.Content.LongLength,
-            StorageKey = storageKey,
-            ContentHash = contentHash,
-            RawText = rawText,
-            IsDefault = setAsDefault,
-            ParseStatus = queueParsing ? "Queued" : "Pending",
-        };
-
-        dbContext.Resumes.Add(resume);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        if (queueParsing)
-        {
-            backgroundJobs.Enqueue<ResumeWorkflowJob>(job => job.ProcessResumeAsync(resume.Id));
-        }
-
-        return new ApiResponse<ResumeDto>(true, new ResumeDto(resume.Id, resume.FileName, resume.ContentType, resume.IsDefault, resume.ParseStatus, resume.CreatedAtUtc), "Resume uploaded.");
     }
 
     private async Task<string> ExtractRawTextAsync(ResumeUploadRequest request, CancellationToken cancellationToken)
@@ -112,5 +124,21 @@ public sealed class ResumeService(
         return new ApiResponse<ParsedResumeResultDto>(
             true,
             new ParsedResumeResultDto(parsed.FullName, parsed.Email, parsed.Phone, ServiceJson.DeserializeStringList(parsed.SkillsJson), parsed.StructuredJson));
+    }
+
+    public async Task<ApiResponse<bool>> ProcessResumeDirectAsync(long resumeId, CancellationToken cancellationToken)
+    {
+        var resume = await dbContext.Resumes.FirstOrDefaultAsync(x => x.Id == resumeId, cancellationToken);
+        if (resume is null)
+        {
+            return new ApiResponse<bool>(false, false, "Resume not found.", ["not_found"]);
+        }
+
+        resume.ParseStatus = "Queued";
+        resume.UpdatedAtUtc = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<ResumeWorkflowJob>(job => job.ProcessResumeAsync(resume.Id));
+        return new ApiResponse<bool>(true, true, "Resume parsing queued.");
     }
 }

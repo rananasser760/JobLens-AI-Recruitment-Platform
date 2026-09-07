@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Union
 
 import cv2
 import numpy as np
@@ -13,7 +14,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from request_context import get_request_id
-from routers.integrity import _active_get
+from routers.integrity import _active_get, _active_set, WebSessionProcessor
 
 router = APIRouter(prefix="/internal/v1", tags=["internal"])
 
@@ -44,9 +45,13 @@ ALERT_MAP: dict[str, tuple[str, str]] = {
 
 
 class VideoAnalysisRequest(BaseModel):
-    integritySessionId: int
-    base64Frame: str
+    integritySessionId: Union[str, int, Any] = Field(default="1", alias="integritySessionId")
+    base64Frame: str = Field(alias="base64Frame")
     sequence: int = Field(default=1, ge=1)
+
+    class Config:
+        populate_by_name = True
+        allow_population_by_field_name = True
 
 
 def _envelope_ok(data: Any) -> dict[str, Any]:
@@ -98,7 +103,6 @@ async def analyze_video(request: VideoAnalysisRequest):
 
             _VIDEO_FRAME_STATE[state_key] = (frame_hash, now_utc, request.sequence)
 
-            # Prevent memory leaks by pruning old session keys if dictionary exceeds limit
             if len(_VIDEO_FRAME_STATE) > 1000:
                 cutoff = now_utc.timestamp() - 3600
                 expired_keys = [k for k, v in _VIDEO_FRAME_STATE.items() if v[1].timestamp() < cutoff]
@@ -106,10 +110,16 @@ async def analyze_video(request: VideoAnalysisRequest):
                     _VIDEO_FRAME_STATE.pop(k, None)
 
         proc = _active_get(request.integritySessionId)
-        if not proc:
-            return _envelope_ok({"events": [], "skipped": True, "reason": "processor_not_found"})
 
-        frame = _decode_frame(request.base64Frame)
+        # Auto-create processor on demand if session was started externally by .NET
+        if not proc:
+            numeric_id = int(request.integritySessionId) if str(request.integritySessionId).isdigit() else 1
+            proc = WebSessionProcessor(numeric_id)
+            proc.start()
+            _active_set(request.integritySessionId, proc)
+            _active_set(numeric_id, proc)
+
+        frame = await asyncio.to_thread(_decode_frame, request.base64Frame)
         if frame is not None:
             proc.push_frame(frame)
 

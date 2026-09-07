@@ -17,14 +17,14 @@ const STATUS_OPTIONS: ApplicationStatus[] = [
   'Offered',
   'Rejected',
   'Withdrawn',
-  'ExternalRedirected'
+  'ExternalRedirected',
 ];
 
 @Component({
   selector: 'app-candidate-applications-page',
   imports: [CommonModule, RouterLink, DatePipe, ConfirmDialogComponent],
   templateUrl: './candidate-applications.page.html',
-  styleUrls: ['./candidate-applications.page.css']
+  styleUrls: ['./candidate-applications.page.css'],
 })
 export class CandidateApplicationsPage {
   private readonly applicationsService = inject(ApplicationsService);
@@ -41,15 +41,18 @@ export class CandidateApplicationsPage {
   readonly pendingWithdrawApplication = signal<ApplicationDto | null>(null);
   readonly pendingWithdrawBusy = computed(() => {
     const pending = this.pendingWithdrawApplication();
-    return pending ? this.isWithdrawing(pending.id) : false;
+    return pending?.id ? this.isWithdrawing(pending.id) : false;
   });
 
   readonly totalApplications = computed(() => this.applications().length);
-  readonly activeApplications = computed(() =>
-    this.applications().filter((item) => !['Rejected', 'Withdrawn', 'Offered'].includes(item.status)).length
+  readonly activeApplications = computed(
+    () =>
+      this.applications().filter(
+        (item) => !['Rejected', 'Withdrawn', 'Offered'].includes(item.status),
+      ).length,
   );
-  readonly interviewReady = computed(() =>
-    this.applications().filter((item) => item.hasInterview).length
+  readonly interviewReady = computed(
+    () => this.applications().filter((item) => item.hasInterview).length,
   );
 
   constructor() {
@@ -66,7 +69,7 @@ export class CandidateApplicationsPage {
         pageSize: 120,
         sortBy: 'appliedAt',
         sortDescending: true,
-        status: this.statusFilter() || undefined
+        status: this.statusFilter() || undefined,
       })
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
@@ -75,7 +78,7 @@ export class CandidateApplicationsPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to load your applications right now.'));
-        }
+        },
       });
   }
 
@@ -147,7 +150,7 @@ export class CandidateApplicationsPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to withdraw this application right now.'));
-        }
+        },
       });
   }
 

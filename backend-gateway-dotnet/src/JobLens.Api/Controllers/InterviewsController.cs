@@ -1,20 +1,25 @@
+using System.Text.Json;
 using JobLens.Api.Compatibility;
 using JobLens.Api.Contracts;
+using JobLens.Api.Hubs;
 using JobLens.Application.Common;
 using JobLens.Application.Interfaces;
 using JobLens.Infrastructure.Persistence;
 using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 using InterviewContracts = JobLens.Application.DTOs.Interviews;
 
 namespace JobLens.Api.Controllers;
 
 [Authorize]
 [Route("api/interviews")]
-public sealed class InterviewsController(IInterviewService interviewService, JobLensDbContext dbContext) : AppControllerBase
+public sealed class InterviewsController(
+    IInterviewService interviewService,
+    JobLensDbContext dbContext,
+    IHubContext<InterviewHub> interviewHubContext) : AppControllerBase
 {
     [Authorize(Roles = "Recruiter,Admin")]
     [HttpPost("schedule")]
@@ -126,7 +131,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
                 interviewSessionId,
                 "browser-activity",
                 "info",
-                System.Text.Json.JsonSerializer.Serialize(payload)),
+                JsonSerializer.Serialize(payload)),
             cancellationToken);
 
         return Ok(result);
@@ -153,7 +158,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
             return Forbid();
         }
 
-        if (frameImage is not null)
+        if (frameImage is not null && frameImage.Length > 0)
         {
             await using var stream = frameImage.OpenReadStream();
             using var memory = new MemoryStream();
@@ -162,16 +167,27 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
             await interviewService.ProcessVideoFrameAsync(sessionId, base64, timestampSeconds ?? 0, cancellationToken);
         }
 
-        dbContext.ProctoringEvents.Add(new Domain.Entities.ProctoringEvent
+        var proctoringEvent = new Domain.Entities.ProctoringEvent
         {
             InterviewSessionId = sessionId,
             EventType = eventType,
             Severity = confidence.HasValue && confidence.Value > 0.75 ? "high" : "medium",
             Source = "client",
-            PayloadJson = System.Text.Json.JsonSerializer.Serialize(new { confidence, details, timestampSeconds }),
+            PayloadJson = JsonSerializer.Serialize(new { confidence, details, timestampSeconds }),
             OccurredAtUtc = DateTime.UtcNow,
-        });
+        };
+
+        dbContext.ProctoringEvents.Add(proctoringEvent);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        await interviewHubContext.Clients.Group($"interview:{sessionId}").SendAsync("proctoringEventRecorded", new
+        {
+            sessionId,
+            eventType,
+            confidence,
+            details,
+            occurredAtUtc = proctoringEvent.OccurredAtUtc
+        }, cancellationToken);
 
         return Ok(new ApiResponse<bool>(true, true, "Cheating event recorded."));
     }
@@ -188,6 +204,11 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         if (!await CanAccessSessionAsync(session, cancellationToken))
         {
             return Forbid();
+        }
+
+        if (videoFile is null || videoFile.Length == 0)
+        {
+            return BadRequest(new ApiResponse<bool>(false, false, "No video file provided.", ["empty_file"]));
         }
 
         await using var stream = videoFile.OpenReadStream();
@@ -282,13 +303,17 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
     [HttpPost("submit-answer")]
     public async Task<IActionResult> SubmitAnswer(
         [FromForm] long questionId,
+        [FromForm] long? sessionId,
         [FromForm] string? answerText,
         [FromForm] int? responseDurationSeconds,
         [FromForm] IFormFile? audioFile,
         CancellationToken cancellationToken)
     {
-        var sessionId = questionId <= 0 ? 0 : ((questionId - 1) / 1000) + 1;
-        var session = await LoadSessionForRealtimeAsync(sessionId, cancellationToken);
+        var resolvedSessionId = (sessionId.HasValue && sessionId.Value > 0)
+            ? sessionId.Value
+            : (questionId <= 0 ? 0 : ((questionId - 1) / 1000) + 1);
+
+        var session = await LoadSessionForRealtimeAsync(resolvedSessionId, cancellationToken);
         if (session is null)
         {
             return NotFound(new ApiResponse<bool>(false, false, "Interview session not found for provided question.", ["not_found"]));
@@ -300,7 +325,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         }
 
         var candidateText = answerText?.Trim() ?? string.Empty;
-        if (audioFile is not null)
+        if (audioFile is not null && audioFile.Length > 0)
         {
             await using var stream = audioFile.OpenReadStream();
             using var memory = new MemoryStream();
@@ -313,6 +338,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
                 var aiResult = await interviewService.ProcessAudioAsync(session.Id, base64, seq, cancellationToken);
                 if (aiResult.Success)
                 {
+                    await interviewHubContext.Clients.Group($"interview:{session.Id}").SendAsync("audioProcessed", aiResult, cancellationToken);
                     return Ok(new ApiResponse<bool>(true, true, "Answer submitted."));
                 }
             }
@@ -326,6 +352,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         var nextSeq = session.TranscriptSegments.Count == 0
             ? 1
             : session.TranscriptSegments.Max(x => x.Sequence) + 1;
+
         dbContext.InterviewTranscriptSegments.Add(new Domain.Entities.InterviewTranscriptSegment
         {
             InterviewSessionId = session.Id,
@@ -335,6 +362,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
             Content = candidateText,
             OccurredAtUtc = DateTime.UtcNow,
         });
+
         dbContext.InterviewTranscriptSegments.Add(new Domain.Entities.InterviewTranscriptSegment
         {
             InterviewSessionId = session.Id,
@@ -344,7 +372,10 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
             Content = "Thank you. Moving to the next question.",
             OccurredAtUtc = DateTime.UtcNow,
         });
+
         await dbContext.SaveChangesAsync(cancellationToken);
+        await interviewHubContext.Clients.Group($"interview:{session.Id}").SendAsync("answerSubmitted", new { sessionId = session.Id, questionId }, cancellationToken);
+
         return Ok(new ApiResponse<bool>(true, true, "Answer submitted."));
     }
 
@@ -517,6 +548,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
 
         session.Status = Domain.Enums.InterviewSessionStatus.Cancelled;
         session.FinalVerdict = request.Reason?.Trim() ?? session.FinalVerdict;
+        session.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new ApiResponse<bool>(true, true, "Interview cancelled."));
     }
@@ -547,6 +579,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         }
 
         session.ScheduledAtUtc = request.ScheduledAt;
+        session.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new ApiResponse<bool>(true, true, "Interview rescheduled."));
     }
@@ -909,6 +942,7 @@ public sealed class InterviewsController(IInterviewService interviewService, Job
         session.FinalVerdict = string.IsNullOrWhiteSpace(session.FinalVerdict)
             ? $"Completed - manual review required ({reason})"
             : session.FinalVerdict;
+        session.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var fallbackUpdated = await LoadSessionForSummaryAsync(interviewSessionId, cancellationToken);

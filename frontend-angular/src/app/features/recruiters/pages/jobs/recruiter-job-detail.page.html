@@ -7,9 +7,16 @@
     </div>
     <div class="header-actions">
       @if (jobId(); as id) {
-        <a class="top-candidates-link" [routerLink]="['/recruiter/jobs', id, 'top-candidates']">Top candidates</a>
+        <a class="top-candidates-link" [routerLink]="['/recruiter/jobs', id, 'top-candidates']"
+          >Top candidates</a
+        >
       }
-      <button type="button" class="refresh" (click)="load()" [disabled]="loading() || saving() || addingSkill() || toggling()">
+      <button
+        type="button"
+        class="refresh"
+        (click)="load()"
+        [disabled]="loading() || saving() || addingSkill() || toggling()"
+      >
         {{ loading() ? 'Refreshing...' : 'Refresh' }}
       </button>
     </div>
@@ -27,7 +34,10 @@
     <section class="panel hero">
       <div>
         <h2>{{ currentJob.title }}</h2>
-        <p>{{ currentJob.companyName || 'Company' }} · {{ currentJob.location || 'Location not set' }}</p>
+        <p>
+          {{ currentJob.companyName || 'Company' }} ·
+          {{ currentJob.location || 'Location not set' }}
+        </p>
       </div>
       <div class="hero-meta">
         <span>{{ currentJob.source }}</span>
@@ -112,15 +122,19 @@
         </div>
 
         <div class="actions">
-          <button type="submit" [disabled]="saving() || form.invalid">{{ saving() ? 'Saving...' : 'Save changes' }}</button>
-          <button type="button" class="secondary" (click)="toggleStatus()" [disabled]="toggling()">{{ toggling() ? 'Updating...' : 'Toggle status' }}</button>
+          <button type="submit" [disabled]="saving() || form.invalid">
+            {{ saving() ? 'Saving...' : 'Save changes' }}
+          </button>
+          <button type="button" class="secondary" (click)="toggleStatus()" [disabled]="toggling()">
+            {{ toggling() ? 'Updating...' : 'Toggle status' }}
+          </button>
         </div>
       </form>
 
       <section class="panel skills-panel">
         <h3>Required skills</h3>
 
-        @if (currentJob.requiredSkills.length === 0) {
+        @if (!currentJob.requiredSkills?.length) {
           <p class="empty">No required skills configured yet.</p>
         } @else {
           <div class="skill-chips">
@@ -133,20 +147,42 @@
         <div class="add-skill">
           <label>
             Skill name
-            <input #skillInput type="text" [value]="newSkill()" (input)="onNewSkillChanged(skillInput.value)" placeholder="TypeScript" [disabled]="addingSkill()" />
+            <input
+              #skillInput
+              type="text"
+              [value]="newSkill()"
+              (input)="onNewSkillChanged(skillInput.value)"
+              placeholder="TypeScript"
+              [disabled]="addingSkill()"
+            />
           </label>
 
           <label>
             Importance (1-100)
-            <input #importanceInput type="number" min="1" max="100" [value]="newSkillImportance()" (input)="onNewSkillImportanceChanged(importanceInput.value)" [disabled]="addingSkill()" />
+            <input
+              #importanceInput
+              type="number"
+              min="1"
+              max="100"
+              [value]="newSkillImportance()"
+              (input)="onNewSkillImportanceChanged(importanceInput.value)"
+              [disabled]="addingSkill()"
+            />
           </label>
 
-          <button type="button" (click)="addSkill()" [disabled]="addingSkill() || !newSkill().trim()">
+          <button
+            type="button"
+            (click)="addSkill()"
+            [disabled]="addingSkill() || !newSkill().trim()"
+          >
             {{ addingSkill() ? 'Adding...' : 'Add skill' }}
           </button>
         </div>
 
-        <p class="hint">Skill removal requires skill IDs from backend job detail contract; currently only skill names are returned.</p>
+        <p class="hint">
+          Skill removal requires skill IDs from backend job detail contract; currently only skill
+          names are returned.
+        </p>
       </section>
     </div>
   }

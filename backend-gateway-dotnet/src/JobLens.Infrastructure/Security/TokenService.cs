@@ -30,7 +30,9 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
             new(JwtRegisteredClaimNames.Email, user.Email),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.DisplayName),
+            new(ClaimTypes.Email, user.Email),
             new(ClaimTypes.Role, user.Role.ToString()),
+            new("role", user.Role.ToString()),
         };
 
         var token = new JwtSecurityToken(
@@ -55,6 +57,7 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Email, user.Email),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Email, user.Email),
             new(TokenTypeClaim, PasswordResetTokenType),
             new(PasswordStampClaim, ComputePasswordStamp(user.PasswordHash)),
         };
@@ -71,7 +74,12 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
 
     public bool ValidatePasswordResetToken(string token, User user)
     {
-        var principal = GetPrincipalFromToken(token, validateLifetime: true);
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        var principal = GetPrincipalFromToken(token.Trim(), validateLifetime: true);
         if (principal is null)
         {
             return false;
@@ -85,15 +93,17 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
 
         var rawUserId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub)
-            ?? principal.FindFirstValue("sub");
+            ?? principal.FindFirstValue("sub")
+            ?? principal.FindFirstValue("id");
 
         if (!long.TryParse(rawUserId, out var tokenUserId) || tokenUserId != user.Id)
         {
             return false;
         }
 
-        var tokenEmail = principal.FindFirstValue(JwtRegisteredClaimNames.Email)
-            ?? principal.FindFirstValue(ClaimTypes.Email);
+        var tokenEmail = principal.FindFirstValue(ClaimTypes.Email)
+            ?? principal.FindFirstValue(JwtRegisteredClaimNames.Email)
+            ?? principal.FindFirstValue("email");
 
         if (!string.Equals(tokenEmail, user.Email, StringComparison.OrdinalIgnoreCase))
         {
@@ -112,12 +122,16 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
             return null;
         }
 
+        var cleanToken = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+            ? token["Bearer ".Length..].Trim()
+            : token.Trim();
+
         var handler = new JwtSecurityTokenHandler();
 
         try
         {
             return handler.ValidateToken(
-                token,
+                cleanToken,
                 new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -127,7 +141,7 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
                     ValidIssuer = _options.Issuer,
                     ValidAudience = _options.Audience,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey)),
-                    ClockSkew = TimeSpan.FromSeconds(30),
+                    ClockSkew = validateLifetime ? TimeSpan.FromSeconds(5) : TimeSpan.Zero,
                 },
                 out _);
         }

@@ -18,6 +18,7 @@ namespace JobLens.Api.Controllers;
 [Route("api/resumes")]
 public sealed class ResumesController(
     IResumeService resumeService,
+    IJobService jobService,
     IAiBackendClient aiBackendClient,
     JobLensDbContext dbContext,
     IBackgroundJobClient backgroundJobs,
@@ -27,6 +28,11 @@ public sealed class ResumesController(
     [RequestSizeLimit(15_000_000)]
     public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromQuery] bool isDefault = false, [FromQuery] bool parseNow = true, CancellationToken cancellationToken = default)
     {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new ApiResponse<ResumeViewDto>(false, null, "File is required.", ["empty_file"]));
+        }
+
         await using var stream = file.OpenReadStream();
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory, cancellationToken);
@@ -144,7 +150,11 @@ public sealed class ResumesController(
         await dbContext.SaveChangesAsync(cancellationToken);
         await fileStorageService.DeleteAsync(resume.StorageKey, cancellationToken);
 
-        if (!hasOtherResumes)
+        if (hasOtherResumes)
+        {
+            backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(resume.CandidateProfileId));
+        }
+        else
         {
             _ = await aiBackendClient.DeleteCandidateVectorAsync(resume.CandidateProfileId, cancellationToken);
         }
@@ -171,6 +181,9 @@ public sealed class ResumesController(
 
         resume.IsDefault = true;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(resume.CandidateProfileId));
+
         return Ok(new ApiResponse<bool>(true, true, "Default resume updated."));
     }
 
@@ -300,12 +313,15 @@ public sealed class ResumesController(
             return BadRequest(new ApiResponse<object>(false, null, parse.Error?.Message ?? ats.Error?.Message ?? "Analysis failed."));
         }
 
+        var matchesResult = await jobService.MatchJobsFromTextAsync(request.ResumeText, request.JobMatchLimit, cancellationToken);
+        var matches = matchesResult.Success && matchesResult.Data != null ? matchesResult.Data : [];
+
         var payload = new
         {
             parsedCv = parse.Data,
             atsResult = ToAtsScoreDto(0, ats.Data),
             improvements = request.IncludeImprovements ? ats.Data.Suggestions : [],
-            jobMatches = Array.Empty<object>(),
+            jobMatches = matches,
         };
 
         return Ok(new ApiResponse<object>(true, payload));

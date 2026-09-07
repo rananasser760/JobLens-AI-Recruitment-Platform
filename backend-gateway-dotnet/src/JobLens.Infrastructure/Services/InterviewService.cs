@@ -120,6 +120,9 @@ public sealed class InterviewService(
             ScheduledAtUtc = request.ScheduledAtUtc,
             CriteriaSnapshot = request.EvaluationCriteria.Trim(),
             Status = InterviewSessionStatus.Scheduled,
+            AgentType = request.AgentType ?? "Mixed",
+            InterviewTitle = request.InterviewTitle?.Trim() ?? string.Empty,
+            MaxQuestions = Math.Clamp(request.MaxQuestions, 1, 20),
         };
 
         application.Status = ApplicationStatus.InterviewScheduled;
@@ -208,18 +211,8 @@ public sealed class InterviewService(
 
     public async Task<ApiResponse<InterviewRealtimeResultDto>> ProcessAudioAsync(long interviewSessionId, string base64Audio, int sequence, CancellationToken cancellationToken)
     {
-        logger.LogDebug(
-            "ProcessAudioAsync received session {InterviewSessionId}, sequence {Sequence}, payloadLength {PayloadLength}.",
-            interviewSessionId,
-            sequence,
-            base64Audio?.Length ?? 0);
-
         if (string.IsNullOrWhiteSpace(base64Audio))
         {
-            logger.LogWarning(
-                "ProcessAudioAsync received empty payload for session {InterviewSessionId}, sequence {Sequence}.",
-                interviewSessionId,
-                sequence);
             return new ApiResponse<InterviewRealtimeResultDto>(false, null, "Audio payload was empty.", ["empty_audio"]);
         }
 
@@ -232,11 +225,9 @@ public sealed class InterviewService(
             .Include(x => x.Application)
                 .ThenInclude(x => x.JobPosting)
             .FirstOrDefaultAsync(x => x.Id == interviewSessionId, cancellationToken);
+
         if (session is null || string.IsNullOrWhiteSpace(session.InterviewBackendSessionId))
         {
-            logger.LogWarning(
-                "ProcessAudioAsync skipped for session {InterviewSessionId} because InterviewBackendSessionId was missing.",
-                interviewSessionId);
             return new ApiResponse<InterviewRealtimeResultDto>(false, null, "Interview session is not active.", ["not_active"]);
         }
 
@@ -244,22 +235,11 @@ public sealed class InterviewService(
 
         if (!ai.Success && ShouldReinitializeAiSession(ai))
         {
-            logger.LogWarning(
-                "AnalyzeAudio returned not-found for interview backend session {InterviewBackendSessionId}; attempting restart for session {InterviewSessionId}.",
-                session.InterviewBackendSessionId,
-                session.Id);
+            logger.LogWarning("AnalyzeAudio returned not-found for backend session {SessionId}; restarting session.", session.InterviewBackendSessionId);
             var restart = await RestartLiveAiSessionAsync(session, cancellationToken);
             if (!restart.Success)
             {
-                logger.LogWarning(
-                    "RestartLiveAiSessionAsync failed for session {InterviewSessionId}: {Message}.",
-                    session.Id,
-                    restart.Message);
-                return new ApiResponse<InterviewRealtimeResultDto>(
-                    false,
-                    null,
-                    restart.Message,
-                    restart.Errors);
+                return new ApiResponse<InterviewRealtimeResultDto>(false, null, restart.Message, restart.Errors);
             }
 
             ai = await AnalyzeAudioChunkAsync(session.InterviewBackendSessionId, base64Audio, sequence, cancellationToken);
@@ -267,20 +247,11 @@ public sealed class InterviewService(
 
         if (!ai.Success || ai.Data is null)
         {
-            logger.LogWarning(
-                "AnalyzeAudio failed for session {InterviewSessionId}, sequence {Sequence}, code {Code}, message {Message}.",
-                session.Id,
-                sequence,
-                ai.Error?.Code,
-                ai.Error?.Message);
             var timeoutCode = ai.Error?.Code?.Trim();
             if (string.Equals(timeoutCode, "RequestTimeout", StringComparison.OrdinalIgnoreCase))
             {
                 return new ApiResponse<InterviewRealtimeResultDto>(
-                    false,
-                    null,
-                    "AI response timed out for this audio chunk. Please keep speaking and continue.",
-                    ["RequestTimeout", "timeout"]);
+                    false, null, "AI response timed out for this audio chunk. Please continue speaking.", ["RequestTimeout", "timeout"]);
             }
 
             var code = ai.Error?.Code?.Trim();
@@ -314,14 +285,6 @@ public sealed class InterviewService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        logger.LogDebug(
-            "ProcessAudioAsync succeeded for session {InterviewSessionId}, sequence {Sequence}: transcriptPresent={TranscriptPresent}, replyAudioPresent={ReplyAudioPresent}, flagsCount={FlagsCount}.",
-            session.Id,
-            sequence,
-            !string.IsNullOrWhiteSpace(ai.Data.Transcript),
-            !string.IsNullOrWhiteSpace(ai.Data.ReplyAudioBase64),
-            ai.Data.Flags?.Count ?? 0);
-
         return new ApiResponse<InterviewRealtimeResultDto>(
             true,
             new InterviewRealtimeResultDto(
@@ -344,38 +307,20 @@ public sealed class InterviewService(
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(timeout);
 
-        var response = await aiBackendClient.AnalyzeAudioAsync(
+        return await aiBackendClient.AnalyzeAudioAsync(
             new AudioAnalysisRequest(interviewBackendSessionId, base64Audio, sequence),
             timeoutCts.Token);
-
-        if (!response.Success)
-        {
-            logger.LogWarning(
-                "AnalyzeAudioChunkAsync failed for backend session {InterviewBackendSessionId}, sequence {Sequence}, timeoutSeconds {TimeoutSeconds}, code {Code}.",
-                interviewBackendSessionId,
-                sequence,
-                timeout.TotalSeconds,
-                response.Error?.Code);
-        }
-
-        return response;
     }
 
     private static TimeSpan ResolveAnalyzeAudioTimeout()
     {
         var raw = Environment.GetEnvironmentVariable(AnalyzeAudioTimeoutEnvVar);
-        if (string.IsNullOrWhiteSpace(raw))
+        if (string.IsNullOrWhiteSpace(raw) || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds))
         {
             return AnalyzeAudioAiTimeout;
         }
 
-        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds))
-        {
-            return AnalyzeAudioAiTimeout;
-        }
-
-        var clamped = Math.Clamp(seconds, 5.0, 300.0);
-        return TimeSpan.FromSeconds(clamped);
+        return TimeSpan.FromSeconds(Math.Clamp(seconds, 5.0, 300.0));
     }
 
     private static bool ShouldReinitializeAiSession(InternalApiEnvelope<AudioAnalysisResponseDto> envelope)
@@ -391,15 +336,15 @@ public sealed class InterviewService(
         var resumeText = session.Application.Resume?.RawText;
         var jobDescription = session.Application.JobPosting?.Description;
         var candidateName = session.Application.CandidateProfile.User.DisplayName;
-        if (string.IsNullOrWhiteSpace(resumeText)
-            || string.IsNullOrWhiteSpace(jobDescription)
-            || string.IsNullOrWhiteSpace(candidateName))
+
+        if (string.IsNullOrWhiteSpace(resumeText) || string.IsNullOrWhiteSpace(jobDescription) || string.IsNullOrWhiteSpace(candidateName))
         {
-            return new ApiResponse<bool>(false, false, "Unable to recover AI interview session due to incomplete candidate/job data.", ["missing_context"]);
+            return new ApiResponse<bool>(false, false, "Unable to recover session due to incomplete candidate/job data.", ["missing_context"]);
         }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(StartInterviewAiTimeout);
+
         var ai = await aiBackendClient.StartInterviewSessionAsync(
             new StartInterviewAiRequest(
                 candidateName,
@@ -437,18 +382,22 @@ public sealed class InterviewService(
         return $"{intro} We will evaluate you on: {criteria}. First question: briefly introduce yourself and explain why you are a strong fit for this role.";
     }
 
-    public async Task<ApiResponse<IReadOnlyList<string>>> ProcessVideoFrameAsync(long interviewSessionId, string base64Frame, int sequence, CancellationToken cancellationToken)
+    public async Task<ApiResponse<IReadOnlyList<VideoFlagDto>>> ProcessVideoFrameAsync(long interviewSessionId, string base64Frame, int sequence, CancellationToken cancellationToken)
     {
         var session = await dbContext.InterviewSessions.FirstOrDefaultAsync(x => x.Id == interviewSessionId, cancellationToken);
-        if (session is null || string.IsNullOrWhiteSpace(session.InterviewBackendSessionId))
+        var targetSessionId = !string.IsNullOrWhiteSpace(session?.IntegrityBackendSessionId)
+            ? session.IntegrityBackendSessionId
+            : session?.InterviewBackendSessionId;
+
+        if (session is null || string.IsNullOrWhiteSpace(targetSessionId))
         {
-            return new ApiResponse<IReadOnlyList<string>>(false, null, "Interview session is not active.", ["not_active"]);
+            return new ApiResponse<IReadOnlyList<VideoFlagDto>>(false, null, "Interview session is not active.", ["not_active"]);
         }
 
-        var ai = await aiBackendClient.AnalyzeVideoAsync(new VideoAnalysisRequest(session.InterviewBackendSessionId, base64Frame, sequence), cancellationToken);
+        var ai = await aiBackendClient.AnalyzeVideoAsync(new VideoAnalysisRequest(targetSessionId, base64Frame, sequence), cancellationToken);
         if (!ai.Success || ai.Data is null)
         {
-            return new ApiResponse<IReadOnlyList<string>>(false, null, ai.Error?.Message ?? "Video analysis failed.");
+            return new ApiResponse<IReadOnlyList<VideoFlagDto>>(false, null, ai.Error?.Message ?? "Video analysis failed.");
         }
 
         foreach (var evt in ai.Data.Events)
@@ -466,7 +415,7 @@ public sealed class InterviewService(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return new ApiResponse<IReadOnlyList<string>>(true, ai.Data.Events.Select(x => x.Description).ToList());
+        return new ApiResponse<IReadOnlyList<VideoFlagDto>>(true, ai.Data.Events);
     }
 
     public async Task<ApiResponse<bool>> RecordBrowserEventAsync(BrowserEventRequest request, CancellationToken cancellationToken)
@@ -504,10 +453,7 @@ public sealed class InterviewService(
 
         if (session.Status == InterviewSessionStatus.Completed)
         {
-            var existingReport = session.Reports
-                .OrderByDescending(x => x.GeneratedAtUtc)
-                .FirstOrDefault();
-
+            var existingReport = session.Reports.OrderByDescending(x => x.GeneratedAtUtc).FirstOrDefault();
             if (existingReport is not null)
             {
                 return new ApiResponse<InterviewReportDto>(
@@ -537,7 +483,10 @@ public sealed class InterviewService(
             .Select(x => new TranscriptEntryDto(x.Sequence, x.Speaker, x.Content, x.OccurredAtUtc))
             .ToList();
 
-        var ai = await aiBackendClient.FinalizeInterviewAsync(new FinalizeInterviewRequest(session.InterviewBackendSessionId, session.IntegrityBackendSessionId, transcript), cancellationToken);
+        var ai = await aiBackendClient.FinalizeInterviewAsync(
+            new FinalizeInterviewRequest(session.InterviewBackendSessionId, session.IntegrityBackendSessionId, transcript),
+            cancellationToken);
+
         if (!ai.Success || ai.Data is null)
         {
             return new ApiResponse<InterviewReportDto>(false, null, ai.Error?.Message ?? "Could not finalize interview.");
@@ -561,7 +510,10 @@ public sealed class InterviewService(
         dbContext.InterviewReports.Add(report);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new ApiResponse<InterviewReportDto>(true, new InterviewReportDto(session.Id, report.FinalScore, report.Verdict, report.RecruiterReportJson, report.CandidateFeedbackJson), "Interview completed.");
+        return new ApiResponse<InterviewReportDto>(
+            true,
+            new InterviewReportDto(session.Id, report.FinalScore, report.Verdict, report.RecruiterReportJson, report.CandidateFeedbackJson),
+            "Interview completed.");
     }
 
     public async Task<ApiResponse<InterviewReportDto>> GetReportAsync(long interviewSessionId, CancellationToken cancellationToken)
@@ -576,9 +528,21 @@ public sealed class InterviewService(
             return new ApiResponse<InterviewReportDto>(false, null, "Report not found.", ["not_found"]);
         }
 
-        return new ApiResponse<InterviewReportDto>(true, new InterviewReportDto(interviewSessionId, report.FinalScore, report.Verdict, report.RecruiterReportJson, report.CandidateFeedbackJson));
+        return new ApiResponse<InterviewReportDto>(
+            true,
+            new InterviewReportDto(interviewSessionId, report.FinalScore, report.Verdict, report.RecruiterReportJson, report.CandidateFeedbackJson));
     }
 
     private static InterviewSessionDto ToDto(InterviewSession session) =>
-        new(session.Id, session.Status, session.ScheduledAtUtc, session.StartedAtUtc, session.EndedAtUtc, session.InterviewBackendSessionId, session.IntegrityBackendSessionId, session.CriteriaSnapshot, session.FinalScore, session.FinalVerdict);
+        new(
+            session.Id,
+            session.Status,
+            session.ScheduledAtUtc,
+            session.StartedAtUtc,
+            session.EndedAtUtc,
+            session.InterviewBackendSessionId,
+            session.IntegrityBackendSessionId,
+            session.CriteriaSnapshot,
+            session.FinalScore,
+            session.FinalVerdict);
 }

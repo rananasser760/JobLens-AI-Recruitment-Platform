@@ -284,7 +284,7 @@ Rules:
 Return EXACTLY this JSON (no markdown):
 {{
   "full_name":"","email":"","phone":"","linkedin":"","github":"",
-  "job_title":"","summary":"",
+  "job_title":"","summary":"","location":"",
   "education":[{{"degree":"","institution":"","location":"","start_date":"","end_date":"","gpa":""}}],
   "skills":{{"technical":[],"soft":[],"tools":[]}},
   "experience":[{{"title":"","company":"","location":"","employment_type":"",
@@ -313,7 +313,8 @@ CV TEXT:
             )
             result = response.choices[0].message.content.strip()
             return json.loads(_clean_json(result))
-        except Exception:
+        except Exception as exc:
+            print(f"[cv_service] Error calling model '{model}': {exc}", flush=True)
             continue
             
     return _empty_cv_full()

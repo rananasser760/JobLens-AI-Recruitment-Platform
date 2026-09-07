@@ -18,7 +18,23 @@ public sealed class ApplicationsController(IApplicationService applicationServic
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateApplicationRequest request, CancellationToken cancellationToken)
     {
-        var result = await applicationService.CreateAsync(GetRequiredUserId(), request, cancellationToken);
+        var userId = GetRequiredUserId();
+        var candidate = await dbContext.CandidateProfiles.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (candidate is null)
+        {
+            return NotFound(new ApiResponse<ApplicationViewDto>(false, null, "Candidate profile not found.", ["not_found"]));
+        }
+
+        var alreadyApplied = await dbContext.Applications.AnyAsync(
+            x => x.JobPostingId == request.JobId && x.CandidateProfileId == candidate.Id,
+            cancellationToken);
+
+        if (alreadyApplied)
+        {
+            return Conflict(new ApiResponse<ApplicationViewDto>(false, null, "You have already applied for this job.", ["already_applied"]));
+        }
+
+        var result = await applicationService.CreateAsync(userId, request, cancellationToken);
         if (!result.Success || result.Data is null)
         {
             return BadRequest(new ApiResponse<ApplicationViewDto>(false, null, result.Message, result.Errors));
@@ -173,10 +189,28 @@ public sealed class ApplicationsController(IApplicationService applicationServic
             .Select(ToCandidateApplicationView)
             .Select(x =>
             {
-                var ats = x.AtsScore ?? 0d;
-                var interview = x.InterviewScore ?? 0d;
-                var ranking = Math.Round((ats * 0.4) + (interview * 0.6), 2);
-                return x with { RankingScore = ranking };
+                var ats = x.AtsScore;
+                var interview = x.InterviewScore;
+
+                double score;
+                if (ats.HasValue && interview.HasValue)
+                {
+                    score = Math.Round((ats.Value * 0.4) + (interview.Value * 0.6), 2);
+                }
+                else if (interview.HasValue)
+                {
+                    score = Math.Round(interview.Value, 2);
+                }
+                else if (ats.HasValue)
+                {
+                    score = Math.Round(ats.Value, 2);
+                }
+                else
+                {
+                    score = 0d;
+                }
+
+                return x with { RankingScore = score };
             })
             .OrderByDescending(x => x.RankingScore ?? 0d)
             .Select((item, idx) => item with { Rank = idx + 1 })
@@ -218,6 +252,7 @@ public sealed class ApplicationsController(IApplicationService applicationServic
         application.Status = FrontendStatusMapper.FromFrontend(request.Status);
         application.RecruiterNotes = request.Notes?.Trim() ?? string.Empty;
         application.ReviewedAtUtc = DateTime.UtcNow;
+        application.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new ApiResponse<bool>(true, true, "Application status updated."));
@@ -254,6 +289,7 @@ public sealed class ApplicationsController(IApplicationService applicationServic
             app.Status = FrontendStatusMapper.FromFrontend(request.Status);
             app.RecruiterNotes = request.Notes?.Trim() ?? string.Empty;
             app.ReviewedAtUtc = DateTime.UtcNow;
+            app.UpdatedAtUtc = DateTime.UtcNow;
             updated++;
         }
 
@@ -287,8 +323,14 @@ public sealed class ApplicationsController(IApplicationService applicationServic
             return Forbid();
         }
 
+        if (application.Status is Domain.Enums.ApplicationStatus.Withdrawn or Domain.Enums.ApplicationStatus.Rejected or Domain.Enums.ApplicationStatus.Offered)
+        {
+            return BadRequest(new ApiResponse<bool>(false, false, $"Application cannot be withdrawn in its current state ({application.Status})."));
+        }
+
         application.Status = Domain.Enums.ApplicationStatus.Withdrawn;
         application.ReviewedAtUtc = DateTime.UtcNow;
+        application.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new ApiResponse<bool>(true, true, "Application withdrawn."));
     }

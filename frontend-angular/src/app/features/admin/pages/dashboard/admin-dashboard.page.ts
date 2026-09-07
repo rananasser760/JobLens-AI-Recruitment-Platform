@@ -8,7 +8,7 @@ import { ScrapedJobDto } from '../../../../core/models/job.model';
 import {
   BackgroundJobDto,
   ScrapingDiagnosticsDto,
-  ScrapingStatusDto
+  ScrapingStatusDto,
 } from '../../models/admin.model';
 import { AdminService } from '../../services/admin.service';
 
@@ -23,7 +23,7 @@ interface AdminDashboardSnapshot {
   selector: 'app-admin-dashboard-page',
   imports: [CommonModule, ReactiveFormsModule],
   templateUrl: './admin-dashboard.page.html',
-  styleUrl: './admin-dashboard.page.css'
+  styleUrl: './admin-dashboard.page.css',
 })
 export class AdminDashboardPage {
   private readonly fb = inject(FormBuilder);
@@ -45,11 +45,11 @@ export class AdminDashboardPage {
   readonly lastSyncAt = signal<Date | null>(null);
 
   readonly scrapeForm = this.fb.nonNullable.group({
-    maxCategories: [5, [Validators.min(1), Validators.max(50)]]
+    maxCategories: [5, [Validators.min(1), Validators.max(50)]],
   });
 
   readonly cleanupForm = this.fb.nonNullable.group({
-    staleAfterDays: [45, [Validators.required, Validators.min(1), Validators.max(365)]]
+    staleAfterDays: [45, [Validators.required, Validators.min(1), Validators.max(365)]],
   });
 
   constructor() {
@@ -58,7 +58,7 @@ export class AdminDashboardPage {
     timer(8000, 8000)
       .pipe(
         takeUntilDestroyed(this.destroyRef),
-        switchMap(() => this.loadSnapshot$(false))
+        switchMap(() => this.loadSnapshot$(false)),
       )
       .subscribe((snapshot) => {
         this.applySnapshot(snapshot);
@@ -80,7 +80,7 @@ export class AdminDashboardPage {
         finalize(() => {
           this.loading.set(false);
           this.monitorLoading.set(false);
-        })
+        }),
       )
       .subscribe((snapshot) => {
         this.applySnapshot(snapshot);
@@ -108,7 +108,7 @@ export class AdminDashboardPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to queue scraping job.'));
-        }
+        },
       });
   }
 
@@ -133,7 +133,7 @@ export class AdminDashboardPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to queue cleanup job.'));
-        }
+        },
       });
   }
 
@@ -156,12 +156,12 @@ export class AdminDashboardPage {
         },
         error: (err: unknown) => {
           this.error.set(this.mapError(err, 'Unable to queue recommendation refresh.'));
-        }
+        },
       });
   }
 
   trackByScrapedId(_: number, item: ScrapedJobDto): string {
-    return item.externalJobId;
+    return item.externalJobId ?? String(_);
   }
 
   isScrapeRunning(): boolean {
@@ -290,7 +290,7 @@ export class AdminDashboardPage {
             this.error.set(this.mapError(err, 'Unable to load background jobs.'));
           }
           return of(this.jobs());
-        })
+        }),
       ),
       scrapingStatus: this.adminService.getScrapingStatus().pipe(
         map((res) => res.data),
@@ -299,7 +299,7 @@ export class AdminDashboardPage {
             this.monitorError.set(this.mapError(err, 'Unable to load scraping status.'));
           }
           return of(this.scrapingStatus());
-        })
+        }),
       ),
       diagnostics: this.adminService.getScrapingDiagnostics().pipe(
         map((res) => res.data),
@@ -308,7 +308,7 @@ export class AdminDashboardPage {
             this.monitorError.set(this.mapError(err, 'Unable to load scraping diagnostics.'));
           }
           return of(this.diagnostics());
-        })
+        }),
       ),
       scrapedJobs: this.adminService.getScrapedJobs(12).pipe(
         map((res) => res.data ?? []),
@@ -317,8 +317,8 @@ export class AdminDashboardPage {
             this.monitorError.set(this.mapError(err, 'Unable to load recent scraped jobs.'));
           }
           return of(this.scrapedJobs());
-        })
-      )
+        }),
+      ),
     });
   }
 
@@ -337,10 +337,15 @@ export class AdminDashboardPage {
     if (wasRunning && !runningNow) {
       const status = (snapshot.scrapingStatus?.lastStatus || '').toLowerCase();
       if (status === 'completed') {
-        const processed = snapshot.scrapingStatus?.processedJobs ?? snapshot.scrapingStatus?.totalJobs ?? 0;
-        this.success.set(`Scrape completed. Processed ${processed} jobs and refreshed latest results.`);
+        const processed =
+          snapshot.scrapingStatus?.processedJobs ?? snapshot.scrapingStatus?.totalJobs ?? 0;
+        this.success.set(
+          `Scrape completed. Processed ${processed} jobs and refreshed latest results.`,
+        );
       } else if (status === 'failed' && !this.error()) {
-        this.error.set(snapshot.scrapingStatus?.message || 'Scrape failed. Check background jobs for details.');
+        this.error.set(
+          snapshot.scrapingStatus?.message || 'Scrape failed. Check background jobs for details.',
+        );
       }
     }
   }

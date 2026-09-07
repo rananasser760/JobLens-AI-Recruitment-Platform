@@ -64,13 +64,13 @@ Return EXACTLY this JSON (no markdown):
         )
         ats_result = json.loads(_clean_json(response.choices[0].message.content.strip()))
 
-        if ats_result.get("overall_score", 0) > 95:
-            scores = ats_result.get("scores", {})
-            if scores:
-                ats_result["overall_score"] = round(sum(scores.values()) / len(scores))
-            else:
-                ats_result["overall_score"] = 70
+        scores = ats_result.get("scores", {})
+        if scores and isinstance(scores, dict):
+            calculated_avg = round(sum(float(v) for v in scores.values()) / max(len(scores), 1))
+            if ats_result.get("overall_score") is None or ats_result.get("overall_score") <= 0:
+                ats_result["overall_score"] = calculated_avg
 
+        ats_result["overall_score"] = max(0, min(100, int(ats_result.get("overall_score", 65))))
         return ats_result
     except Exception:
         return {

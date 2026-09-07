@@ -2,6 +2,7 @@ using JobLens.Application.Common;
 using JobLens.Application.DTOs.Auth;
 using JobLens.Application.Interfaces;
 using JobLens.Domain.Entities;
+using JobLens.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobLens.Infrastructure.Services;
@@ -27,29 +28,35 @@ public sealed class AuthService(
 
         if (await dbContext.Users.AnyAsync(x => x.Email == normalizedEmail, cancellationToken))
         {
-            return new ApiResponse<AuthResponse>(false, null, "Email already exists.", ["email_taken"]);
+            return new ApiResponse<AuthResponse>(false, null, "An account with this email already exists.", ["email_taken"]);
         }
 
         Company? company = null;
-        if (request.Role == Domain.Enums.AppRole.Recruiter)
+        if (request.Role == AppRole.Recruiter)
         {
             if (request.CompanyId is long companyId and > 0)
             {
                 company = await dbContext.Companies.FirstOrDefaultAsync(x => x.Id == companyId, cancellationToken);
+                if (company is null)
+                {
+                    return new ApiResponse<AuthResponse>(false, null, "Selected company does not exist.", ["company_not_found"]);
+                }
             }
 
             if (company is null && !string.IsNullOrWhiteSpace(request.CompanyName))
             {
-                var slug = request.CompanyName.Trim().ToLowerInvariant().Replace(" ", "-");
+                var trimmedCompName = request.CompanyName.Trim();
+                var slug = trimmedCompName.ToLowerInvariant().Replace(" ", "-");
                 company = await dbContext.Companies.FirstOrDefaultAsync(x => x.Slug == slug, cancellationToken);
                 if (company is null)
                 {
                     company = new Company
                     {
-                        Name = request.CompanyName.Trim(),
+                        Name = trimmedCompName,
                         Slug = slug,
                     };
                     dbContext.Companies.Add(company);
+                    await dbContext.SaveChangesAsync(cancellationToken);
                 }
             }
         }
@@ -60,18 +67,23 @@ public sealed class AuthService(
             DisplayName = displayName,
             PasswordHash = passwordHasher.Hash(request.Password),
             Role = request.Role,
+            IsActive = true,
         };
 
         dbContext.Users.Add(user);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        if (request.Role == Domain.Enums.AppRole.Candidate)
+        if (request.Role == AppRole.Candidate)
         {
             dbContext.CandidateProfiles.Add(new CandidateProfile { UserId = user.Id });
         }
-        else if (request.Role == Domain.Enums.AppRole.Recruiter)
+        else if (request.Role == AppRole.Recruiter)
         {
-            dbContext.RecruiterProfiles.Add(new RecruiterProfile { UserId = user.Id, CompanyId = company?.Id });
+            dbContext.RecruiterProfiles.Add(new RecruiterProfile 
+            { 
+                UserId = user.Id, 
+                CompanyId = company?.Id 
+            });
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -98,10 +110,16 @@ public sealed class AuthService(
     public async Task<ApiResponse<AuthResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Email == normalizedEmail && x.IsActive, cancellationToken);
+        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Email == normalizedEmail, cancellationToken);
+
         if (user is null || !passwordHasher.Verify(request.Password, user.PasswordHash))
         {
-            return new ApiResponse<AuthResponse>(false, null, "Invalid credentials.", ["invalid_credentials"]);
+            return new ApiResponse<AuthResponse>(false, null, "Invalid email or password.", ["invalid_credentials"]);
+        }
+
+        if (!user.IsActive)
+        {
+            return new ApiResponse<AuthResponse>(false, null, "Your account has been deactivated. Please contact support.", ["account_deactivated"]);
         }
 
         var token = tokenService.GenerateToken(user);
@@ -123,15 +141,15 @@ public sealed class AuthService(
             "Login successful.");
     }
 
-    private async Task<long?> ResolveProfileIdAsync(long userId, Domain.Enums.AppRole role, CancellationToken cancellationToken)
+    private async Task<long?> ResolveProfileIdAsync(long userId, AppRole role, CancellationToken cancellationToken)
     {
         return role switch
         {
-            Domain.Enums.AppRole.Candidate => await dbContext.CandidateProfiles
+            AppRole.Candidate => await dbContext.CandidateProfiles
                 .Where(x => x.UserId == userId)
                 .Select(x => (long?)x.Id)
                 .FirstOrDefaultAsync(cancellationToken),
-            Domain.Enums.AppRole.Recruiter => await dbContext.RecruiterProfiles
+            AppRole.Recruiter => await dbContext.RecruiterProfiles
                 .Where(x => x.UserId == userId)
                 .Select(x => (long?)x.Id)
                 .FirstOrDefaultAsync(cancellationToken),
