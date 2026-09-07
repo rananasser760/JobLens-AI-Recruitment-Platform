@@ -218,6 +218,34 @@ using (var scope = app.Services.CreateScope())
         app.Logger.LogWarning(ex, "Database migration skipped or encountered warnings on startup.");
     }
 
+// Ensure newly added entity properties exist in SQL Server
+   try
+    {
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            IF OBJECT_ID(N'dbo.ParsedResumeResults', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.ParsedResumeResults', N'Confidence') IS NULL
+                    ALTER TABLE [dbo].[ParsedResumeResults] ADD [Confidence] FLOAT NULL;
+                IF COL_LENGTH(N'dbo.ParsedResumeResults', N'Headline') IS NULL
+                    ALTER TABLE [dbo].[ParsedResumeResults] ADD [Headline] NVARCHAR(MAX) NULL;
+                IF COL_LENGTH(N'dbo.ParsedResumeResults', N'Summary') IS NULL
+                    ALTER TABLE [dbo].[ParsedResumeResults] ADD [Summary] NVARCHAR(MAX) NULL;
+            END
+
+            IF OBJECT_ID(N'dbo.Jobs', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.Jobs', N'SalaryMin') IS NULL
+                    ALTER TABLE [dbo].[Jobs] ADD [SalaryMin] DECIMAL(18,2) NULL;
+                IF COL_LENGTH(N'dbo.Jobs', N'SalaryMax') IS NULL
+                    ALTER TABLE [dbo].[Jobs] ADD [SalaryMax] DECIMAL(18,2) NULL;
+            END
+        ");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Schema synchronization encountered an issue; proceeding with startup.");
+    }
+
     var seedAdminEnabled = builder.Configuration.GetValue<bool?>("Security:SeedAdminEnabled") ?? true;
     if (seedAdminEnabled)
     {

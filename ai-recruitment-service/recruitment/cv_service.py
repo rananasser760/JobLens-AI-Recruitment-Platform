@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from typing import Dict, Optional, Tuple
 
 import docx
@@ -175,6 +176,21 @@ def _clean_json(raw: str) -> str:
     return raw
 
 
+def _extract_json_block(text: str) -> str:
+    if not text:
+        return "{}"
+    
+    # Strip any potential markdown code blocks (e.g., ```json ... ```)
+    cleaned = re.sub(r"```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    cleaned = re.sub(r"```\s*$", "", cleaned)
+    
+    # Use regex to find the outermost curly braces containing the JSON object
+    match = re.search(r"(\{.*\})", cleaned, re.DOTALL)
+    if match:
+        return match.group(1)
+        
+    return cleaned.strip()
+
 def _empty_cv_essentials() -> Dict:
     return {
         "full_name": "",
@@ -232,7 +248,7 @@ def parse_cv_with_docling_llm(file_path: str) -> Dict:
 
     prompt = f"""You are an expert CV parser. Extract ONLY essential fields.
 
-Return EXACTLY this JSON (no markdown, no preamble):
+Return ONLY valid raw JSON matching this structure (no markdown, no preamble, no text outside JSON):
 {{
   "full_name": "", "email": "", "phone": "",
   "linkedin": "full URL or empty", "github": "full URL or empty",
@@ -251,15 +267,22 @@ CV TEXT:
             response = llm_client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "CV parser. Return only valid JSON."},
+                    {"role": "system", "content": "You are a strict JSON data extractor. Output ONLY raw JSON. Do not include markdown code blocks."},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=3000,
-                temperature=0.1,
+                max_tokens=2000,
+                temperature=0.0,
             )
-            result = response.choices[0].message.content.strip()
-            return json.loads(_clean_json(result))
-        except Exception:
+            message_content = response.choices[0].message.content
+            if not message_content:
+                continue
+            
+            json_str = _extract_json_block(message_content)
+            parsed_data = json.loads(json_str)
+            if isinstance(parsed_data, dict):
+                return parsed_data
+        except Exception as exc:
+            print(f"[cv_service] Docling parse warning with model '{model}': {exc}", flush=True)
             continue
 
     return _empty_cv_essentials()
@@ -272,16 +295,14 @@ def parse_cv_with_llm(cv_text: str) -> Dict:
     if len(cv_text) > 10000:
         cv_text = cv_text[:10000]
 
-    prompt = f"""You are an expert CV parser. Extract ALL information.
+    prompt = f"""You are an expert CV parser. Extract ALL information into a valid JSON object.
 
 Rules:
 - LinkedIn / GitHub: extract the full URL, not just the label text.
 - If a field is missing, use empty string or empty array.
-- Infer job_title from experience/skills if not explicit.
-- Do NOT include degrees in certifications.
-- Volunteer work may be inferred from context.
+- Return ONLY valid raw JSON. No conversational text, no markdown formatting.
 
-Return EXACTLY this JSON (no markdown):
+Structure required:
 {{
   "full_name":"","email":"","phone":"","linkedin":"","github":"",
   "job_title":"","summary":"","location":"",
@@ -305,16 +326,22 @@ CV TEXT:
             response = llm_client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "Professional CV parser. Return only valid JSON."},
+                    {"role": "system", "content": "You are a professional CV parser. Return strictly valid, parseable JSON only."},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=4000,
-                temperature=0.1,
+                max_tokens=2000,
+                temperature=0.0,
             )
-            result = response.choices[0].message.content.strip()
-            return json.loads(_clean_json(result))
+            message_content = response.choices[0].message.content
+            if not message_content:
+                continue
+            
+            json_str = _extract_json_block(message_content)
+            parsed_data = json.loads(json_str)
+            if isinstance(parsed_data, dict):
+                return parsed_data
         except Exception as exc:
-            print(f"[cv_service] Error calling model '{model}': {exc}", flush=True)
+            print(f"[cv_service] Error parsing JSON with model '{model}': {exc}", flush=True)
             continue
             
     return _empty_cv_full()
