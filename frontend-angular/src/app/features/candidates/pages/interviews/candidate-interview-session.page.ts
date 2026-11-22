@@ -446,22 +446,28 @@ export class CandidateInterviewSessionPage implements OnDestroy, AfterViewChecke
     if (el) el.scrollTop = el.scrollHeight;
   }
 
+  private previewSource: MediaStream | null = null;
+  private previewStream: MediaStream | null = null;
+
   private attachCameraToVideoElement(): void {
-    const stream = this.cameraStream();
-    if (!stream) return;
+    const source = this.cameraStream();
+    if (!source) return;
 
-    if (
-      this.previewVideoRef?.nativeElement &&
-      this.previewVideoRef.nativeElement.srcObject !== stream
-    ) {
-      this.previewVideoRef.nativeElement.srcObject = stream;
+    if (this.previewSource !== source || !this.previewStream) {
+      this.previewSource = source;
+      this.previewStream = new MediaStream(source.getVideoTracks());
     }
+    const stream = this.previewStream;
 
-    if (
-      this.arenaVideoRef?.nativeElement &&
-      this.arenaVideoRef.nativeElement.srcObject !== stream
-    ) {
-      this.arenaVideoRef.nativeElement.srcObject = stream;
+    for (const ref of [this.previewVideoRef, this.arenaVideoRef]) {
+      const video = ref?.nativeElement;
+      if (!video) continue;
+      video.muted = true;
+      video.defaultMuted = true;
+      video.volume = 0;
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
+      }
     }
   }
 

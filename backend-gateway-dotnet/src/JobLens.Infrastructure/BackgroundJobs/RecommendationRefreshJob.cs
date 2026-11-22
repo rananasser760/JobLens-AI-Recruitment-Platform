@@ -96,7 +96,7 @@ public sealed class RecommendationRefreshJob(
             vectorEntry.LastError = vectorResult.Error?.Message ?? "Candidate vector upsert failed.";
         }
 
-        await dbContext.SaveChangesAsync();
+        await SaveVectorEntryAsync(vectorEntry);
 
         var results = await aiBackendClient.RecommendJobsAsync(
             new JobRecommendationRequest(candidateId, resume.RawText, 10),
@@ -175,7 +175,7 @@ public sealed class RecommendationRefreshJob(
                 vectorEntry.LastError = vectorResult.Error?.Message ?? "Job vector upsert failed.";
             }
 
-            await dbContext.SaveChangesAsync();
+            await SaveVectorEntryAsync(vectorEntry);
         }
 
         var results = await aiBackendClient.RecommendCandidatesAsync(
@@ -195,6 +195,33 @@ public sealed class RecommendationRefreshJob(
             sanitized,
             job.ContentHash,
             CancellationToken.None);
+    }
+
+    private async Task SaveVectorEntryAsync(VectorIndexEntry entry)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException) when (dbContext.Entry(entry).State == EntityState.Added)
+        {
+            dbContext.Entry(entry).State = EntityState.Detached;
+            var existing = await dbContext.VectorIndexEntries
+                .FirstOrDefaultAsync(x => x.EntityType == entry.EntityType && x.EntityId == entry.EntityId);
+            if (existing is null)
+            {
+                throw;
+            }
+
+            existing.ContentHash = entry.ContentHash;
+            existing.EmbeddedAtUtc = entry.EmbeddedAtUtc;
+            existing.Collection = entry.Collection;
+            existing.VectorId = entry.VectorId;
+            existing.Model = entry.Model;
+            existing.Status = entry.Status;
+            existing.LastError = entry.LastError;
+            await dbContext.SaveChangesAsync();
+        }
     }
 
     private async Task ReplaceRecommendationCacheAsync(

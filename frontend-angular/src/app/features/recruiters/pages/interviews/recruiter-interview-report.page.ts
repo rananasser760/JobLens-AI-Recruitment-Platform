@@ -4,6 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { InterviewReportDto } from '../../../../core/models/interview.model';
+import { parseAiFeedback } from '../../../../core/utils/ai-feedback';
 import { InterviewsService } from '../../../interviews/interviews.service';
 
 @Component({
@@ -21,6 +22,8 @@ export class RecruiterInterviewReportPage {
 
   readonly sessionId = signal<number | null>(null);
   readonly report = signal<InterviewReportDto | null>(null);
+
+  readonly feedback = computed(() => parseAiFeedback(this.report()?.aiFeedback));
 
   readonly eventRows = computed(() =>
     Object.entries(this.report()?.cheatingReport.eventsByType ?? {})

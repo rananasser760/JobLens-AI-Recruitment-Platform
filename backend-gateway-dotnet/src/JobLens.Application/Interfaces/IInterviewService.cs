@@ -14,5 +14,6 @@ public interface IInterviewService
     Task<ApiResponse<IReadOnlyList<VideoFlagDto>>> ProcessVideoFrameAsync(long interviewSessionId, string base64Frame, int sequence, CancellationToken cancellationToken);
     Task<ApiResponse<bool>> RecordBrowserEventAsync(BrowserEventRequest request, CancellationToken cancellationToken);
     Task<ApiResponse<InterviewReportDto>> CompleteAsync(long interviewSessionId, CancellationToken cancellationToken);
+    Task EndIntegritySessionQuietlyAsync(string? integritySessionId);
     Task<ApiResponse<InterviewReportDto>> GetReportAsync(long interviewSessionId, CancellationToken cancellationToken);
 }

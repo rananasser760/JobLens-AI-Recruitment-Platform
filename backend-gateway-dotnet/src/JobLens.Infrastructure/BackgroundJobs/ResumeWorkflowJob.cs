@@ -32,7 +32,7 @@ public sealed class ResumeWorkflowJob(
             return;
         }
 
-        if (resume.ParseStatus == "Parsing")
+        if (resume.ParseStatus == "Parsing" && resume.UpdatedAtUtc > DateTime.UtcNow.AddMinutes(-10))
         {
             throw new InvalidOperationException("Resume is currently being parsed by another process. Will retry later.");
         }
@@ -89,7 +89,13 @@ public sealed class ResumeWorkflowJob(
 
             if (parsed.Data.Skills is { Count: > 0 })
             {
-                resume.CandidateProfile.SkillsJson = ServiceJson.Serialize(parsed.Data.Skills);
+                var mergedSkills = ServiceJson.DeserializeStringList(resume.CandidateProfile.SkillsJson)
+                    .Concat(parsed.Data.Skills)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                resume.CandidateProfile.SkillsJson = ServiceJson.Serialize(mergedSkills);
             }
 
             if (!string.IsNullOrWhiteSpace(resume.ParsedResumeResult.Summary) && string.IsNullOrWhiteSpace(resume.CandidateProfile.Summary))

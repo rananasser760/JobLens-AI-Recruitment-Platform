@@ -194,7 +194,7 @@ async def parse_cv_text(req: CVParseTextRequest):
 async def ats_score(req: ATSRequest):
     try:
         parsed = parse_cv_with_llm(req.resume_text)
-        ats_result = analyze_ats_with_llm(parsed, req.job_description or req.resume_text)
+        ats_result = analyze_ats_with_llm(parsed, req.job_description or "")
         return StandardResponse(success=True, data=ats_result)
     except Exception as exc:
         return StandardResponse(success=False, message=str(exc))
@@ -204,7 +204,7 @@ async def ats_score(req: ATSRequest):
 async def cv_improvements(req: ImprovementRequest):
     try:
         parsed = parse_cv_with_llm(req.resume_text)
-        ats_result = analyze_ats_with_llm(parsed, req.resume_text)
+        ats_result = analyze_ats_with_llm(parsed, "")
         improvements = generate_improvements_with_llm(parsed, ats_result)
         return StandardResponse(success=True, data=improvements)
     except Exception as exc:
@@ -216,7 +216,7 @@ async def full_cv_analysis(req: CVFullAnalysisRequest):
     try:
         parsed = parse_cv_with_llm(req.resume_text)
         ai_result = get_ai_detector().analyze_text(req.resume_text)
-        ats_result = analyze_ats_with_llm(parsed, req.resume_text)
+        ats_result = analyze_ats_with_llm(parsed, "")
 
         data = {
             "parsed_cv": parsed,

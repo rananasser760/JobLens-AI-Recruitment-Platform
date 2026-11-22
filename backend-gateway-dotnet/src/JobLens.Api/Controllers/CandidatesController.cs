@@ -114,6 +114,11 @@ public sealed class CandidatesController(
             return BadRequest(new ApiResponse<bool>(false, false, "Invalid image file."));
         }
 
+        if (!UploadRules.HasAllowedExtension(file.FileName, UploadRules.ImageExtensions))
+        {
+            return BadRequest(new ApiResponse<bool>(false, false, "Profile image must be a PNG, JPG, WEBP or GIF file.", ["invalid_file_type"]));
+        }
+
         var profile = await dbContext.CandidateProfiles.FirstOrDefaultAsync(x => x.UserId == GetRequiredUserId(), cancellationToken);
         if (profile is null)
         {
@@ -147,6 +152,30 @@ public sealed class CandidatesController(
         }
     }
 
+    [AllowAnonymous]
+    [HttpGet("{candidateId:long}/image")]
+    public async Task<IActionResult> GetProfileImage(long candidateId, CancellationToken cancellationToken)
+    {
+        var path = await dbContext.CandidateProfiles
+            .Where(x => x.Id == candidateId)
+            .Select(x => x.ProfileImagePath)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return NotFound();
+        }
+
+        var bytes = await fileStorageService.ReadAsync(path, cancellationToken);
+        if (bytes is null)
+        {
+            return NotFound();
+        }
+
+        Response.Headers.CacheControl = "public, max-age=86400";
+        return File(bytes, UploadRules.ContentTypeFor(path));
+    }
+
     [Authorize(Roles = "Candidate")]
     [HttpGet("dashboard")]
     public async Task<IActionResult> GetDashboard(CancellationToken cancellationToken)
@@ -160,6 +189,7 @@ public sealed class CandidatesController(
 
         var applications = await dbContext.Applications
             .Include(x => x.JobPosting)
+            .ThenInclude(x => x.Company)
             .Include(x => x.AtsAssessments)
             .Where(x => x.CandidateProfileId == candidate.Id)
             .OrderByDescending(x => x.SubmittedAtUtc)
@@ -168,6 +198,7 @@ public sealed class CandidatesController(
         var interviews = await dbContext.InterviewSessions
             .Include(x => x.Application)
             .ThenInclude(x => x.JobPosting)
+            .Include(x => x.ProctoringEvents)
             .Where(x => x.Application.CandidateProfileId == candidate.Id)
             .ToListAsync(cancellationToken);
 
@@ -288,7 +319,7 @@ public sealed class CandidatesController(
                 string.IsNullOrWhiteSpace(x.Headline) ? null : x.Headline,
                 string.IsNullOrWhiteSpace(x.Location) ? null : x.Location,
                 x.YearsExperience,
-                string.IsNullOrWhiteSpace(x.ProfileImagePath) ? null : x.ProfileImagePath,
+                MediaUrls.CandidateImage(x.Id, x.ProfileImagePath),
                 ServiceJson.DeserializeStringList(x.SkillsJson).Take(5).ToArray()))
             .ToListAsync(cancellationToken);
 
@@ -311,6 +342,11 @@ public sealed class CandidatesController(
             return NotFound(new ApiResponse<CandidateProfileViewDto>(false, null, "Candidate profile not found.", ["not_found"]));
         }
 
+        if (User.IsInRole("Candidate") && profile.UserId != GetRequiredUserId())
+        {
+            return Forbid();
+        }
+
         var dto = await MapCandidateProfileAsync(profile, cancellationToken);
         return Ok(new ApiResponse<CandidateProfileViewDto>(true, dto));
     }
@@ -323,6 +359,11 @@ public sealed class CandidatesController(
         if (profile is null)
         {
             return NotFound(new ApiResponse<IReadOnlyList<CandidateSkillDto>>(false, null, "Candidate not found.", ["not_found"]));
+        }
+
+        if (User.IsInRole("Candidate") && profile.UserId != GetRequiredUserId())
+        {
+            return Forbid();
         }
 
         var skills = ServiceJson.DeserializeStringList(profile.SkillsJson)
@@ -462,7 +503,7 @@ public sealed class CandidatesController(
                 resume.ParsedResumeResult.ParsedAtUtc = DateTime.UtcNow;
             }
 
-            resume.ParseStatus = "Parsed";
+            resume.ParseStatus = "Completed";
             resume.UpdatedAtUtc = DateTime.UtcNow;
         }
 
@@ -545,8 +586,6 @@ public sealed class CandidatesController(
                     var expCount = expEl.GetArrayLength();
                     if (expCount > 0)
                     {
-                        profile.YearsExperience = Math.Max(profile.YearsExperience, expCount * 2);
-
                         if (string.IsNullOrWhiteSpace(profile.Location))
                         {
                             var firstExp = expEl[0];
@@ -618,7 +657,7 @@ public sealed class CandidatesController(
             string.IsNullOrWhiteSpace(profile.Summary) ? null : profile.Summary,
             string.IsNullOrWhiteSpace(profile.LinkedInUrl) ? null : profile.LinkedInUrl,
             string.IsNullOrWhiteSpace(profile.PortfolioUrl) ? null : profile.PortfolioUrl,
-            string.IsNullOrWhiteSpace(profile.ProfileImagePath) ? null : profile.ProfileImagePath,
+            MediaUrls.CandidateImage(profile.Id, profile.ProfileImagePath),
             profile.YearsExperience,
             profile.CreatedAtUtc,
             profile.UpdatedAtUtc,

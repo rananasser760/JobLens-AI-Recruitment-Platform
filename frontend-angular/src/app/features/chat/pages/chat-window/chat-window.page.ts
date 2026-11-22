@@ -11,7 +11,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ChatService, ChatMessageDto } from '../../../../core/services/chat.service';
+import { ChatService, ChatMessageDto, ChatAttachment } from '../../../../core/services/chat.service';
 import { AuthService } from '../../../../core/auth/auth.service';
 import { Subscription } from 'rxjs';
 
@@ -170,5 +170,21 @@ export class ChatWindowPage implements OnInit, OnDestroy, AfterViewChecked {
       this.messagesContainer.nativeElement.scrollTop =
         this.messagesContainer.nativeElement.scrollHeight;
     } catch (err) {}
+  }
+
+  openAttachment(attachment: ChatAttachment, event: Event) {
+    event.preventDefault();
+    this.chatService.downloadAttachment(attachment).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = attachment.fileName || 'attachment';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      },
+    });
   }
 }

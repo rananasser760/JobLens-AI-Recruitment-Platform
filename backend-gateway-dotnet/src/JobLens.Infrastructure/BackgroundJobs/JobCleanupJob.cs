@@ -15,7 +15,9 @@ public sealed class JobCleanupJob(
         var now = DateTime.UtcNow;
 
         var staleJobs = await dbContext.Jobs
-            .Where(x => x.IsActive && ((x.ExpiresAtUtc.HasValue && x.ExpiresAtUtc < now) || (x.PostedAtUtc.HasValue && x.PostedAtUtc < cutoff)))
+            .Where(x => x.IsActive && (
+                (x.ExpiresAtUtc.HasValue && x.ExpiresAtUtc < now) ||
+                (!x.ExpiresAtUtc.HasValue && x.SourceType == JobSourceType.External && x.PostedAtUtc.HasValue && x.PostedAtUtc < cutoff)))
             .ToListAsync();
 
         if (staleJobs.Count == 0)

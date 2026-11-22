@@ -1,3 +1,4 @@
+using JobLens.Api.Compatibility;
 using JobLens.Application.Common;
 using JobLens.Application.DTOs.Chat;
 using JobLens.Application.Interfaces;
@@ -101,56 +102,52 @@ public sealed class ChatController(
             return BadRequest(new ApiResponse<ChatAttachmentDto>(false, null, "File is required.", ["empty_file"]));
         }
 
+        if (!UploadRules.HasAllowedExtension(file.FileName, UploadRules.ChatExtensions))
+        {
+            return BadRequest(new ApiResponse<ChatAttachmentDto>(false, null, "Only PDF, Word, text and image files can be attached.", ["invalid_file_type"]));
+        }
+
         await using var stream = file.OpenReadStream();
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory, cancellationToken);
 
-        var storageKey = await fileStorageService.SaveAsync(file.FileName, memory.ToArray(), cancellationToken);
-
-        var attachment = new ChatAttachment
-        {
-            FileName = Path.GetFileName(file.FileName),
-            FileUrl = $"/api/chat/attachments/{storageKey}",
-            FileType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
-            FileSize = file.Length,
-        };
-
-        dbContext.ChatAttachments.Add(attachment);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        var dto = new ChatAttachmentDto
-        {
-            Id = attachment.Id,
-            FileName = attachment.FileName,
-            FileUrl = attachment.FileUrl,
-            FileType = attachment.FileType,
-            FileSize = attachment.FileSize,
-        };
+        var dto = await chatService.SaveAttachmentAsync(
+            GetRequiredUserId(),
+            file.FileName,
+            UploadRules.ContentTypeFor(file.FileName),
+            memory.ToArray(),
+            cancellationToken);
 
         return Ok(new ApiResponse<ChatAttachmentDto>(true, dto, "Attachment uploaded successfully."));
     }
 
-    [HttpGet("attachments/{storageKey}")]
-    public async Task<IActionResult> DownloadAttachment([FromRoute] string storageKey, CancellationToken cancellationToken)
+    [HttpGet("attachments/{attachmentId:long}")]
+    public async Task<IActionResult> DownloadAttachment([FromRoute] long attachmentId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(storageKey))
+        var userId = GetRequiredUserId();
+        var attachment = await dbContext.ChatAttachments
+            .Include(a => a.Message)
+            .ThenInclude(m => m!.Conversation)
+            .FirstOrDefaultAsync(a => a.Id == attachmentId, cancellationToken);
+
+        if (attachment is null || string.IsNullOrWhiteSpace(attachment.StorageKey))
         {
-            return BadRequest();
+            return NotFound(new ApiResponse<bool>(false, false, "Attachment not found.", ["not_found"]));
         }
 
-        var attachment = await dbContext.ChatAttachments.FirstOrDefaultAsync(
-            a => a.FileUrl.EndsWith(storageKey),
-            cancellationToken);
+        var conversation = attachment.Message?.Conversation;
+        var isParticipant = conversation is not null && (conversation.Participant1Id == userId || conversation.Participant2Id == userId);
+        if (attachment.UploadedByUserId != userId && !isParticipant)
+        {
+            return Forbid();
+        }
 
-        var bytes = await fileStorageService.ReadAsync(storageKey, cancellationToken);
+        var bytes = await fileStorageService.ReadAsync(attachment.StorageKey, cancellationToken);
         if (bytes is null)
         {
             return NotFound(new ApiResponse<bool>(false, false, "Attachment file not found.", ["not_found"]));
         }
 
-        var contentType = attachment?.FileType ?? "application/octet-stream";
-        var fileName = attachment?.FileName ?? storageKey;
-
-        return File(bytes, contentType, fileName);
+        return File(bytes, UploadRules.ContentTypeFor(attachment.FileName), attachment.FileName);
     }
 }

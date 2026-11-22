@@ -126,6 +126,28 @@ async def analyze_audio(request: AudioAnalysisRequest):
     session_lock: asyncio.Lock = session.setdefault("lock", asyncio.Lock())
 
     async with session_lock:
+        if session.get("completed"):
+            return _envelope_ok({
+                "transcript": "",
+                "reply": "This interview has already finished. Thank you for your time.",
+                "isComplete": True,
+                "score": None,
+                "flags": ["interview_already_complete"],
+                "replyAudioBase64": None,
+                "replyAudioMimeType": None,
+            })
+
+        if request.sequence == session.get("last_sequence"):
+            return _envelope_ok({
+                "transcript": "",
+                "reply": "",
+                "isComplete": False,
+                "score": None,
+                "flags": ["duplicate_chunk"],
+                "replyAudioBase64": None,
+                "replyAudioMimeType": None,
+            })
+
         try:
             flags: list[str] = []
             transcript = ""
@@ -171,6 +193,7 @@ async def analyze_audio(request: AudioAnalysisRequest):
 
             session.setdefault("history", []).append({"role": "user", "content": transcript})
             session["turn_count"] = int(session.get("turn_count", 0)) + 1
+            session["last_sequence"] = request.sequence
 
             is_complete = session["turn_count"] >= int(session.get("max_questions", 5))
             score = None
@@ -187,6 +210,7 @@ async def analyze_audio(request: AudioAnalysisRequest):
                         session.get("criteria", ""),
                     )
                     session["summary"] = summary
+                    session["completed"] = True
                     score = float(summary.get("score", 0.0)) if isinstance(summary, dict) else None
                 except InterviewProviderError as exc:
                     return _envelope_error(exc.code, str(exc))
@@ -285,6 +309,7 @@ async def finalize_interview(request: FinalizeInterviewRequest):
                 except InterviewProviderError as exc:
                     return _envelope_error(exc.code, str(exc))
 
+            session["completed"] = True
             return _envelope_ok({
                 "finalScore": float(summary.get("score", 0.0)),
                 "verdict": str(summary.get("recommendation", "Requires manual review")),
@@ -294,7 +319,6 @@ async def finalize_interview(request: FinalizeInterviewRequest):
                         "review": summary.get("review", ""),
                         "strengths": summary.get("strengths", []),
                         "weaknesses": summary.get("weaknesses", []),
-                        "recommendation": summary.get("recommendation", ""),
                     },
                     ensure_ascii=False,
                 ),

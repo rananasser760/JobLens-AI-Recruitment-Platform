@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Hangfire;
+using JobLens.Api.Compatibility;
 using JobLens.Api.Contracts;
+using JobLens.Api.Security;
 using JobLens.Application.Common;
 using JobLens.Application.DTOs.Resumes;
 using JobLens.Application.Interfaces;
@@ -10,6 +12,7 @@ using JobLens.Infrastructure.Persistence;
 using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobLens.Api.Controllers;
@@ -26,6 +29,7 @@ public sealed class ResumesController(
 {
     [HttpPost]
     [RequestSizeLimit(15_000_000)]
+    [EnableRateLimiting(RateLimitPolicies.Ai)]
     public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromQuery] bool isDefault = false, [FromQuery] bool parseNow = true, CancellationToken cancellationToken = default)
     {
         if (file is null || file.Length == 0)
@@ -33,11 +37,16 @@ public sealed class ResumesController(
             return BadRequest(new ApiResponse<ResumeViewDto>(false, null, "File is required.", ["empty_file"]));
         }
 
+        if (!UploadRules.HasAllowedExtension(file.FileName, UploadRules.ResumeExtensions))
+        {
+            return BadRequest(new ApiResponse<ResumeViewDto>(false, null, "Resume must be a PDF, DOCX, PNG or JPG file.", ["invalid_file_type"]));
+        }
+
         await using var stream = file.OpenReadStream();
         using var memory = new MemoryStream();
         await stream.CopyToAsync(memory, cancellationToken);
 
-        var request = new ResumeUploadRequest(file.FileName, file.ContentType, memory.ToArray(), isDefault);
+        var request = new ResumeUploadRequest(file.FileName, UploadRules.ContentTypeFor(file.FileName), memory.ToArray(), isDefault);
         var result = await resumeService.UploadAsync(GetRequiredUserId(), request, parseNow, cancellationToken);
         if (!result.Success || result.Data is null)
         {
@@ -107,25 +116,13 @@ public sealed class ResumesController(
         var linkedApplicationsCount = await dbContext.Applications
             .CountAsync(x => x.ResumeId == resume.Id, cancellationToken);
 
-        if (linkedApplicationsCount > 0 && fallbackResume is null)
+        if (linkedApplicationsCount > 0)
         {
             return Conflict(new ApiResponse<bool>(
                 false,
                 false,
-                "This resume is used by existing applications. Upload another resume before deleting this one.",
+                "This resume was submitted with one or more applications and cannot be deleted.",
                 ["resume_in_use"]));
-        }
-
-        if (linkedApplicationsCount > 0 && fallbackResume is not null)
-        {
-            var linkedApplications = await dbContext.Applications
-                .Where(x => x.ResumeId == resume.Id)
-                .ToListAsync(cancellationToken);
-
-            foreach (var application in linkedApplications)
-            {
-                application.ResumeId = fallbackResume.Id;
-            }
         }
 
         if (resume.IsDefault && fallbackResume is not null)
@@ -201,7 +198,7 @@ public sealed class ResumesController(
             return BadRequest(new ApiResponse<bool>(false, false, "This resume has no extractable text."));
         }
 
-        if (resume.ParseStatus is "Queued" or "Parsing")
+        if (resume.ParseStatus is "Queued" or "Parsing" && resume.UpdatedAtUtc > DateTime.UtcNow.AddMinutes(-10))
         {
             return Ok(new ApiResponse<bool>(true, true, "Resume parsing is already in progress."));
         }
@@ -219,6 +216,7 @@ public sealed class ResumesController(
         return Ok(new ApiResponse<bool>(true, true, "Resume parsing queued."));
     }
 
+    [EnableRateLimiting(RateLimitPolicies.Ai)]
     [HttpGet("{resumeId:long}/ats-score")]
     public async Task<IActionResult> GetStoredAtsScore(long resumeId, [FromQuery] long? jobId, CancellationToken cancellationToken)
     {
@@ -232,7 +230,7 @@ public sealed class ResumesController(
         if (jobId.HasValue && jobId.Value > 0)
         {
             var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId.Value, cancellationToken);
-            jobDescription = job?.Description ?? resume.RawText;
+            jobDescription = job?.Description ?? string.Empty;
         }
         else
         {
@@ -240,7 +238,7 @@ public sealed class ResumesController(
                 .Where(x => x.ResumeId == resume.Id)
                 .Select(x => x.JobPosting.Description)
                 .FirstOrDefaultAsync(cancellationToken)
-                ?? resume.RawText;
+                ?? string.Empty;
         }
 
         var ai = await aiBackendClient.ScoreAtsAsync(resume.RawText, jobDescription, cancellationToken);
@@ -257,6 +255,7 @@ public sealed class ResumesController(
     public async Task<IActionResult> GetParsed(long resumeId, CancellationToken cancellationToken) =>
         Ok(await resumeService.GetParsedResumeAsync(GetRequiredUserId(), resumeId, cancellationToken));
 
+    [EnableRateLimiting(RateLimitPolicies.Ai)]
     [HttpPost("parse-text")]
     public async Task<IActionResult> ParseText([FromBody] ResumeTextRequest request, CancellationToken cancellationToken)
     {
@@ -269,10 +268,11 @@ public sealed class ResumesController(
         return Ok(new ApiResponse<ParsedResumeResultDto>(true, ai.Data));
     }
 
+    [EnableRateLimiting(RateLimitPolicies.Ai)]
     [HttpPost("ats-score-text")]
     public async Task<IActionResult> AtsScoreText([FromBody] ResumeTextAtsRequest request, CancellationToken cancellationToken)
     {
-        var ai = await aiBackendClient.ScoreAtsAsync(request.ResumeText, request.JobDescription ?? request.ResumeText, cancellationToken);
+        var ai = await aiBackendClient.ScoreAtsAsync(request.ResumeText, request.JobDescription ?? string.Empty, cancellationToken);
         if (!ai.Success || ai.Data is null)
         {
             return BadRequest(new ApiResponse<AtsScoreDto>(false, null, ai.Error?.Message ?? "Could not score resume text."));
@@ -282,10 +282,11 @@ public sealed class ResumesController(
         return Ok(new ApiResponse<AtsScoreDto>(true, dto));
     }
 
+    [EnableRateLimiting(RateLimitPolicies.Ai)]
     [HttpPost("improvements")]
     public async Task<IActionResult> Improvements([FromBody] ResumeTextRequest request, CancellationToken cancellationToken)
     {
-        var ai = await aiBackendClient.ScoreAtsAsync(request.ResumeText, request.ResumeText, cancellationToken);
+        var ai = await aiBackendClient.ScoreAtsAsync(request.ResumeText, string.Empty, cancellationToken);
         if (!ai.Success || ai.Data is null)
         {
             return BadRequest(new ApiResponse<object>(false, null, ai.Error?.Message ?? "Could not analyze resume text."));
@@ -302,11 +303,12 @@ public sealed class ResumesController(
         return Ok(new ApiResponse<object>(true, payload));
     }
 
+    [EnableRateLimiting(RateLimitPolicies.Ai)]
     [HttpPost("full-analysis")]
     public async Task<IActionResult> FullAnalysis([FromBody] ResumeFullAnalysisRequest request, CancellationToken cancellationToken)
     {
         var parse = await aiBackendClient.ParseResumeTextAsync(request.ResumeText, cancellationToken);
-        var ats = await aiBackendClient.ScoreAtsAsync(request.ResumeText, request.ResumeText, cancellationToken);
+        var ats = await aiBackendClient.ScoreAtsAsync(request.ResumeText, string.Empty, cancellationToken);
 
         if (!parse.Success || parse.Data is null || !ats.Success || ats.Data is null)
         {
@@ -342,7 +344,7 @@ public sealed class ResumesController(
             return NotFound(new ApiResponse<bool>(false, false, "Resume file not found.", ["not_found"]));
         }
 
-        return File(bytes, resume.ContentType, resume.FileName);
+        return File(bytes, UploadRules.ContentTypeFor(resume.FileName), resume.FileName);
     }
 
     private async Task<Resume?> LoadResumeAsync(long resumeId, CancellationToken cancellationToken)

@@ -19,5 +19,6 @@ public interface IAiBackendClient
     Task<InternalApiEnvelope<InterviewSessionInitResponseDto>> StartInterviewSessionAsync(StartInterviewAiRequest request, CancellationToken cancellationToken);
     Task<InternalApiEnvelope<AudioAnalysisResponseDto>> AnalyzeAudioAsync(AudioAnalysisRequest request, CancellationToken cancellationToken);
     Task<InternalApiEnvelope<VideoAnalysisResponseDto>> AnalyzeVideoAsync(VideoAnalysisRequest request, CancellationToken cancellationToken);
+    Task<InternalApiEnvelope<bool>> EndIntegritySessionAsync(string integritySessionId, CancellationToken cancellationToken);
     Task<InternalApiEnvelope<InterviewFinalizationResponseDto>> FinalizeInterviewAsync(FinalizeInterviewRequest request, CancellationToken cancellationToken);
 }

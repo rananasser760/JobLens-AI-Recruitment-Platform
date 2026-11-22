@@ -2,10 +2,14 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
+ENV NG_CLI_ANALYTICS=false \
+    CI=true
 COPY . .
-RUN npm run build
+RUN --mount=type=cache,target=/app/.angular/cache \
+    npm run build
 
 FROM nginx:alpine
 COPY --from=build /app/dist/GP_front/browser /usr/share/nginx/html

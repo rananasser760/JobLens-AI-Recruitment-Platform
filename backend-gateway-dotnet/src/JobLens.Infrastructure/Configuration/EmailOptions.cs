@@ -12,4 +12,5 @@ public sealed class EmailOptions
     public bool UseSsl { get; set; } = true;
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    public bool LogLinksWhenDisabled { get; set; } = false;
 }

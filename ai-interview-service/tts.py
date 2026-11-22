@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 import uuid
 import wave
 from typing import Any, Optional
@@ -90,6 +91,22 @@ def _write_silent_wav(output_path: str, seconds: float = 0.5, sample_rate: int =
     return output_path
 
 
+def _purge_stale_audio(target_dir: str, max_age_seconds: float = 600.0) -> None:
+    cutoff = time.time() - max_age_seconds
+    try:
+        for name in os.listdir(target_dir):
+            if not name.startswith("response_"):
+                continue
+            path = os.path.join(target_dir, name)
+            try:
+                if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                    os.remove(path)
+            except OSError:
+                continue
+    except OSError:
+        pass
+
+
 def text_to_speech_file(text: str) -> str:
     """
     Converts text to an audio file (.wav or .mp3) and returns its absolute path.
@@ -101,6 +118,7 @@ def text_to_speech_file(text: str) -> str:
 
     target_dir = os.path.abspath("temp_audio")
     os.makedirs(target_dir, exist_ok=True)
+    _purge_stale_audio(target_dir)
     uid = uuid.uuid4().hex
 
     # 1. Primary Coqui synthesis (.wav)

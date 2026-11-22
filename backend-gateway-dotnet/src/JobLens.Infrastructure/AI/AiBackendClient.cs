@@ -72,6 +72,9 @@ public sealed class AiBackendClient(HttpClient httpClient) : IAiBackendClient
             request,
             cancellationToken);
 
+    public Task<InternalApiEnvelope<bool>> EndIntegritySessionAsync(string integritySessionId, CancellationToken cancellationToken) =>
+        PostAsync<object, bool>("/internal/v1/integrity/sessions/end", new { integritySessionId }, cancellationToken);
+
     public Task<InternalApiEnvelope<InterviewFinalizationResponseDto>> FinalizeInterviewAsync(FinalizeInterviewRequest request, CancellationToken cancellationToken) =>
         PostAsync<FinalizeInterviewRequest, InterviewFinalizationResponseDto>("/internal/v1/interviews/finalize", request, cancellationToken);
 

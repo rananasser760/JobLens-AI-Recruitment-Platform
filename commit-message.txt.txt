@@ -1,0 +1,33 @@
+Harden security, add production deployment, and fix AI pipeline
+
+Security
+- JWT signing key from env; reject weak keys and missing AI API key in production
+- Separate refresh tokens (token_type claim), password-stamp invalidation
+- Rate limiting on auth and AI-heavy endpoints; forwarded headers
+- Ownership/role checks on interviews, applications, jobs, candidates, chat and SignalR hubs
+- Recruiters can no longer join a company already claimed by another recruiter
+- Chat attachments downloaded through an authorized endpoint; path traversal guard in file storage
+- Admin/demo seeding only when explicitly configured; secrets removed from appsettings
+
+Reliability
+- ATS scoring moved to a Hangfire job with retries and a re-queue sweep
+- Startup migration retries while SQL Server finishes coming online
+- Fixed duplicate VectorIndexEntries race in recommendation refresh
+- Integrity sessions ended on interview completion; per-session processors
+- nginx AI gateway re-resolves service DNS so rebuilt containers are reachable
+
+AI services
+- Free OpenRouter models only, defaulting to Nemotron 3 Ultra with openrouter/free fallback
+- Shared JSON helper: skips models no longer free, repairs truncated/malformed JSON
+- ATS fails loudly instead of returning a fake score; CV text treated as untrusted
+- Parakeet STT and TTS preloaded at service startup
+
+Frontend
+- Interview self-view no longer plays the candidate's own microphone
+- AI feedback rendered as review, strengths and weaknesses instead of raw JSON
+- Token refresh de-duplicated; guard refreshes expired sessions
+- Production build: same-origin API, no build-time font inlining, build cache
+
+Deployment
+- docker-compose.prod.yml with Caddy (automatic HTTPS), internal-only SQL/AI ports
+- Root .env.example, DEPLOY.md, .dockerignore files, BuildKit caches to avoid re-downloads

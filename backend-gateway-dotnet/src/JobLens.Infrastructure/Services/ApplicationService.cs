@@ -11,7 +11,6 @@ namespace JobLens.Infrastructure.Services;
 
 public sealed class ApplicationService(
     Persistence.JobLensDbContext dbContext,
-    IAiBackendClient aiBackendClient,
     IBackgroundJobClient backgroundJobs) : IApplicationService
 {
     public async Task<ApiResponse<ApplicationDto>> CreateAsync(long candidateUserId, CreateApplicationRequest request, CancellationToken cancellationToken)
@@ -77,42 +76,9 @@ public sealed class ApplicationService(
             return new ApiResponse<ApplicationDto>(true, ToDto(application, job, null), "External job tracked. Redirect to source to finish applying.");
         }
 
-        // Attempt immediate ATS evaluation with a bounded timeout
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
-
-        try
+        if (string.IsNullOrWhiteSpace(resume.RawText) || string.IsNullOrWhiteSpace(job.Description))
         {
-            if (!string.IsNullOrWhiteSpace(resume.RawText) && !string.IsNullOrWhiteSpace(job.Description))
-            {
-                var ats = await aiBackendClient.ScoreAtsAsync(resume.RawText, job.Description, timeoutCts.Token);
-                if (ats.Success && ats.Data is not null)
-                {
-                    var assessment = new AtsAssessment
-                    {
-                        ApplicationId = application.Id,
-                        Status = "Completed",
-                        Score = ats.Data.Score,
-                        Summary = ats.Data.Summary ?? string.Empty,
-                        MissingSkillsJson = ServiceJson.Serialize(ats.Data.MissingSkills ?? []),
-                        SuggestionsJson = ServiceJson.Serialize(ats.Data.Suggestions ?? []),
-                        RawResponseJson = ServiceJson.Serialize(ats.Data),
-                        EvaluatedAtUtc = DateTime.UtcNow,
-                    };
-
-                    application.Status = ats.Data.Score >= 65 ? ApplicationStatus.AtsQualified : ApplicationStatus.AtsRejected;
-                    application.ReviewedAtUtc = DateTime.UtcNow;
-                    dbContext.AtsAssessments.Add(assessment);
-                    await dbContext.SaveChangesAsync(cancellationToken);
-
-                    backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(candidate.Id));
-                    return new ApiResponse<ApplicationDto>(true, ToDto(application, job, ats.Data.Score), "Application submitted and evaluated.");
-                }
-            }
-        }
-        catch
-        {
-            // Fall back to queued background assessment
+            return new ApiResponse<ApplicationDto>(true, ToDto(application, job, null), "Application submitted for manual review.");
         }
 
         application.Status = ApplicationStatus.AtsPending;
@@ -123,8 +89,8 @@ public sealed class ApplicationService(
         });
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        backgroundJobs.Enqueue<RecommendationRefreshJob>(j => j.RefreshCandidateAsync(candidate.Id));
-        return new ApiResponse<ApplicationDto>(true, ToDto(application, job, null), "Application submitted. ATS evaluation queued.");
+        backgroundJobs.Enqueue<AtsScoringJob>(j => j.ScoreApplicationAsync(application.Id));
+        return new ApiResponse<ApplicationDto>(true, ToDto(application, job, null), "Application submitted. ATS evaluation is in progress.");
     }
 
     public async Task<ApiResponse<IReadOnlyList<ApplicationDto>>> GetCandidateApplicationsAsync(long candidateUserId, CancellationToken cancellationToken)

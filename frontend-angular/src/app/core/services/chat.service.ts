@@ -1,4 +1,5 @@
 import { Injectable, NgZone, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import {
   HubConnection,
   HubConnectionBuilder,
@@ -54,6 +55,7 @@ export type ChatConversationDto = ChatConversation;
 })
 export class ChatService {
   private readonly api = inject(ApiClientService);
+  private readonly http = inject(HttpClient);
   private readonly tokenStore = inject(TokenStoreService);
   private readonly zone = inject(NgZone);
 
@@ -68,6 +70,10 @@ export class ChatService {
 
   private readonly typingIndicatorSubject = new Subject<{ userId: number; isTyping: boolean }>();
   public readonly typingIndicator$ = this.typingIndicatorSubject.asObservable();
+
+  public downloadAttachment(attachment: ChatAttachment): Observable<Blob> {
+    return this.http.get(this.api.buildUrl(attachment.fileUrl), { responseType: 'blob' });
+  }
 
   public async startConnection(): Promise<void> {
     if (this.hubConnection && this.hubConnection.state === HubConnectionState.Connected) {

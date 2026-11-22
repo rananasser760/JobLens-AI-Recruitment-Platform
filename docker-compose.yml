@@ -1,14 +1,12 @@
-version: "3.8"
-
 services:
   sql-server:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: joblens-sql-server
     ports:
-      - "1433:1433"
+      - "127.0.0.1:1433:1433"
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD=SuperStrong!Passw0rd
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env}
     volumes:
       - mssql_data:/var/opt/mssql
     restart: unless-stopped
@@ -16,7 +14,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'SuperStrong!Passw0rd' -C -Q 'SELECT 1' || exit 1",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1",
         ]
       interval: 10s
       timeout: 5s
@@ -28,11 +26,16 @@ services:
       context: ./ai-integrity-service
       dockerfile: Dockerfile
     container_name: joblens-ai-integrity
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
+    env_file:
+      - ./ai-integrity-service/.env
     environment:
       - JOBLENS_ENV=development
-      - AI_SQLSERVER_CONNECTION_STRING=Server=sql-server;Database=GPAi;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
-      - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
+      - AI_SQLSERVER_CONNECTION_STRING=Server=sql-server;Database=GPAi;UID=sa;PWD=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;
+      - JOBLENS_INTERNAL_API_KEY=${JOBLENS_INTERNAL_API_KEY:?Set JOBLENS_INTERNAL_API_KEY in .env}
+      - JOBLENS_ENABLE_PUBLIC_ROUTES=false
       - PORT=8000
+      - WATCHFILES_FORCE_POLLING=true
     depends_on:
       sql-server:
         condition: service_healthy
@@ -40,7 +43,6 @@ services:
       - ./ai-integrity-service:/app
       - huggingface_cache:/root/.cache/huggingface
       - torch_cache:/root/.cache/torch
-      - chroma_cache:/root/.cache/chroma
     restart: unless-stopped
 
   ai-recruitment-service:
@@ -48,13 +50,22 @@ services:
       context: ./ai-recruitment-service
       dockerfile: Dockerfile
     container_name: joblens-ai-recruitment
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
     env_file:
       - ./ai-recruitment-service/.env
     environment:
       - JOBLENS_ENV=development
-      - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
+      - JOBLENS_INTERNAL_API_KEY=${JOBLENS_INTERNAL_API_KEY}
       - JOBLENS_CHROMA_PATH=/root/.cache/chroma
+      - JOBLENS_ENABLE_PUBLIC_ROUTES=false
+      - JOBLENS_PARSING_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
+      - JOBLENS_PARSING_FALLBACK_MODEL=openrouter/free
+      - JOBLENS_ATS_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
+      - JOBLENS_SCORING_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
+      - JOBLENS_OCR_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
+      - JOBLENS_SCRAPER_ENRICHMENT_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
       - PORT=8000
+      - WATCHFILES_FORCE_POLLING=true
     volumes:
       - ./ai-recruitment-service:/app
       - huggingface_cache:/root/.cache/huggingface
@@ -67,24 +78,27 @@ services:
       context: ./ai-interview-service
       dockerfile: Dockerfile
     container_name: joblens-ai-interview
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
     env_file:
       - ./ai-interview-service/.env
     environment:
       - JOBLENS_ENV=development
-      - JOBLENS_INTERNAL_API_KEY=super_secure_internal_shared_key_123
-      - JOBLENS_INTERVIEW_MODEL=mistralai/mistral-small-3.2-24b-instruct
+      - JOBLENS_INTERNAL_API_KEY=${JOBLENS_INTERNAL_API_KEY}
+      - JOBLENS_INTERVIEW_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
       - PORT=8000
+      - WATCHFILES_FORCE_POLLING=true
     volumes:
       - ./ai-interview-service:/app
       - huggingface_cache:/root/.cache/huggingface
       - torch_cache:/root/.cache/torch
+      - tts_cache:/root/.local/share/tts
     restart: unless-stopped
 
   ai-gateway:
     image: nginx:alpine
     container_name: joblens-ai-gateway
     ports:
-      - "8000:80"
+      - "127.0.0.1:8000:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -104,10 +118,11 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_HTTP_PORTS=5245
       - AIBackend__BaseUrl=http://ai-gateway:80
-      - AIBackend__ApiKey=super_secure_internal_shared_key_123
-      - ConnectionStrings__DefaultConnection=Server=sql-server;Database=GPDot;UID=sa;PWD=SuperStrong!Passw0rd;TrustServerCertificate=True;
-      - JWT_SIGNING_KEY=your_super_secret_secure_jwt_signing_key_for_production_min_32_chars
+      - AIBackend__ApiKey=${JOBLENS_INTERNAL_API_KEY}
+      - ConnectionStrings__DefaultConnection=Server=sql-server;Database=GPDot;UID=sa;PWD=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;
+      - JWT_SIGNING_KEY=${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}
       - Storage__RootPath=/app/data/storage
+      - DOTNET_USE_POLLING_FILE_WATCHER=true
     volumes:
       - ./backend-gateway-dotnet:/src
       - dotnet_storage:/app/data/storage
@@ -139,6 +154,7 @@ volumes:
   mssql_data:
   huggingface_cache:
   torch_cache:
+  tts_cache:
   chroma_cache:
   dotnet_storage:
   nuget_cache:

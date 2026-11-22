@@ -41,6 +41,8 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # 3. Database (Don't commit real database or candidate data)
+backend-gateway-dotnet/data/
+**/data/storage/
 joblens.db
 joblens_db/
 *.db
@@ -109,3 +111,5 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+Claude outputs/

@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using JobLens.Api.Contracts;
+using JobLens.Api.Security;
 using JobLens.Application.Common;
 using JobLens.Application.DTOs.Auth;
 using JobLens.Application.Interfaces;
@@ -8,6 +9,7 @@ using JobLens.Infrastructure.Configuration;
 using JobLens.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -24,6 +26,7 @@ public sealed class AuthController(
     ILogger<AuthController> logger) : AppControllerBase
 {
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterCompatRequest request, CancellationToken cancellationToken)
     {
@@ -75,6 +78,7 @@ public sealed class AuthController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
@@ -99,28 +103,25 @@ public sealed class AuthController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("refresh-token")]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.AccessToken) || string.IsNullOrWhiteSpace(request.RefreshToken))
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
         {
             return Unauthorized(new ApiResponse<AuthSessionDto>(false, null, "Invalid refresh payload.", ["invalid_refresh"]));
         }
 
-        var principal = tokenService.GetPrincipalFromToken(request.AccessToken, validateLifetime: false);
-        var rawUserId = principal?.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? principal?.FindFirstValue(JwtRegisteredClaimNames.Sub)
-            ?? principal?.FindFirstValue("sub");
-
-        if (!long.TryParse(rawUserId, out var userId))
+        var userId = tokenService.ReadRefreshTokenUserId(request.RefreshToken);
+        if (userId is null)
         {
-            return Unauthorized(new ApiResponse<AuthSessionDto>(false, null, "Invalid access token.", ["invalid_token"]));
+            return Unauthorized(new ApiResponse<AuthSessionDto>(false, null, "Refresh token is invalid or expired.", ["invalid_refresh"]));
         }
 
-        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId && x.IsActive, cancellationToken);
-        if (user is null)
+        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Id == userId.Value && x.IsActive, cancellationToken);
+        if (user is null || !tokenService.ValidateRefreshToken(request.RefreshToken, user))
         {
-            return Unauthorized(new ApiResponse<AuthSessionDto>(false, null, "User not found or account is deactivated.", ["not_found"]));
+            return Unauthorized(new ApiResponse<AuthSessionDto>(false, null, "Refresh token is invalid or expired.", ["invalid_refresh"]));
         }
 
         var token = tokenService.GenerateToken(user);
@@ -164,6 +165,7 @@ public sealed class AuthController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -196,6 +198,7 @@ public sealed class AuthController(
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -238,7 +241,7 @@ public sealed class AuthController(
 
     private async Task<AuthSessionDto> BuildAuthSessionAsync(Domain.Entities.User user, string accessToken, DateTime expiresAtUtc, CancellationToken cancellationToken)
     {
-        var refreshToken = Convert.ToBase64String(Guid.NewGuid().ToByteArray());
+        var refreshToken = tokenService.GenerateRefreshToken(user).RefreshToken;
         long? profileId = null;
 
         if (user.Role == Domain.Enums.AppRole.Candidate)

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Hangfire;
 using JobLens.Api.Compatibility;
 using JobLens.Api.Contracts;
+using JobLens.Api.Security;
 using JobLens.Application.Common;
 using JobLens.Application.DTOs.Jobs;
 using JobLens.Application.Interfaces;
@@ -11,6 +12,7 @@ using JobLens.Infrastructure.Persistence;
 using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobLens.Api.Controllers;
@@ -100,6 +102,7 @@ public sealed class JobsController(
                 x.SalaryRange,
                 PostedAt = x.PostedAtUtc ?? x.CreatedAtUtc,
                 CompanyName = x.Company != null ? x.Company.Name : null,
+                x.CompanyId,
                 CompanyLogo = x.Company != null && !string.IsNullOrWhiteSpace(x.Company.LogoUrl) ? x.Company.LogoUrl : null,
                 x.SourceType,
                 x.SkillsJson,
@@ -118,7 +121,7 @@ public sealed class JobsController(
                 string.IsNullOrWhiteSpace(x.SalaryRange) ? null : x.SalaryRange,
                 x.PostedAt,
                 CoalesceText(x.CompanyName, ReadMetadataString(x.MetadataJson, "company")),
-                x.CompanyLogo,
+                MediaUrls.CompanyLogo(x.CompanyId, x.CompanyLogo),
                 FrontendStatusMapper.ToFrontend(x.SourceType),
                 ServiceJson.DeserializeStringList(x.SkillsJson).Take(6).ToArray(),
                 null,
@@ -143,7 +146,10 @@ public sealed class JobsController(
             return NotFound(new ApiResponse<JobViewDto>(false, null, "Job not found.", ["not_found"]));
         }
 
-        return Ok(new ApiResponse<JobViewDto>(true, ToJobView(job)));
+        var canManage = User.Identity?.IsAuthenticated == true
+            && (User.IsInRole("Admin") || (User.IsInRole("Recruiter") && await CanManageJobAsync(jobId, cancellationToken)));
+
+        return Ok(new ApiResponse<JobViewDto>(true, ToJobView(job, includeInterviewDefaults: canManage)));
     }
 
     [Authorize(Roles = "Recruiter,Admin")]
@@ -443,6 +449,7 @@ public sealed class JobsController(
     }
 
     [Authorize(Roles = "Candidate")]
+    [EnableRateLimiting(RateLimitPolicies.Ai)]
     [HttpPost("recommendations/match-from-text")]
     public async Task<IActionResult> MatchFromText([FromBody] MatchJobsFromTextRequest request, [FromQuery] int limit = 5, CancellationToken cancellationToken = default)
     {
@@ -512,7 +519,7 @@ public sealed class JobsController(
                     candidate?.User?.DisplayName ?? "Candidate",
                     string.IsNullOrWhiteSpace(candidate?.Headline) ? null : candidate.Headline,
                     string.IsNullOrWhiteSpace(candidate?.Location) ? null : candidate.Location,
-                    string.IsNullOrWhiteSpace(candidate?.ProfileImagePath) ? null : candidate.ProfileImagePath,
+                    candidate is null ? null : MediaUrls.CandidateImage(candidate.Id, candidate.ProfileImagePath),
                     candidate?.YearsExperience,
                     ServiceJson.DeserializeStringList(candidate?.SkillsJson ?? "[]").Take(8).ToArray(),
                     NormalizeRecommendationScore(x.Score),
@@ -537,9 +544,10 @@ public sealed class JobsController(
         }
 
         var query = dbContext.Jobs.Include(x => x.Company).AsQueryable();
-        if (recruiter is not null && recruiter.CompanyId.HasValue)
+        if (!User.IsInRole("Admin"))
         {
-            query = query.Where(x => x.CompanyId == recruiter.CompanyId.Value);
+            var companyId = recruiter?.CompanyId ?? -1;
+            query = query.Where(x => x.CompanyId == companyId);
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -559,6 +567,7 @@ public sealed class JobsController(
                 x.SalaryRange,
                 PostedAt = x.PostedAtUtc ?? x.CreatedAtUtc,
                 CompanyName = x.Company != null ? x.Company.Name : null,
+                x.CompanyId,
                 CompanyLogo = x.Company != null && !string.IsNullOrWhiteSpace(x.Company.LogoUrl) ? x.Company.LogoUrl : null,
                 x.SourceType,
                 x.SkillsJson,
@@ -577,7 +586,7 @@ public sealed class JobsController(
                 string.IsNullOrWhiteSpace(x.SalaryRange) ? null : x.SalaryRange,
                 x.PostedAt,
                 CoalesceText(x.CompanyName, ReadMetadataString(x.MetadataJson, "company")),
-                x.CompanyLogo,
+                MediaUrls.CompanyLogo(x.CompanyId, x.CompanyLogo),
                 FrontendStatusMapper.ToFrontend(x.SourceType),
                 ServiceJson.DeserializeStringList(x.SkillsJson).Take(6).ToArray(),
                 null,
@@ -904,7 +913,7 @@ public sealed class JobsController(
         }));
     }
 
-    [Authorize(Roles = "Recruiter,Admin")]
+    [Authorize(Roles = "Admin")]
     [HttpPost("scraping/trigger")]
     public async Task<IActionResult> TriggerScraping([FromQuery] int? maxCategories, CancellationToken cancellationToken)
     {
@@ -943,7 +952,7 @@ public sealed class JobsController(
         return job is not null && job.CompanyId == recruiter.CompanyId;
     }
 
-    private static JobViewDto ToJobView(Domain.Entities.JobPosting job)
+    private static JobViewDto ToJobView(Domain.Entities.JobPosting job, bool includeInterviewDefaults = true)
     {
         var companyName = CoalesceText(job.Company?.Name, ReadMetadataString(job.MetadataJson, "company"));
         var description = CoalesceText(job.Description, ReadMetadataString(job.MetadataJson, "description")) ?? string.Empty;
@@ -972,10 +981,10 @@ public sealed class JobsController(
             FrontendStatusMapper.ToFrontend(job.SourceType),
             ResolveExternalUrl(job.SourceType, job.RedirectUrl, job.SourceUrl),
             companyName,
-            job.Company is not null && !string.IsNullOrWhiteSpace(job.Company.LogoUrl) ? job.Company.LogoUrl : null,
+            MediaUrls.CompanyLogo(job.CompanyId, job.Company?.LogoUrl),
             ServiceJson.DeserializeStringList(job.SkillsJson),
             job.Applications.Count,
-            DeserializeInterviewDefaults(job.InterviewDefaultsJson));
+            includeInterviewDefaults ? DeserializeInterviewDefaults(job.InterviewDefaultsJson) : null);
     }
 
     private static string SerializeInterviewDefaults(InterviewDefaultsRequest? input)

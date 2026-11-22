@@ -249,3 +249,25 @@ li + li {
     grid-template-columns: 1fr;
   }
 }
+
+.fb-list-title {
+  margin: 0.9rem 0 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.fb-list-title--good {
+  color: #15803d;
+}
+
+.fb-list-title--bad {
+  color: #b45309;
+}
+
+.fb-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+  line-height: 1.5;
+}

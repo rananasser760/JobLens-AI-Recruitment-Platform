@@ -6,6 +6,7 @@ public sealed class JwtOptions
 
     public string Issuer { get; set; } = "JobLens";
     public string Audience { get; set; } = "JobLens.Frontend";
-    public string SigningKey { get; set; } = "joblens-dev-signing-key-change-me-immediately";
+    public string SigningKey { get; set; } = string.Empty;
     public int ExpiryMinutes { get; set; } = 120;
+    public int RefreshTokenDays { get; set; } = 7;
 }

@@ -587,6 +587,7 @@ class WebSessionProcessor:
             self._fps_prev=now; self._fps_cnt=0
 
     def _no_face_check(self, face_count) -> Optional[int]:
+        if not getattr(self, "auto_abandon_enabled", True): return None
         now=time.time(); thr=Config.NO_FACE_AUTO_STOP_SECONDS
         if face_count>0: self._no_face_since=None; return None
         if self._no_face_since is None: self._no_face_since=now

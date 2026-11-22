@@ -15,6 +15,7 @@ public sealed class InterviewService(
     IAiBackendClient aiBackendClient,
     ILogger<InterviewService> logger) : IInterviewService
 {
+    private static readonly DateTime SequenceEpochUtc = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     private static readonly TimeSpan StartInterviewAiTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan AnalyzeAudioAiTimeout = TimeSpan.FromSeconds(25);
     private const string AnalyzeAudioTimeoutEnvVar = "JOBLENS_ANALYZE_AUDIO_TIMEOUT_SECONDS";
@@ -394,7 +395,9 @@ public sealed class InterviewService(
             return new ApiResponse<IReadOnlyList<VideoFlagDto>>(false, null, "Interview session is not active.", ["not_active"]);
         }
 
-        var ai = await aiBackendClient.AnalyzeVideoAsync(new VideoAnalysisRequest(targetSessionId, base64Frame, sequence), cancellationToken);
+        _ = sequence;
+        var serverSequence = (int)((DateTime.UtcNow - SequenceEpochUtc).Ticks / TimeSpan.TicksPerMillisecond / 100);
+        var ai = await aiBackendClient.AnalyzeVideoAsync(new VideoAnalysisRequest(targetSessionId, base64Frame, Math.Max(1, serverSequence)), cancellationToken);
         if (!ai.Success || ai.Data is null)
         {
             return new ApiResponse<IReadOnlyList<VideoFlagDto>>(false, null, ai.Error?.Message ?? "Video analysis failed.");
@@ -442,6 +445,7 @@ public sealed class InterviewService(
     public async Task<ApiResponse<InterviewReportDto>> CompleteAsync(long interviewSessionId, CancellationToken cancellationToken)
     {
         var session = await dbContext.InterviewSessions
+            .Include(x => x.Application)
             .Include(x => x.TranscriptSegments)
             .Include(x => x.Reports)
             .FirstOrDefaultAsync(x => x.Id == interviewSessionId, cancellationToken);
@@ -495,6 +499,7 @@ public sealed class InterviewService(
         session.Status = InterviewSessionStatus.Completed;
         session.EndedAtUtc = DateTime.UtcNow;
         session.FinalScore = ai.Data.FinalScore;
+        session.Application.Status = ApplicationStatus.InterviewCompleted;
         session.FinalVerdict = ai.Data.Verdict;
 
         var report = new InterviewReport
@@ -510,10 +515,30 @@ public sealed class InterviewService(
         dbContext.InterviewReports.Add(report);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        await EndIntegritySessionQuietlyAsync(session.IntegrityBackendSessionId);
+
         return new ApiResponse<InterviewReportDto>(
             true,
             new InterviewReportDto(session.Id, report.FinalScore, report.Verdict, report.RecruiterReportJson, report.CandidateFeedbackJson),
             "Interview completed.");
+    }
+
+    public async Task EndIntegritySessionQuietlyAsync(string? integritySessionId)
+    {
+        if (string.IsNullOrWhiteSpace(integritySessionId))
+        {
+            return;
+        }
+
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await aiBackendClient.EndIntegritySessionAsync(integritySessionId, timeout.Token);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not close integrity session {IntegritySessionId}.", integritySessionId);
+        }
     }
 
     public async Task<ApiResponse<InterviewReportDto>> GetReportAsync(long interviewSessionId, CancellationToken cancellationToken)

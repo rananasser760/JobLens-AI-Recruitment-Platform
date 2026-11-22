@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Union
@@ -13,15 +14,20 @@ import numpy as np
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from models import DBSession, DBSessionLocal
 from request_context import get_request_id
-from routers.integrity import _active_get, _active_set, WebSessionProcessor
+from routers.integrity import WebSessionProcessor
 
 router = APIRouter(prefix="/internal/v1", tags=["internal"])
 
 VIDEO_DEDUP_WINDOW_SECONDS = 1.0
 VIDEO_MIN_INTERVAL_SECONDS = 0.45
+PROCESSOR_IDLE_TIMEOUT_SECONDS = 20 * 60
 _STATE_LOCK = threading.Lock()
 _VIDEO_FRAME_STATE: dict[str, tuple[str, datetime, int]] = {}
+_PROCESSORS_LOCK = threading.Lock()
+_INTERNAL_PROCESSORS: dict[str, WebSessionProcessor] = {}
+_LAST_FRAME_AT: dict[str, float] = {}
 
 ALERT_MAP: dict[str, tuple[str, str]] = {
     "NO_FACE": ("No face detected in frame", "high"),
@@ -42,6 +48,10 @@ ALERT_MAP: dict[str, tuple[str, str]] = {
     "MULTIPLE_PEOPLE": ("Multiple people detected in background (YOLO)", "high"),
     "CHEATING_ITEM_MOBILE": ("Mobile phone detected in frame (YOLO)", "high"),
 }
+
+
+class EndIntegritySessionRequest(BaseModel):
+    integritySessionId: str
 
 
 class VideoAnalysisRequest(BaseModel):
@@ -70,6 +80,69 @@ def _envelope_error(code: str, message: str, details: str | None = None) -> dict
         "data": None,
         "error": {"code": code, "message": message, "details": details},
     }
+
+
+def _processor_alive(proc: WebSessionProcessor) -> bool:
+    thread = getattr(proc, "_thread", None)
+    return bool(getattr(proc, "_running", False)) and thread is not None and thread.is_alive()
+
+
+def _create_processor(session_key: str) -> WebSessionProcessor:
+    db = DBSessionLocal()
+    try:
+        record = DBSession(interview_session_id=session_key[:100])
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        proc = WebSessionProcessor(record.id)
+    finally:
+        db.close()
+
+    proc.auto_abandon_enabled = False
+    proc.start()
+    return proc
+
+
+def _finalize_processor(proc: WebSessionProcessor) -> None:
+    db = DBSessionLocal()
+    try:
+        proc.finalize(db)
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
+def _get_or_create_processor(session_key: str) -> WebSessionProcessor:
+    with _PROCESSORS_LOCK:
+        proc = _INTERNAL_PROCESSORS.get(session_key)
+        if proc is not None and _processor_alive(proc):
+            _LAST_FRAME_AT[session_key] = time.time()
+            return proc
+
+        proc = _create_processor(session_key)
+        _INTERNAL_PROCESSORS[session_key] = proc
+        _LAST_FRAME_AT[session_key] = time.time()
+        return proc
+
+
+def _pop_processor(session_key: str) -> WebSessionProcessor | None:
+    with _PROCESSORS_LOCK:
+        _LAST_FRAME_AT.pop(session_key, None)
+        return _INTERNAL_PROCESSORS.pop(session_key, None)
+
+
+def _sweep_idle_processors() -> None:
+    cutoff = time.time() - PROCESSOR_IDLE_TIMEOUT_SECONDS
+    with _PROCESSORS_LOCK:
+        idle_keys = [key for key, last in _LAST_FRAME_AT.items() if last < cutoff]
+    for key in idle_keys:
+        proc = _pop_processor(key)
+        if proc is not None:
+            _finalize_processor(proc)
+    with _STATE_LOCK:
+        for key in idle_keys:
+            _VIDEO_FRAME_STATE.pop(key, None)
 
 
 def _decode_frame(base64_frame: str) -> np.ndarray | None:
@@ -109,15 +182,8 @@ async def analyze_video(request: VideoAnalysisRequest):
                 for k in expired_keys:
                     _VIDEO_FRAME_STATE.pop(k, None)
 
-        proc = _active_get(request.integritySessionId)
-
-        # Auto-create processor on demand if session was started externally by .NET
-        if not proc:
-            numeric_id = int(request.integritySessionId) if str(request.integritySessionId).isdigit() else 1
-            proc = WebSessionProcessor(numeric_id)
-            proc.start()
-            _active_set(request.integritySessionId, proc)
-            _active_set(numeric_id, proc)
+        await asyncio.to_thread(_sweep_idle_processors)
+        proc = await asyncio.to_thread(_get_or_create_processor, state_key)
 
         frame = await asyncio.to_thread(_decode_frame, request.base64Frame)
         if frame is not None:
@@ -151,3 +217,17 @@ async def analyze_video(request: VideoAnalysisRequest):
 
     except Exception as exc:
         return _envelope_error("InterviewVideoAnalysisFailed", "Could not analyze video frame.", str(exc))
+
+
+@router.post("/integrity/sessions/end")
+async def end_integrity_session(request: EndIntegritySessionRequest):
+    try:
+        key = str(request.integritySessionId)
+        proc = _pop_processor(key)
+        with _STATE_LOCK:
+            _VIDEO_FRAME_STATE.pop(key, None)
+        if proc is not None:
+            await asyncio.to_thread(_finalize_processor, proc)
+        return _envelope_ok(True)
+    except Exception as exc:
+        return _envelope_error("IntegritySessionEndFailed", "Could not close integrity session.", str(exc))

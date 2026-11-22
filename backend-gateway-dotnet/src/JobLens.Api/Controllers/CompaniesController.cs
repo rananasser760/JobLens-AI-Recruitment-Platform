@@ -25,7 +25,7 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
                 string.IsNullOrWhiteSpace(x.WebsiteUrl) ? null : x.WebsiteUrl,
                 string.IsNullOrWhiteSpace(x.Industry) ? null : x.Industry,
                 x.Size,
-                string.IsNullOrWhiteSpace(x.LogoUrl) ? null : x.LogoUrl,
+                MediaUrls.CompanyLogo(x.Id, x.LogoUrl),
                 string.IsNullOrWhiteSpace(x.Description) ? null : x.Description,
                 string.IsNullOrWhiteSpace(x.Location) ? null : x.Location,
                 x.CreatedAtUtc,
@@ -48,7 +48,7 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
                 string.IsNullOrWhiteSpace(x.WebsiteUrl) ? null : x.WebsiteUrl,
                 string.IsNullOrWhiteSpace(x.Industry) ? null : x.Industry,
                 x.Size,
-                string.IsNullOrWhiteSpace(x.LogoUrl) ? null : x.LogoUrl,
+                MediaUrls.CompanyLogo(x.Id, x.LogoUrl),
                 string.IsNullOrWhiteSpace(x.Description) ? null : x.Description,
                 string.IsNullOrWhiteSpace(x.Location) ? null : x.Location,
                 x.CreatedAtUtc,
@@ -90,13 +90,24 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
         dbContext.Companies.Add(company);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        if (!User.IsInRole("Admin"))
+        {
+            var creatorId = GetRequiredUserId();
+            var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == creatorId, cancellationToken);
+            if (recruiter is not null && !recruiter.CompanyId.HasValue)
+            {
+                recruiter.CompanyId = company.Id;
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
         var dto = new CompanyDto(
             company.Id,
             company.Name,
             string.IsNullOrWhiteSpace(company.WebsiteUrl) ? null : company.WebsiteUrl,
             string.IsNullOrWhiteSpace(company.Industry) ? null : company.Industry,
             company.Size,
-            string.IsNullOrWhiteSpace(company.LogoUrl) ? null : company.LogoUrl,
+            MediaUrls.CompanyLogo(company.Id, company.LogoUrl),
             string.IsNullOrWhiteSpace(company.Description) ? null : company.Description,
             string.IsNullOrWhiteSpace(company.Location) ? null : company.Location,
             company.CreatedAtUtc,
@@ -171,7 +182,7 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
             string.IsNullOrWhiteSpace(company.WebsiteUrl) ? null : company.WebsiteUrl,
             string.IsNullOrWhiteSpace(company.Industry) ? null : company.Industry,
             company.Size,
-            string.IsNullOrWhiteSpace(company.LogoUrl) ? null : company.LogoUrl,
+            MediaUrls.CompanyLogo(company.Id, company.LogoUrl),
             string.IsNullOrWhiteSpace(company.Description) ? null : company.Description,
             string.IsNullOrWhiteSpace(company.Location) ? null : company.Location,
             company.CreatedAtUtc,
@@ -179,6 +190,30 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
             activeJobs);
 
         return Ok(new ApiResponse<CompanyDto>(true, dto, "Company updated."));
+    }
+
+    [AllowAnonymous]
+    [HttpGet("{companyId:long}/logo")]
+    public async Task<IActionResult> GetLogo(long companyId, CancellationToken cancellationToken)
+    {
+        var logo = await dbContext.Companies
+            .Where(x => x.Id == companyId)
+            .Select(x => x.LogoUrl)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(logo) || logo.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound();
+        }
+
+        var bytes = await fileStorageService.ReadAsync(logo, cancellationToken);
+        if (bytes is null)
+        {
+            return NotFound();
+        }
+
+        Response.Headers.CacheControl = "public, max-age=86400";
+        return File(bytes, UploadRules.ContentTypeFor(logo));
     }
 
     [Authorize(Roles = "Recruiter,Admin")]
@@ -194,6 +229,11 @@ public sealed class CompaniesController(JobLensDbContext dbContext, IFileStorage
         if (file is null || file.Length == 0)
         {
             return BadRequest(new ApiResponse<bool>(false, false, "Logo file is required."));
+        }
+
+        if (!UploadRules.HasAllowedExtension(file.FileName, UploadRules.ImageExtensions))
+        {
+            return BadRequest(new ApiResponse<bool>(false, false, "Logo must be a PNG, JPG, WEBP or GIF file.", ["invalid_file_type"]));
         }
 
         var company = await dbContext.Companies.FirstOrDefaultAsync(x => x.Id == companyId, cancellationToken);

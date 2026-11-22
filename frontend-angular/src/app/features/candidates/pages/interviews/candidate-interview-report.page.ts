@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 
 import { InterviewsService } from '../../../interviews/interviews.service';
 import { InterviewReportDto } from '../../../../core/models/interview.model';
+import { parseAiFeedback } from '../../../../core/utils/ai-feedback';
 
 @Component({
   selector: 'app-candidate-interview-report-page',
@@ -21,6 +22,8 @@ export class CandidateInterviewReportPage {
 
   readonly sessionId = signal<number | null>(null);
   readonly report = signal<InterviewReportDto | null>(null);
+
+  readonly feedback = computed(() => parseAiFeedback(this.report()?.aiFeedback));
 
   readonly eventRows = computed(() =>
     Object.entries(this.report()?.cheatingReport.eventsByType ?? {})

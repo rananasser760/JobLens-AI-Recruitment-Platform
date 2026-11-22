@@ -122,6 +122,12 @@ public sealed class ChatService(
 
     public async Task<ChatMessageDto> SendMessageAsync(long senderId, SendMessageDto dto, CancellationToken cancellationToken = default)
     {
+        var receiverExists = await dbContext.Users.AnyAsync(u => u.Id == dto.ReceiverId && u.IsActive, cancellationToken);
+        if (!receiverExists)
+        {
+            throw new InvalidOperationException("Receiver does not exist.");
+        }
+
         var conversation = await dbContext.ChatConversations
             .FirstOrDefaultAsync(c => 
                 (c.Participant1Id == senderId && c.Participant2Id == dto.ReceiverId) ||
@@ -143,7 +149,7 @@ public sealed class ChatService(
         {
             ConversationId = conversation.Id,
             SenderId = senderId,
-            Content = dto.Content,
+            Content = dto.Content ?? string.Empty,
             IsRead = false
         };
 
@@ -154,7 +160,7 @@ public sealed class ChatService(
         if (dto.AttachmentIds != null && dto.AttachmentIds.Count > 0)
         {
             var pendingAttachments = await dbContext.ChatAttachments
-                .Where(a => dto.AttachmentIds.Contains(a.Id) && a.MessageId == null)
+                .Where(a => dto.AttachmentIds.Contains(a.Id) && a.MessageId == null && a.UploadedByUserId == senderId)
                 .ToListAsync(cancellationToken);
 
             foreach (var att in pendingAttachments)
@@ -220,12 +226,16 @@ public sealed class ChatService(
         var attachment = new ChatAttachment
         {
             FileName = Path.GetFileName(fileName),
-            FileUrl = $"/api/chat/attachments/{storageKey}",
+            StorageKey = storageKey,
+            UploadedByUserId = userId,
             FileType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType,
             FileSize = content.LongLength,
         };
 
         dbContext.ChatAttachments.Add(attachment);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        attachment.FileUrl = $"/api/chat/attachments/{attachment.Id}";
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new ChatAttachmentDto

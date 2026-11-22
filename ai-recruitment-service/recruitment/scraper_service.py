@@ -25,6 +25,7 @@ except Exception:
 from sentence_transformers import SentenceTransformer
 
 from .config import get_recruitment_settings
+from .llm_json import chat_json
 from .llm_client import get_llm_client
 from .vector_store import store
 
@@ -430,19 +431,14 @@ class JobLensScraper:
         )
 
         try:
-            response = self._get_llm_client().chat.completions.create(
-                model=self.settings.scraper_enrichment_model,
-                messages=[
-                    {"role": "system", "content": "Return only valid JSON."},
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=self.settings.scraper_enrichment_max_tokens,
+            parsed = chat_json(
+                [self.settings.scraper_enrichment_model],
+                "Return only valid JSON.",
+                prompt,
+                max_tokens=max(self.settings.scraper_enrichment_max_tokens, 3000),
                 temperature=self.settings.scraper_enrichment_temperature,
-                timeout=self.settings.scraper_enrichment_timeout_seconds,
+                label="scraper_service",
             )
-
-            raw = response.choices[0].message.content or "{}"
-            parsed = json.loads(_clean_llm_json(raw))
             if not isinstance(parsed, dict):
                 return job, False
 

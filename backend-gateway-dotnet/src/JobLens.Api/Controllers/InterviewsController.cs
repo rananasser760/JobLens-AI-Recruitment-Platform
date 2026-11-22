@@ -104,19 +104,61 @@ public sealed class InterviewsController(
     [HttpPost("{interviewSessionId:long}/end")]
     public async Task<IActionResult> End(long interviewSessionId, CancellationToken cancellationToken)
     {
+        var session = await LoadSessionForAccessAsync(interviewSessionId, cancellationToken);
+        if (session is null)
+        {
+            return NotFound(new ApiResponse<InterviewSessionDto>(false, null, "Interview session not found.", ["not_found"]));
+        }
+
+        if (!await CanAccessSessionAsync(session, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (session.Status is not (Domain.Enums.InterviewSessionStatus.Live or Domain.Enums.InterviewSessionStatus.Completed))
+        {
+            return BadRequest(new ApiResponse<InterviewSessionDto>(false, null, "Only an interview in progress can be ended.", ["invalid_state"]));
+        }
+
         var report = await CompleteWithFallbackAsync(interviewSessionId, cancellationToken);
         return report.Success
             ? Ok(report)
             : BadRequest(report);
     }
 
+    [Authorize(Roles = "Candidate")]
     [HttpPost("browser-event")]
-    public async Task<IActionResult> RecordBrowserEvent([FromBody] InterviewContracts.BrowserEventRequest request, CancellationToken cancellationToken) =>
-        Ok(await interviewService.RecordBrowserEventAsync(request, cancellationToken));
+    public async Task<IActionResult> RecordBrowserEvent([FromBody] InterviewContracts.BrowserEventRequest request, CancellationToken cancellationToken)
+    {
+        var session = await LoadSessionForAccessAsync(request.InterviewSessionId, cancellationToken);
+        if (session is null)
+        {
+            return NotFound(new ApiResponse<bool>(false, false, "Interview session not found.", ["not_found"]));
+        }
 
+        if (!await CanAccessSessionAsync(session, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        return Ok(await interviewService.RecordBrowserEventAsync(request, cancellationToken));
+    }
+
+    [Authorize(Roles = "Candidate")]
     [HttpPost("{interviewSessionId:long}/browser-event")]
     public async Task<IActionResult> RecordBrowserEventCompat(long interviewSessionId, [FromBody] ReportBrowserEventCompatRequest request, CancellationToken cancellationToken)
     {
+        var session = await LoadSessionForAccessAsync(interviewSessionId, cancellationToken);
+        if (session is null)
+        {
+            return NotFound(new ApiResponse<bool>(false, false, "Interview session not found.", ["not_found"]));
+        }
+
+        if (!await CanAccessSessionAsync(session, cancellationToken))
+        {
+            return Forbid();
+        }
+
         var payload = new
         {
             request.TabSwitchCount,
@@ -221,8 +263,32 @@ public sealed class InterviewsController(
     }
 
     [HttpPost("{interviewSessionId:long}/complete")]
-    public async Task<IActionResult> Complete(long interviewSessionId, CancellationToken cancellationToken) =>
-        Ok(await interviewService.CompleteAsync(interviewSessionId, cancellationToken));
+    public async Task<IActionResult> Complete(long interviewSessionId, CancellationToken cancellationToken)
+    {
+        var session = await LoadSessionForAccessAsync(interviewSessionId, cancellationToken);
+        if (session is null)
+        {
+            return NotFound(new ApiResponse<bool>(false, false, "Interview session not found.", ["not_found"]));
+        }
+
+        if (!await CanAccessSessionAsync(session, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (session.Status is not (Domain.Enums.InterviewSessionStatus.Live or Domain.Enums.InterviewSessionStatus.Completed))
+        {
+            return BadRequest(new ApiResponse<bool>(false, false, "Only an interview in progress can be completed.", ["invalid_state"]));
+        }
+
+        var result = await interviewService.CompleteAsync(interviewSessionId, cancellationToken);
+        if (User.IsInRole("Candidate") && result.Data is not null)
+        {
+            result = result with { Data = result.Data with { RecruiterReportJson = "{}" } };
+        }
+
+        return Ok(result);
+    }
 
     [HttpGet("{interviewSessionId:long}/report")]
     public async Task<IActionResult> Report(long interviewSessionId, CancellationToken cancellationToken)
@@ -412,11 +478,26 @@ public sealed class InterviewsController(
     [HttpGet("job/{jobId:long}/rankings")]
     public async Task<IActionResult> GetJobRankings(long jobId, CancellationToken cancellationToken)
     {
+        if (!User.IsInRole("Admin"))
+        {
+            var recruiterCompanyId = await dbContext.RecruiterProfiles
+                .Where(x => x.UserId == GetRequiredUserId())
+                .Select(x => x.CompanyId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (recruiterCompanyId is not long companyId ||
+                !await dbContext.Jobs.AnyAsync(x => x.Id == jobId && x.CompanyId == companyId, cancellationToken))
+            {
+                return Forbid();
+            }
+        }
+
         var applications = await dbContext.Applications
             .Include(x => x.CandidateProfile)
             .ThenInclude(x => x.User)
             .Include(x => x.AtsAssessments)
             .Include(x => x.InterviewSessions)
+            .ThenInclude(x => x.ProctoringEvents)
             .Where(x => x.JobPostingId == jobId)
             .ToListAsync(cancellationToken);
 
@@ -466,15 +547,15 @@ public sealed class InterviewsController(
             .ThenInclude(x => x.JobPosting)
             .AsQueryable();
 
-        if (recruiter is not null)
+        if (recruiter is not null && !User.IsInRole("Admin"))
         {
-            query = query.Where(x => x.Application.JobPosting.CompanyId == recruiter.CompanyId);
+            var companyId = recruiter.CompanyId ?? -1;
+            query = query.Where(x => x.Application.JobPosting.CompanyId == companyId);
         }
 
-        if (!string.IsNullOrWhiteSpace(status))
+        if (TryParseInterviewStatus(status, out var statusFilter))
         {
-            var normalized = status.Trim().ToLowerInvariant();
-            query = query.Where(x => FrontendStatusMapper.ToFrontend(x.Status).ToLower().Contains(normalized));
+            query = query.Where(x => x.Status == statusFilter);
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -507,10 +588,9 @@ public sealed class InterviewsController(
             .ThenInclude(x => x.JobPosting)
             .Where(x => x.Application.CandidateProfile.UserId == userId);
 
-        if (!string.IsNullOrWhiteSpace(status))
+        if (TryParseInterviewStatus(status, out var statusFilter))
         {
-            var normalized = status.Trim().ToLowerInvariant();
-            query = query.Where(x => FrontendStatusMapper.ToFrontend(x.Status).ToLower().Contains(normalized));
+            query = query.Where(x => x.Status == statusFilter);
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -678,7 +758,16 @@ public sealed class InterviewsController(
         }
 
         var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == GetRequiredUserId(), cancellationToken);
-        return recruiter is not null && application.JobPosting.CompanyId == recruiter.CompanyId;
+        return recruiter?.CompanyId is long companyId && application.JobPosting.CompanyId == companyId;
+    }
+
+    private static bool TryParseInterviewStatus(string? value, out Domain.Enums.InterviewSessionStatus status)
+    {
+        status = default;
+        return !string.IsNullOrWhiteSpace(value)
+            && !value.Trim().All(char.IsDigit)
+            && Enum.TryParse(value.Trim(), ignoreCase: true, out status)
+            && Enum.IsDefined(status);
     }
 
     private static InterviewSessionDto ToInterviewSessionDto(Domain.Entities.InterviewSession session)
@@ -936,6 +1025,7 @@ public sealed class InterviewsController(
 
         session.Status = Domain.Enums.InterviewSessionStatus.Completed;
         session.EndedAtUtc = DateTime.UtcNow;
+        session.Application.Status = Domain.Enums.ApplicationStatus.InterviewCompleted;
         var reason = string.IsNullOrWhiteSpace(complete.Message)
             ? "AI finalization unavailable"
             : complete.Message.Trim();
@@ -944,6 +1034,7 @@ public sealed class InterviewsController(
             : session.FinalVerdict;
         session.UpdatedAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+        await interviewService.EndIntegritySessionQuietlyAsync(session.IntegrityBackendSessionId);
 
         var fallbackUpdated = await LoadSessionForSummaryAsync(interviewSessionId, cancellationToken);
         return new ApiResponse<InterviewSessionDto>(

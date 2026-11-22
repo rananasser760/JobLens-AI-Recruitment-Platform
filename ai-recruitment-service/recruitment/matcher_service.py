@@ -9,8 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 
 from .config import get_recruitment_settings
-from .cv_service import _clean_json
-from .llm_client import get_llm_client
+from .llm_json import chat_json
 from .vector_store import store
 
 
@@ -141,7 +140,6 @@ class JobMatcher:
 
     def _llm_match(self, cv: Dict, job: Dict) -> Optional[Dict]:
         settings = get_recruitment_settings()
-        llm_client = get_llm_client()
 
         prompt = f"""You are a recruitment matching expert.
 
@@ -166,16 +164,14 @@ Return EXACTLY this JSON (no markdown):
 }}"""
 
         try:
-            response = llm_client.chat.completions.create(
-                model=settings.scoring_model,
-                messages=[
-                    {"role": "system", "content": "Recruitment expert. Return only valid JSON."},
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=2000,
+            return chat_json(
+                [settings.scoring_model, settings.parsing_fallback_model],
+                "Recruitment expert. Return only valid JSON.",
+                prompt,
+                max_tokens=6000,
                 temperature=0.3,
+                label="matcher_service",
             )
-            return json.loads(_clean_json(response.choices[0].message.content.strip()))
         except Exception:
             return None
 

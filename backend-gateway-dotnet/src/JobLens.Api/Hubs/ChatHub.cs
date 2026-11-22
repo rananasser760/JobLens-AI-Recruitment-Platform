@@ -39,6 +39,16 @@ public sealed class ChatHub(IChatService chatService, ILogger<ChatHub> logger) :
             throw new HubException("Cannot send a message to yourself.");
         }
 
+        if (string.IsNullOrWhiteSpace(dto.Content) && (dto.AttachmentIds is null || dto.AttachmentIds.Count == 0))
+        {
+            throw new HubException("Message is empty.");
+        }
+
+        if ((dto.Content ?? string.Empty).Length > 4000)
+        {
+            throw new HubException("Message is too long.");
+        }
+
         try
         {
             var messageDto = await chatService.SendMessageAsync(senderId, dto, Context.ConnectionAborted);
@@ -73,14 +83,15 @@ public sealed class ChatHub(IChatService chatService, ILogger<ChatHub> logger) :
 
         try
         {
-            await chatService.MarkConversationAsReadAsync(userId, conversationId, Context.ConnectionAborted);
-
             var conversations = await chatService.GetConversationsForUserAsync(userId, Context.ConnectionAborted);
             var conversation = conversations.FirstOrDefault(c => c.Id == conversationId);
-            if (conversation != null)
+            if (conversation is null)
             {
-                await Clients.Group($"user_{conversation.OtherParticipantId}").SendAsync("MessagesRead", conversationId);
+                return;
             }
+
+            await chatService.MarkConversationAsReadAsync(userId, conversationId, Context.ConnectionAborted);
+            await Clients.Group($"user_{conversation.OtherParticipantId}").SendAsync("MessagesRead", conversationId);
         }
         catch (Exception ex)
         {

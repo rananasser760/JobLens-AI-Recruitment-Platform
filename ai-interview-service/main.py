@@ -43,12 +43,30 @@ async def _session_cleanup_worker(interval_seconds: float = 600.0) -> None:
             logger.warning(f"Error in session cleanup worker: {exc}")
 
 
+def _preload_models() -> None:
+    try:
+        from stt import _get_model
+
+        _get_model()
+    except Exception as exc:
+        logger.warning(f"STT model preload failed; it will load on first use: {exc}")
+    try:
+        from tts import _get_tts_model
+
+        _get_tts_model()
+    except Exception as exc:
+        logger.warning(f"TTS model preload failed; it will load on first use: {exc}")
+    logger.info("Interview models are ready.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if RUNTIME_ENV not in {"development", "dev", "local", "test"} and not INTERNAL_API_KEY:
         raise RuntimeError("JOBLENS_INTERNAL_API_KEY must be configured outside development environments")
 
     cleanup_task = asyncio.create_task(_session_cleanup_worker())
+    if os.getenv("JOBLENS_PRELOAD_MODELS", "true").strip().lower() in {"1", "true", "yes", "on"}:
+        asyncio.get_running_loop().run_in_executor(None, _preload_models)
     logger.info("AI Interview Service started.")
     yield
     cleanup_task.cancel()

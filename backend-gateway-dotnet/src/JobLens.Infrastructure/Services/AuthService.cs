@@ -46,9 +46,9 @@ public sealed class AuthService(
             if (company is null && !string.IsNullOrWhiteSpace(request.CompanyName))
             {
                 var trimmedCompName = request.CompanyName.Trim();
-                var slug = trimmedCompName.ToLowerInvariant().Replace(" ", "-");
+                var slug = Slugify(trimmedCompName);
                 company = await dbContext.Companies.FirstOrDefaultAsync(x => x.Slug == slug, cancellationToken);
-                if (company is null)
+                if (company is null && slug.Length > 0)
                 {
                     company = new Company
                     {
@@ -58,6 +58,15 @@ public sealed class AuthService(
                     dbContext.Companies.Add(company);
                     await dbContext.SaveChangesAsync(cancellationToken);
                 }
+            }
+
+            if (company is not null && await dbContext.RecruiterProfiles.AnyAsync(x => x.CompanyId == company.Id, cancellationToken))
+            {
+                return new ApiResponse<AuthResponse>(
+                    false,
+                    null,
+                    "This company already has a recruiter account. Ask that recruiter or an admin to add you.",
+                    ["company_already_claimed"]);
             }
         }
 
@@ -89,7 +98,7 @@ public sealed class AuthService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var token = tokenService.GenerateToken(user);
-        var refreshToken = Convert.ToBase64String(Guid.NewGuid().ToByteArray());
+        var refreshToken = tokenService.GenerateRefreshToken(user).RefreshToken;
         var profileId = await ResolveProfileIdAsync(user.Id, user.Role, cancellationToken);
 
         return new ApiResponse<AuthResponse>(
@@ -123,7 +132,7 @@ public sealed class AuthService(
         }
 
         var token = tokenService.GenerateToken(user);
-        var refreshToken = Convert.ToBase64String(Guid.NewGuid().ToByteArray());
+        var refreshToken = tokenService.GenerateRefreshToken(user).RefreshToken;
         var profileId = await ResolveProfileIdAsync(user.Id, user.Role, cancellationToken);
 
         return new ApiResponse<AuthResponse>(
@@ -139,6 +148,18 @@ public sealed class AuthService(
                 profileId,
                 user.DisplayName),
             "Login successful.");
+    }
+
+    private static string Slugify(string value)
+    {
+        var chars = value.Trim().ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray();
+        var slug = new string(chars);
+        while (slug.Contains("--", StringComparison.Ordinal))
+        {
+            slug = slug.Replace("--", "-", StringComparison.Ordinal);
+        }
+
+        return slug.Trim('-');
     }
 
     private async Task<long?> ResolveProfileIdAsync(long userId, AppRole role, CancellationToken cancellationToken)

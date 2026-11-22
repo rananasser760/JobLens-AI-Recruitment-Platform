@@ -138,6 +138,15 @@ def _normalize_iso_datetime(value: Any) -> str | None:
         return None
 
 
+def _has_parsed_content(parsed: Any) -> bool:
+    if not isinstance(parsed, dict):
+        return False
+    for key in ("full_name", "summary", "job_title", "experience", "education", "projects"):
+        if parsed.get(key):
+            return True
+    return bool(_flatten_skills(parsed.get("skills")))
+
+
 def _decode_data_uri_base64(value: str) -> bytes:
     payload = value.split(",", 1)[1] if "," in value else value
     return base64.b64decode(payload.strip())
@@ -185,8 +194,10 @@ async def extract_resume_text(request: ExtractResumeTextRequest):
 async def score_ats(request: ScoreAtsRequest):
     try:
         parsed = await asyncio.to_thread(parse_cv_with_llm, request.resumeText)
+        if not _has_parsed_content(parsed):
+            parsed = {"raw_cv_text": (request.resumeText or "")[:10000]}
         ats_result = await asyncio.to_thread(
-            analyze_ats_with_llm, parsed, request.jobDescription or request.resumeText
+            analyze_ats_with_llm, parsed, request.jobDescription or ""
         )
 
         suggestions = []

@@ -64,7 +64,7 @@ public sealed class RecruitersController(IRecruiterService recruiterService, Job
                     profile.Company.Name,
                     string.IsNullOrWhiteSpace(profile.Company.WebsiteUrl) ? null : profile.Company.WebsiteUrl,
                     string.IsNullOrWhiteSpace(profile.Company.Industry) ? null : profile.Company.Industry,
-                    string.IsNullOrWhiteSpace(profile.Company.LogoUrl) ? null : profile.Company.LogoUrl));
+                    JobLens.Api.Compatibility.MediaUrls.CompanyLogo(profile.Company.Id, profile.Company.LogoUrl)));
 
         return Ok(new ApiResponse<RecruiterProfileViewDto>(true, dto));
     }
@@ -108,6 +108,18 @@ public sealed class RecruitersController(IRecruiterService recruiterService, Job
             if (company is null)
             {
                 return NotFound(new ApiResponse<RecruiterProfileViewDto>(false, null, "Company not found.", ["not_found"]));
+            }
+
+            if (profile.CompanyId != company.Id)
+            {
+                var alreadyClaimed = await dbContext.RecruiterProfiles
+                    .AnyAsync(x => x.CompanyId == company.Id && x.Id != profile.Id, cancellationToken);
+                if (alreadyClaimed)
+                {
+                    return StatusCode(
+                        StatusCodes.Status403Forbidden,
+                        new ApiResponse<RecruiterProfileViewDto>(false, null, "This company is already managed by another recruiter.", ["company_already_claimed"]));
+                }
             }
 
             profile.CompanyId = company.Id;

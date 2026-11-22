@@ -125,15 +125,33 @@
     </div>
 
     <!-- AI Feedback -->
-    @if (r.aiFeedback || r.recommendation) {
+    @if (feedback() || r.recommendation) {
       <div class="feedback-grid">
-        @if (r.aiFeedback) {
+        @if (feedback(); as fb) {
           <div class="feedback-card feedback-ai">
             <div class="fc-header">
               <span class="fc-icon">🤖</span>
               <h3>AI Feedback</h3>
             </div>
-            <p>{{ r.aiFeedback }}</p>
+            @if (fb.review) {
+              <p>{{ fb.review }}</p>
+            }
+            @if (fb.strengths.length) {
+              <h4 class="fb-list-title fb-list-title--good">Strengths</h4>
+              <ul class="fb-list">
+                @for (item of fb.strengths; track $index) {
+                  <li>{{ item }}</li>
+                }
+              </ul>
+            }
+            @if (fb.weaknesses.length) {
+              <h4 class="fb-list-title fb-list-title--bad">Areas to improve</h4>
+              <ul class="fb-list">
+                @for (item of fb.weaknesses; track $index) {
+                  <li>{{ item }}</li>
+                }
+              </ul>
+            }
           </div>
         }
         @if (r.recommendation) {

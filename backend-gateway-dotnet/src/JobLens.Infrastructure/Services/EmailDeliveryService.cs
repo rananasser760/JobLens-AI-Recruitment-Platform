@@ -22,7 +22,15 @@ public sealed class EmailDeliveryService(
 
         if (!emailOptions.Enabled)
         {
-            logger.LogInformation("Password reset link for {Email}: {ResetLink}", toEmail, resetLink);
+            if (emailOptions.LogLinksWhenDisabled)
+            {
+                logger.LogInformation("Password reset link for {Email}: {ResetLink}", toEmail, resetLink);
+            }
+            else
+            {
+                logger.LogWarning("Password reset requested for {Email} but email delivery is disabled.", toEmail);
+            }
+
             return;
         }
 
@@ -61,7 +69,7 @@ public sealed class EmailDeliveryService(
         return $"""
                <p>You requested a password reset for your JobLens account.</p>
                <p>Use the link below to choose a new password:</p>
-               <p><a href=\"{WebUtility.HtmlEncode(resetLink)}\">Reset password</a></p>
+               <p><a href="{WebUtility.HtmlEncode(resetLink)}">Reset password</a></p>
                <p>If you did not request this, you can safely ignore this email.</p>
                """;
     }

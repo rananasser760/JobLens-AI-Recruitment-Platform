@@ -11,4 +11,6 @@ public sealed class ChatAttachment : BaseEntity
     public string FileUrl { get; set; } = string.Empty;
     public string FileType { get; set; } = string.Empty;
     public long FileSize { get; set; }
+    public long? UploadedByUserId { get; set; }
+    public string StorageKey { get; set; } = string.Empty;
 }

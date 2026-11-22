@@ -38,7 +38,7 @@
         <p class="message-text">{{ msg.content }}</p>
         
         <div *ngIf="msg.attachments && msg.attachments.length" class="attachments-list">
-          <a *ngFor="let att of msg.attachments" [href]="att.fileUrl" target="_blank" class="attachment-link">
+          <a *ngFor="let att of msg.attachments" href="#" (click)="openAttachment(att, $event)" class="attachment-link">
             <i class="fas fa-paperclip"></i> {{ att.fileName }}
           </a>
         </div>

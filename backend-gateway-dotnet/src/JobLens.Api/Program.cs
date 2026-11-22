@@ -1,8 +1,11 @@
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using Hangfire;
 using Hangfire.Dashboard;
 using Hangfire.SqlServer;
 using JobLens.Api.Security;
+using JobLens.Api.Setup;
 using JobLens.Application.Interfaces;
 using JobLens.Domain.Entities;
 using JobLens.Domain.Enums;
@@ -13,16 +16,17 @@ using JobLens.Infrastructure.Persistence;
 using JobLens.Infrastructure.Security;
 using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
+var isDevelopment = builder.Environment.IsDevelopment();
 
-// Ensure Kestrel binds to all network interfaces inside Docker
 builder.WebHost.UseUrls("http://0.0.0.0:5245");
 
-// Align Kestrel payload limit with Nginx (25MB) for heavy resume and frame uploads
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = 25 * 1024 * 1024;
@@ -33,23 +37,40 @@ builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(Stor
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
 builder.Services.Configure<SecurityOptions>(builder.Configuration.GetSection(SecurityOptions.SectionName));
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Server=(localdb)\\MSSQLLocalDB;Database=GPDot;Integrated Security=True;TrustServerCertificate=True;";
+var configuredConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var connectionString = string.IsNullOrWhiteSpace(configuredConnectionString)
+    ? "Server=(localdb)\\MSSQLLocalDB;Database=GPDot;Integrated Security=True;TrustServerCertificate=True;"
+    : configuredConnectionString;
+
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 var jwtSigningKeyFromEnv = Environment.GetEnvironmentVariable("JWT_SIGNING_KEY");
 if (!string.IsNullOrWhiteSpace(jwtSigningKeyFromEnv))
 {
-    jwtOptions.SigningKey = jwtSigningKeyFromEnv;
+    jwtOptions.SigningKey = jwtSigningKeyFromEnv.Trim();
 }
 
-if (builder.Environment.IsProduction())
+var effectiveSigningKey = jwtOptions.SigningKey;
+builder.Services.PostConfigure<JwtOptions>(options => options.SigningKey = effectiveSigningKey);
+
+if (!isDevelopment)
 {
-    if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) ||
-        jwtOptions.SigningKey.Contains("change-me", StringComparison.OrdinalIgnoreCase) ||
-        jwtOptions.SigningKey.Contains("your_super_secret", StringComparison.OrdinalIgnoreCase))
+    string[] placeholderMarkers = ["change-me", "your_super_secret", "dev_super_secret", "replace_with"];
+    if (string.IsNullOrWhiteSpace(effectiveSigningKey) ||
+        effectiveSigningKey.Length < 32 ||
+        placeholderMarkers.Any(marker => effectiveSigningKey.Contains(marker, StringComparison.OrdinalIgnoreCase)))
     {
-        throw new InvalidOperationException("A secure JWT signing key must be provided via JWT_SIGNING_KEY in production.");
+        throw new InvalidOperationException("A random JWT signing key of at least 32 characters must be provided via JWT_SIGNING_KEY outside Development.");
     }
+
+    var aiApiKey = builder.Configuration["AIBackend:ApiKey"];
+    if (string.IsNullOrWhiteSpace(aiApiKey) || placeholderMarkers.Any(marker => aiApiKey.Contains(marker, StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException("AIBackend__ApiKey must be set to the shared internal API key outside Development.");
+    }
+}
+else if (string.IsNullOrWhiteSpace(effectiveSigningKey))
+{
+    throw new InvalidOperationException("Jwt:SigningKey or JWT_SIGNING_KEY must be configured.");
 }
 
 builder.Services.AddDbContext<JobLensDbContext>(options =>
@@ -72,7 +93,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtOptions.Issuer,
             ValidAudience = jwtOptions.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(effectiveSigningKey)),
         };
 
         options.Events = new JwtBearerEvents
@@ -82,15 +103,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                // Bind JWT token automatically for WebSocket SignalR hubs
-                if (!string.IsNullOrWhiteSpace(accessToken) && 
+                if (!string.IsNullOrWhiteSpace(accessToken) &&
                     (path.StartsWithSegments("/hubs/interview") || path.StartsWithSegments("/hubs/chat")))
                 {
                     context.Token = accessToken;
                 }
 
                 return Task.CompletedTask;
-            }
+            },
+            OnTokenValidated = context =>
+            {
+                var tokenType = context.Principal?.FindFirstValue(TokenService.TokenTypeClaim);
+                if (!string.IsNullOrEmpty(tokenType) && !string.Equals(tokenType, TokenService.AccessTokenType, StringComparison.Ordinal))
+                {
+                    context.Fail("Only access tokens can be used for authentication.");
+                }
+
+                return Task.CompletedTask;
+            },
         };
     });
 
@@ -105,6 +135,40 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials());
+});
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy(RateLimitPolicies.Auth, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+    options.AddPolicy(RateLimitPolicies.Ai, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0,
+            }));
 });
 
 builder.Services.AddHangfire(config =>
@@ -125,8 +189,8 @@ builder.Services.AddHangfireServer();
 
 builder.Services.AddSignalR(options =>
 {
-    options.EnableDetailedErrors = true;
-    options.MaximumReceiveMessageSize = 5 * 1024 * 1024; // 5 MB for large base64 frames
+    options.EnableDetailedErrors = isDevelopment;
+    options.MaximumReceiveMessageSize = 5 * 1024 * 1024;
 });
 
 builder.Services.AddControllers();
@@ -171,14 +235,17 @@ builder.Services.AddScoped<ResumeWorkflowJob>();
 builder.Services.AddScoped<RecommendationRefreshJob>();
 builder.Services.AddScoped<JobScrapingJob>();
 builder.Services.AddScoped<JobCleanupJob>();
+builder.Services.AddScoped<AtsScoringJob>();
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
+
 app.Use(async (context, next) =>
 {
-    var correlationId = context.Request.Headers.TryGetValue("X-Correlation-Id", out var incoming)
-        && !string.IsNullOrWhiteSpace(incoming.ToString())
-        ? incoming.ToString().Trim()
+    var incoming = context.Request.Headers["X-Correlation-Id"].ToString().Trim();
+    var correlationId = incoming.Length is > 0 and <= 64 && incoming.All(ch => char.IsLetterOrDigit(ch) || ch is '-' or '_')
+        ? incoming
         : Guid.NewGuid().ToString("N");
 
     context.TraceIdentifier = correlationId;
@@ -196,30 +263,50 @@ app.Use(async (context, next) =>
 var scrapeCron = builder.Configuration["BackgroundJobs:ScrapeCron"] ?? "0 */6 * * *";
 var cleanupCron = builder.Configuration["BackgroundJobs:CleanupCron"] ?? "0 2 * * *";
 var recommendationCron = builder.Configuration["BackgroundJobs:RecommendationRefreshCron"] ?? "0 */8 * * *";
+var atsRetryCron = builder.Configuration["BackgroundJobs:AtsRetryCron"] ?? "*/30 * * * *";
 var staleAfterDays = 30;
 if (int.TryParse(builder.Configuration["BackgroundJobs:CleanupStaleAfterDays"], out var configuredStaleAfterDays) && configuredStaleAfterDays > 0)
 {
     staleAfterDays = configuredStaleAfterDays;
 }
 
-// Database initialization and Hangfire Seed Data
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<JobLensDbContext>();
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-    
-    // Automatically apply Entity Framework Core migrations on startup
-    try
+
+    const int maxMigrationAttempts = 18;
+    for (var attempt = 1; ; attempt++)
     {
-        await dbContext.Database.MigrateAsync();
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogWarning(ex, "Database migration skipped or encountered warnings on startup.");
+        try
+        {
+            await dbContext.Database.MigrateAsync();
+            break;
+        }
+        catch (Exception ex) when (attempt < maxMigrationAttempts)
+        {
+            app.Logger.LogWarning(
+                "Database is not ready yet (attempt {Attempt}/{MaxAttempts}): {Message}. Retrying in 10 seconds.",
+                attempt,
+                maxMigrationAttempts,
+                ex.Message);
+            dbContext.ChangeTracker.Clear();
+            await Task.Delay(TimeSpan.FromSeconds(10));
+        }
+        catch (Exception ex)
+        {
+            if (!isDevelopment)
+            {
+                app.Logger.LogCritical(ex, "Database migration failed on startup.");
+                throw;
+            }
+
+            app.Logger.LogWarning(ex, "Database migration skipped or encountered warnings on startup.");
+            break;
+        }
     }
 
-// Ensure newly added entity properties exist in SQL Server
-   try
+    try
     {
         await dbContext.Database.ExecuteSqlRawAsync(@"
             IF OBJECT_ID(N'dbo.ParsedResumeResults', N'U') IS NOT NULL
@@ -239,6 +326,14 @@ using (var scope = app.Services.CreateScope())
                 IF COL_LENGTH(N'dbo.Jobs', N'SalaryMax') IS NULL
                     ALTER TABLE [dbo].[Jobs] ADD [SalaryMax] DECIMAL(18,2) NULL;
             END
+
+            IF OBJECT_ID(N'dbo.ChatAttachments', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'dbo.ChatAttachments', N'UploadedByUserId') IS NULL
+                    ALTER TABLE [dbo].[ChatAttachments] ADD [UploadedByUserId] BIGINT NULL;
+                IF COL_LENGTH(N'dbo.ChatAttachments', N'StorageKey') IS NULL
+                    ALTER TABLE [dbo].[ChatAttachments] ADD [StorageKey] NVARCHAR(MAX) NOT NULL CONSTRAINT [DF_ChatAttachments_StorageKey] DEFAULT N'';
+            END
         ");
     }
     catch (Exception ex)
@@ -246,11 +341,11 @@ using (var scope = app.Services.CreateScope())
         app.Logger.LogWarning(ex, "Schema synchronization encountered an issue; proceeding with startup.");
     }
 
-    var seedAdminEnabled = builder.Configuration.GetValue<bool?>("Security:SeedAdminEnabled") ?? true;
-    if (seedAdminEnabled)
+    var seedAdminEnabled = builder.Configuration.GetValue<bool?>("Security:SeedAdminEnabled") ?? false;
+    var seedAdminPassword = builder.Configuration["Security:SeedAdminPassword"];
+    if (seedAdminEnabled && !string.IsNullOrWhiteSpace(seedAdminPassword))
     {
-        var seedAdminEmail = (builder.Configuration["Security:SeedAdminEmail"] ?? "admin@gmail.com").Trim().ToLowerInvariant();
-        var seedAdminPassword = builder.Configuration["Security:SeedAdminPassword"] ?? "Admin@123";
+        var seedAdminEmail = (builder.Configuration["Security:SeedAdminEmail"] ?? "admin@joblens.local").Trim().ToLowerInvariant();
         var seedAdminDisplayName = builder.Configuration["Security:SeedAdminDisplayName"] ?? "System Admin";
 
         var existingAdmin = await dbContext.Users.FirstOrDefaultAsync(x => x.Email == seedAdminEmail);
@@ -268,8 +363,13 @@ using (var scope = app.Services.CreateScope())
             await dbContext.SaveChangesAsync();
         }
     }
+    else if (seedAdminEnabled)
+    {
+        app.Logger.LogWarning("Admin seeding is enabled but Security:SeedAdminPassword is empty; no admin account was created.");
+    }
 
-    // Register Background Jobs
+    await DemoDataSeeder.SeedAsync(dbContext, passwordHasher, builder.Configuration, app.Logger);
+
     var recurringJobs = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
     recurringJobs.AddOrUpdate<JobScrapingJob>(
         "joblens-scrape-jobs",
@@ -285,11 +385,17 @@ using (var scope = app.Services.CreateScope())
         "joblens-refresh-recommendations",
         job => job.RefreshAllAsync(),
         recommendationCron);
+
+    recurringJobs.AddOrUpdate<AtsScoringJob>(
+        "joblens-retry-pending-ats",
+        job => job.RequeuePendingAsync(),
+        atsRetryCron);
 }
 
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 app.MapHangfireDashboard(
@@ -299,7 +405,6 @@ app.MapHangfireDashboard(
         Authorization = [new AdminHangfireDashboardAuthorizationFilter()],
     });
 
-// Map Real-time WebSockets
 app.MapHub<JobLens.Api.Hubs.InterviewHub>("/hubs/interview");
 app.MapHub<JobLens.Api.Hubs.ChatHub>("/hubs/chat");
 

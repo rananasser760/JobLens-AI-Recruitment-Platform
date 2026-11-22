@@ -38,6 +38,7 @@ public sealed class InterviewHub(IInterviewService interviewService, ILogger<Int
     public async Task SubmitAudio(long interviewSessionId, string base64Audio, int sequence)
     {
         await EnsureSessionAccessAsync(interviewSessionId);
+        EnsureCandidateCaller();
 
         try
         {
@@ -99,6 +100,7 @@ public sealed class InterviewHub(IInterviewService interviewService, ILogger<Int
     public async Task RequestOpeningPrompt(long interviewSessionId)
     {
         await EnsureSessionAccessAsync(interviewSessionId);
+        EnsureCandidateCaller();
 
         try
         {
@@ -147,6 +149,7 @@ public sealed class InterviewHub(IInterviewService interviewService, ILogger<Int
     public async Task SubmitVideoFrame(long interviewSessionId, string base64Frame, int sequence)
     {
         await EnsureSessionAccessAsync(interviewSessionId);
+        EnsureCandidateCaller();
 
         try
         {
@@ -193,6 +196,7 @@ public sealed class InterviewHub(IInterviewService interviewService, ILogger<Int
     public async Task SubmitBrowserEvent(BrowserEventRequest request)
     {
         await EnsureSessionAccessAsync(request.InterviewSessionId);
+        EnsureCandidateCaller();
         var result = await interviewService.RecordBrowserEventAsync(request, Context.ConnectionAborted);
         await Clients.Group($"interview:{request.InterviewSessionId}").SendAsync("browserEventRecorded", result);
     }
@@ -200,8 +204,17 @@ public sealed class InterviewHub(IInterviewService interviewService, ILogger<Int
     public async Task CompleteInterview(long interviewSessionId)
     {
         await EnsureSessionAccessAsync(interviewSessionId);
+        EnsureCandidateCaller();
         var result = await interviewService.CompleteAsync(interviewSessionId, Context.ConnectionAborted);
         await Clients.Group($"interview:{interviewSessionId}").SendAsync("interviewCompleted", result);
+    }
+
+    private void EnsureCandidateCaller()
+    {
+        if (Context.User?.IsInRole("Candidate") != true)
+        {
+            throw new HubException("Only the candidate taking this interview can perform this action.");
+        }
     }
 
     private async Task SendRealtimeErrorToCallerAsync(string eventName, string code, string message, string? details = null)

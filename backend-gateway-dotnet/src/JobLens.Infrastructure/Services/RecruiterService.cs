@@ -43,6 +43,11 @@ public sealed class RecruiterService(Persistence.JobLensDbContext dbContext) : I
         if (profile.Company is null)
         {
             var company = await dbContext.Companies.FirstOrDefaultAsync(x => x.Slug == slug, cancellationToken);
+            if (company is not null && await dbContext.RecruiterProfiles.AnyAsync(x => x.CompanyId == company.Id && x.Id != profile.Id, cancellationToken))
+            {
+                return new ApiResponse<RecruiterProfileDto>(false, null, "This company is already managed by another recruiter.", ["company_already_claimed"]);
+            }
+
             if (company is null)
             {
                 company = new Company

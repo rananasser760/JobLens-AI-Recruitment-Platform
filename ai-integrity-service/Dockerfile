@@ -28,9 +28,8 @@ COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir uv "cython<3.0" setuptools wheel
 
-# Isolated cache ID avoids lock contention with the other Python services
-RUN --mount=type=cache,id=integrity-uv-cache,target=/root/.cache/uv \
-    uv pip install --system --no-build-isolation -r requirements.txt
+RUN --mount=type=cache,id=joblens-uv-cache,target=/root/.cache/uv,sharing=locked \
+    UV_TORCH_BACKEND=cpu uv pip install --system --no-build-isolation -r requirements.txt
 
 COPY . .
 

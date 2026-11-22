@@ -1,5 +1,6 @@
 using JobLens.Api.Compatibility;
 using JobLens.Api.Contracts;
+using JobLens.Api.Security;
 using JobLens.Application.Common;
 using JobLens.Application.DTOs.Applications;
 using JobLens.Application.Interfaces;
@@ -7,6 +8,7 @@ using JobLens.Infrastructure.Persistence;
 using JobLens.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobLens.Api.Controllers;
@@ -15,6 +17,7 @@ namespace JobLens.Api.Controllers;
 public sealed class ApplicationsController(IApplicationService applicationService, JobLensDbContext dbContext) : AppControllerBase
 {
     [Authorize(Roles = "Candidate")]
+    [EnableRateLimiting(RateLimitPolicies.Ai)]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateApplicationRequest request, CancellationToken cancellationToken)
     {
@@ -249,7 +252,12 @@ public sealed class ApplicationsController(IApplicationService applicationServic
             return Forbid();
         }
 
-        application.Status = FrontendStatusMapper.FromFrontend(request.Status);
+        if (!TryParseStatus(request.Status, out var newStatus))
+        {
+            return BadRequest(new ApiResponse<bool>(false, false, "Unknown application status.", ["invalid_status"]));
+        }
+
+        application.Status = newStatus;
         application.RecruiterNotes = request.Notes?.Trim() ?? string.Empty;
         application.ReviewedAtUtc = DateTime.UtcNow;
         application.UpdatedAtUtc = DateTime.UtcNow;
@@ -266,6 +274,11 @@ public sealed class ApplicationsController(IApplicationService applicationServic
         if (ids.Length == 0)
         {
             return BadRequest(new ApiResponse<BulkUpdateApplicationStatusResultDto>(false, null, "No application IDs provided.", ["validation_error"]));
+        }
+
+        if (!TryParseStatus(request.Status, out var bulkStatus))
+        {
+            return BadRequest(new ApiResponse<BulkUpdateApplicationStatusResultDto>(false, null, "Unknown application status.", ["invalid_status"]));
         }
 
         var apps = await dbContext.Applications
@@ -286,7 +299,7 @@ public sealed class ApplicationsController(IApplicationService applicationServic
                 continue;
             }
 
-            app.Status = FrontendStatusMapper.FromFrontend(request.Status);
+            app.Status = bulkStatus;
             app.RecruiterNotes = request.Notes?.Trim() ?? string.Empty;
             app.ReviewedAtUtc = DateTime.UtcNow;
             app.UpdatedAtUtc = DateTime.UtcNow;
@@ -364,7 +377,7 @@ public sealed class ApplicationsController(IApplicationService applicationServic
         if (User.IsInRole("Recruiter"))
         {
             var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
-            return recruiter is not null && application.JobPosting.CompanyId == recruiter.CompanyId;
+            return recruiter?.CompanyId is long companyId && application.JobPosting.CompanyId == companyId;
         }
 
         return false;
@@ -379,13 +392,21 @@ public sealed class ApplicationsController(IApplicationService applicationServic
 
         var userId = GetRequiredUserId();
         var recruiter = await dbContext.RecruiterProfiles.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
-        if (recruiter is null)
+        if (recruiter?.CompanyId is not long companyId)
         {
             return false;
         }
 
-        var job = await dbContext.Jobs.FirstOrDefaultAsync(x => x.Id == jobId, cancellationToken);
-        return job is not null && job.CompanyId == recruiter.CompanyId;
+        return await dbContext.Jobs.AnyAsync(x => x.Id == jobId && x.CompanyId == companyId, cancellationToken);
+    }
+
+    private static bool TryParseStatus(string? value, out Domain.Enums.ApplicationStatus status)
+    {
+        status = default;
+        return !string.IsNullOrWhiteSpace(value)
+            && !value.Trim().All(char.IsDigit)
+            && Enum.TryParse(value.Trim(), ignoreCase: true, out status)
+            && Enum.IsDefined(status);
     }
 
     private static ApplicationViewDto ToApplicationView(Domain.Entities.JobApplication application)
@@ -427,7 +448,7 @@ public sealed class ApplicationsController(IApplicationService applicationServic
             application.CandidateProfile.User.Email,
             string.IsNullOrWhiteSpace(application.CandidateProfile.Headline) ? null : application.CandidateProfile.Headline,
             application.CandidateProfile.YearsExperience,
-            string.IsNullOrWhiteSpace(application.CandidateProfile.ProfileImagePath) ? null : application.CandidateProfile.ProfileImagePath,
+            MediaUrls.CandidateImage(application.CandidateProfileId, application.CandidateProfile.ProfileImagePath),
             application.SubmittedAtUtc,
             FrontendStatusMapper.ToFrontend(application.Status),
             latestAts?.Score,

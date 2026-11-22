@@ -1,0 +1,23 @@
+{$JOBLENS_DOMAIN} {
+	encode gzip zstd
+
+	request_body {
+		max_size 25MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	@backend path /api/* /hubs/* /hangfire*
+	handle @backend {
+		reverse_proxy dotnet-gateway:5245
+	}
+
+	handle {
+		reverse_proxy angular-frontend:4000
+	}
+}

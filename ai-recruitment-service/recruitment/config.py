@@ -31,11 +31,11 @@ class RecruitmentSettings(BaseModel):
     openrouter_api_key: str = Field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY", ""))
     groq_api_key: str = Field(default_factory=lambda: os.getenv("GROQ_API_KEY", ""))
 
-    parsing_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_PARSING_MODEL", "meta-llama/llama-3.3-70b-instruct"))
-    parsing_fallback_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_PARSING_FALLBACK_MODEL", "meta-llama/llama-3.1-70b-instruct"))
-    ats_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_ATS_MODEL", "meta-llama/llama-3.3-70b-instruct"))
-    scoring_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_SCORING_MODEL", "meta-llama/llama-3.3-70b-instruct"))
-    ocr_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_OCR_MODEL", "meta-llama/llama-3.2-90b-vision-preview"))
+    parsing_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_PARSING_MODEL", "meta-llama/llama-3.3-70b-instruct:free"))
+    parsing_fallback_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_PARSING_FALLBACK_MODEL", "mistralai/mistral-small-3.2-24b-instruct:free"))
+    ats_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_ATS_MODEL", "meta-llama/llama-3.3-70b-instruct:free"))
+    scoring_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_SCORING_MODEL", "meta-llama/llama-3.3-70b-instruct:free"))
+    ocr_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_OCR_MODEL", "mistralai/mistral-small-3.2-24b-instruct:free"))
 
     scraper_embedding_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_SCRAPER_EMBEDDING_MODEL", "all-MiniLM-L6-v2"))
     cv_embedding_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_CV_EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2"))
@@ -44,11 +44,12 @@ class RecruitmentSettings(BaseModel):
     scheduled_scrape_hours: int = Field(default_factory=lambda: _int_env("JOBLENS_SCRAPER_INTERVAL_HOURS", 6))
     scheduled_scrape_enabled: bool = Field(default_factory=lambda: _bool_env("JOBLENS_SCRAPER_SCHEDULED", False))
     scraper_enrichment_enabled: bool = Field(default_factory=lambda: _bool_env("JOBLENS_SCRAPER_ENRICHMENT_ENABLED", True))
-    scraper_enrichment_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_SCRAPER_ENRICHMENT_MODEL", "meta-llama/llama-3.3-70b-instruct"))
+    scraper_enrichment_model: str = Field(default_factory=lambda: os.getenv("JOBLENS_SCRAPER_ENRICHMENT_MODEL", "meta-llama/llama-3.3-70b-instruct:free"))
     scraper_enrichment_max_tokens: int = Field(default_factory=lambda: _int_env("JOBLENS_SCRAPER_ENRICHMENT_MAX_TOKENS", 1024))
     scraper_enrichment_temperature: float = Field(default_factory=lambda: _float_env("JOBLENS_SCRAPER_ENRICHMENT_TEMPERATURE", 0.1))
     scraper_enrichment_timeout_seconds: int = Field(default_factory=lambda: _int_env("JOBLENS_SCRAPER_ENRICHMENT_TIMEOUT_SECONDS", 60))
     strict_egypt_only: bool = Field(default_factory=lambda: _bool_env("JOBLENS_SCRAPER_STRICT_EGYPT_ONLY", False))
+    free_models_only: bool = Field(default_factory=lambda: _bool_env("JOBLENS_FREE_MODELS_ONLY", True))
 
     target_categories: list[str] = Field(
         default_factory=lambda: [
@@ -94,6 +95,26 @@ class RecruitmentSettings(BaseModel):
     )
 
 
+_LLM_MODEL_FIELDS = (
+    "parsing_model",
+    "parsing_fallback_model",
+    "ats_model",
+    "scoring_model",
+    "ocr_model",
+    "scraper_enrichment_model",
+)
+
+
+def enforce_free_model(model: str, provider: str, free_only: bool) -> str:
+    cleaned = (model or "").strip()
+    if not free_only or provider.lower().strip() != "openrouter" or not cleaned or cleaned == "openrouter/free":
+        return cleaned
+    return cleaned if cleaned.endswith(":free") else f"{cleaned}:free"
+
+
 @lru_cache(maxsize=1)
 def get_recruitment_settings() -> RecruitmentSettings:
-    return RecruitmentSettings()
+    settings = RecruitmentSettings()
+    for field in _LLM_MODEL_FIELDS:
+        setattr(settings, field, enforce_free_model(getattr(settings, field), settings.provider, settings.free_models_only))
+    return settings
