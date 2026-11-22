@@ -26,6 +26,20 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN --mount=type=cache,id=joblens-uv-cache,target=/root/.cache/uv,sharing=locked \
     UV_TORCH_BACKEND=cpu uv pip install --system --no-build-isolation -r requirements.txt
 
+RUN --mount=type=cache,id=joblens-uv-cache,target=/root/.cache/uv,sharing=locked \
+    TORCH_MINOR=$(python -c "import torch; print('.'.join(torch.__version__.split('+')[0].split('.')[:2]))") && \
+    case "$TORCH_MINOR" in \
+        2.8) CODEC_SPEC="torchcodec>=0.6,<0.8" ;; \
+        2.9) CODEC_SPEC="torchcodec>=0.8,<0.10" ;; \
+        2.10) CODEC_SPEC="torchcodec>=0.10,<0.11" ;; \
+        2.11) CODEC_SPEC="torchcodec>=0.11" ;; \
+        *) CODEC_SPEC="torchcodec" ;; \
+    esac && \
+    echo "torch $TORCH_MINOR -> $CODEC_SPEC" && \
+    UV_TORCH_BACKEND=cpu uv pip install --system --no-deps "$CODEC_SPEC" six && \
+    python -c "import torchcodec; print('torchcodec', torchcodec.__version__)" && \
+    python -c "from TTS.api import TTS; print('coqui-tts import ok')"
+
 COPY . .
 
 # Ensure audio exchange directory exists
